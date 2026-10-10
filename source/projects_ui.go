@@ -77,6 +77,7 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 		}
 	}()
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
+		s.commandTrigger(c)
 		components.ScrollView(c, components.ScrollViewOptions{}).Fill().ScrollbarInsets(0).Children(func() {
 			ui.Column(c).FillWidth().Shrink(0).Padding(16, 8, 16, 8).Gap(12).Children(func() {
 				switch {

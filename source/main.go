@@ -40,6 +40,7 @@ func main() {
 			Content: func(c *ui.Context) {
 				settings.welcome(c)
 				settings.render(c)
+				settings.renderCommands(c)
 			},
 			ContentTitle: func(c *ui.Context) {
 				components.Text(c, "Onegit").Bold()

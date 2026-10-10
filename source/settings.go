@@ -49,6 +49,7 @@ func savePreferences(path string, p preferences) error {
 }
 
 type settings struct {
+	commands          commandState
 	state             sidebarState
 	statePath         string
 	stateProblem      string
@@ -96,6 +97,7 @@ func newSettings() *settings {
 }
 
 func (s *settings) show() {
+	s.commands.open = false
 	s.open = true
 	if s.window != nil {
 		s.window.Show()
