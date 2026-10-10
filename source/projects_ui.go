@@ -5,6 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -93,35 +95,119 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 					if s.projectTree == nil && s.scanProblem == "" && !s.scanning {
 						components.Text(c, s.text("未找到 Git 项目。")).Wrap().TextColor(c.Theme().TextMuted)
 					}
+					pinned, visible := sidebarProjects(s.projectTree)
 					components.Tree(c, func() {
-						if s.projectTree != nil {
-							for _, child := range s.projectTree.Children {
-								s.projectRow(c, child)
+						s.projectGroup(c, "pinned", "置顶", &s.state.PinnedOpen, func() {
+							for _, node := range pinned {
+								s.projectRow(c, node, nil)
 							}
-						}
-					})
+						})
+						s.projectGroup(c, "other", "其他项目", &s.state.OtherOpen, func() {
+							if s.projectTree != nil {
+								if s.projectTree.Repository {
+									if visible[s.projectTree] {
+										s.projectRow(c, s.projectTree, visible)
+									}
+								} else {
+									for _, child := range s.projectTree.Children {
+										if visible[child] {
+											s.projectRow(c, child, visible)
+										}
+									}
+								}
+							}
+						})
+					}).Gap(c.Theme().Space(4))
 				}
 			})
 		})
 	})
 }
 
-func (s *settings) projectRow(c *ui.Context, node *projectNode) {
+// Group collapse is a sidebar preference, independent of project expansion.
+func (s *settings) projectGroup(c *ui.Context, key, label string, expanded **bool, children func()) {
+	if *expanded == nil {
+		open := true
+		*expanded = &open
+	}
+	ui.Column(c).Key(key).FillWidth().Shrink(0).Children(func() {
+		parts := components.Collapsible(c, s.text(label), *expanded, components.CollapsibleOptions{}, func() {
+			ui.Column(c).FillWidth().Shrink(0).Children(children)
+		})
+		parts.Root.FillWidth()
+		parts.Trigger.FillWidth().TextColor(c.Theme().TextMuted)
+		if parts.Changed() {
+			s.saveSidebarState()
+		}
+	})
+}
+
+func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*projectNode]bool) {
 	label := filepath.Base(node.Path)
 	if node.Missing {
 		label += s.text("（已不存在）")
 	}
 	var children func()
-	if len(node.Children) > 0 {
+	if !node.Repository && len(node.Children) > 0 {
 		children = func() {
 			for _, child := range node.Children {
-				s.projectRow(c, child)
+				if visible[child] {
+					s.projectRow(c, child, visible)
+				}
 			}
 		}
 	}
 	ui.Column(c).Key(node.Path).FillWidth().Shrink(0).Children(func() {
-		if components.TreeItem(c, label, &node.Open, s.selectedProject == node, children).Clicked() {
+		row := components.TreeItem(c, label, &node.Open, s.selectedProject == node, children)
+		if row.Clicked() {
 			s.selectedProject = node
 		}
+		if node.Repository {
+			row.ContextMenu(func(m *ui.Menu) {
+				action := "置顶项目"
+				if node.Pinned {
+					action = "取消置顶"
+				}
+				if m.Item(s.text(action)).Chosen() {
+					node.Pinned = !node.Pinned
+					s.saveSidebarState()
+				}
+			})
+		}
 	})
+}
+
+// Derive display groups without moving cached nodes or changing expansion state.
+func sidebarProjects(root *projectNode) (pinned []*projectNode, visible map[*projectNode]bool) {
+	visible = make(map[*projectNode]bool)
+	var visit func(*projectNode) bool
+	visit = func(node *projectNode) bool {
+		if node == nil {
+			return false
+		}
+		if node.Repository {
+			if node.Pinned {
+				pinned = append(pinned, node)
+			} else {
+				visible[node] = true
+			}
+			return visible[node]
+		}
+		for _, child := range node.Children {
+			if visit(child) {
+				visible[node] = true
+			}
+		}
+		return visible[node]
+	}
+	visit(root)
+	sort.Slice(pinned, func(i, j int) bool {
+		left := strings.ToLower(filepath.Base(pinned[i].Path))
+		right := strings.ToLower(filepath.Base(pinned[j].Path))
+		if left == right {
+			return pinned[i].Path < pinned[j].Path
+		}
+		return left < right
+	})
+	return pinned, visible
 }

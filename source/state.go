@@ -10,7 +10,9 @@ import (
 )
 
 type sidebarState struct {
-	Roots map[string]*projectNode `yaml:"roots,omitempty"`
+	Roots      map[string]*projectNode `yaml:"roots,omitempty"`
+	PinnedOpen *bool                   `yaml:"pinnedOpen,omitempty"`
+	OtherOpen  *bool                   `yaml:"otherOpen,omitempty"`
 }
 
 func walkProjects(node *projectNode, visit func(*projectNode)) {

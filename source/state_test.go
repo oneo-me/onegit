@@ -160,3 +160,132 @@ func TestStateFilesAndMigration(t *testing.T) {
 		t.Fatal("save failure damaged file")
 	}
 }
+
+func TestPinnedProjectGroupsAndRestore(t *testing.T) {
+	pinned := &projectNode{Path: "/projects/group/repo", Repository: true}
+	other := &projectNode{Path: "/projects/other", Repository: true}
+	group := &projectNode{Path: "/projects/group", Open: true, savedOpen: true, Children: []*projectNode{pinned}}
+	root := &projectNode{Path: "/projects", Children: []*projectNode{group, other}}
+	s := &settings{projectRoot: root.Path, projectTree: root, statePath: filepath.Join(t.TempDir(), "state.yaml"), values: preferences{ProjectParentDir: root.Path}, systemLanguage: "zh-CN"}
+	view := ui.NewTester(s.worktreeSidebar, 300, 720)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	view.Frame()
+	if err := view.Click("repo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.RightClick("repo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("置顶项目"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !pinned.Pinned || s.selectedProject != pinned || view.HasText("group") || !view.HasText("repo") || !view.HasText("other") || !view.HasText("置顶") || !view.HasText("其他项目") {
+		t.Fatal("pinning did not move the project out of its hierarchy", view.Texts())
+	}
+	pins, visible := sidebarProjects(root)
+	if len(pins) != 1 || pins[0] != pinned || visible[pinned] || visible[group] || !visible[other] || !group.Open {
+		t.Fatal("incorrect projection or expansion changed")
+	}
+	state, err := loadSidebarState(s.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored := findProject(state.Roots[root.Path], pinned.Path)
+	if restored == nil || !restored.Pinned {
+		t.Fatal("pin was not persisted")
+	}
+	fresh := &projectNode{Path: root.Path, Children: []*projectNode{{Path: group.Path, Children: []*projectNode{{Path: pinned.Path, Repository: true}}}}}
+	merged := mergeProjects(state.Roots[root.Path], fresh, nil)
+	if !findProject(merged, pinned.Path).Pinned {
+		t.Fatal("scan discarded pinned state")
+	}
+	if err := view.RightClick("repo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("取消置顶"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if pinned.Pinned || !view.HasText("group") || !view.HasText("repo") || s.selectedProject != pinned {
+		t.Fatal("unpin did not restore hierarchy and selection", view.Texts())
+	}
+	state, err = loadSidebarState(s.statePath)
+	if err != nil || findProject(state.Roots[root.Path], pinned.Path).Pinned {
+		t.Fatal("unpin was not persisted", err)
+	}
+}
+
+func TestPinnedProjectionIgnoresCollapsedAncestors(t *testing.T) {
+	first := &projectNode{Path: "/projects/a/same", Repository: true, Pinned: true, Missing: true}
+	second := &projectNode{Path: "/projects/b/same", Repository: true, Pinned: true}
+	root := &projectNode{Path: "/projects", Children: []*projectNode{
+		{Path: "/projects/a", Children: []*projectNode{first}},
+		{Path: "/projects/b", Children: []*projectNode{second}},
+	}}
+	pins, visible := sidebarProjects(root)
+	if len(pins) != 2 || pins[0] != first || pins[1] != second || visible[root] {
+		t.Fatal("collapsed, missing or same-name projects lost")
+	}
+	pins, visible = sidebarProjects(second)
+	if len(pins) != 1 || visible[second] {
+		t.Fatal("repository root not pinned")
+	}
+	second.Pinned = false
+	pins, visible = sidebarProjects(second)
+	if len(pins) != 0 || !visible[second] {
+		t.Fatal("repository root not restored")
+	}
+}
+
+func TestSidebarGroupCollapseAndRestore(t *testing.T) {
+	pin := &projectNode{Path: "/projects/pin", Repository: true, Pinned: true}
+	repo := &projectNode{Path: "/projects/group/repo", Repository: true}
+	group := &projectNode{Path: "/projects/group", Open: true, savedOpen: true, Children: []*projectNode{repo}}
+	root := &projectNode{Path: "/projects", Children: []*projectNode{pin, group}}
+	s := &settings{projectRoot: root.Path, projectTree: root, selectedProject: repo, statePath: filepath.Join(t.TempDir(), "state.yaml"), values: preferences{ProjectParentDir: root.Path}, systemLanguage: "zh-CN"}
+	view := ui.NewTester(s.worktreeSidebar, 300, 720)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	view.Frame()
+	if !view.HasText("pin") || !view.HasText("repo") {
+		t.Fatal("groups should be expanded by default", view.Texts())
+	}
+	if err := view.Click("置顶"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if view.HasText("pin") || !view.HasText("repo") || *s.state.PinnedOpen || !*s.state.OtherOpen {
+		t.Fatal("pinned collapse affected other group", view.Texts())
+	}
+	if err := view.Click("其他项目"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if view.HasText("repo") || view.HasText("group") || *s.state.OtherOpen || !group.Open || s.selectedProject != repo {
+		t.Fatal("collapse lost project state", view.Texts())
+	}
+	state, err := loadSidebarState(s.statePath)
+	if err != nil || state.PinnedOpen == nil || *state.PinnedOpen || state.OtherOpen == nil || *state.OtherOpen {
+		t.Fatal("group collapse was not persisted", err)
+	}
+	restarted := &settings{state: state, projectRoot: root.Path, projectTree: state.Roots[root.Path], statePath: s.statePath, values: s.values, systemLanguage: s.systemLanguage}
+	view = ui.NewTester(restarted.worktreeSidebar, 300, 720)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	view.Frame()
+	if view.HasText("pin") || view.HasText("repo") {
+		t.Fatal("restart did not restore collapse", view.Texts())
+	}
+	if err := view.Click("其他项目"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !view.HasText("repo") || view.HasText("pin") {
+		t.Fatal("expand did not restore nested projects", view.Texts())
+	}
+	// The clicked disclosure keeps keyboard focus; Space toggles it again.
+	view.Key(0, ui.KeySpace)
+	view.Frame()
+	if *restarted.state.OtherOpen || view.HasText("repo") {
+		t.Fatal("keyboard collapse failed", view.Texts())
+	}
+}

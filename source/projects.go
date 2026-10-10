@@ -18,6 +18,7 @@ type projectNode struct {
 	Bare       bool   `yaml:"bare,omitempty"`
 	Open       bool   `yaml:"open"`
 	Missing    bool   `yaml:"missing,omitempty"`
+	Pinned     bool   `yaml:"pinned,omitempty"`
 	savedOpen  bool
 	Children   []*projectNode `yaml:"children,omitempty"`
 }
