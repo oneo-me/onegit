@@ -21,7 +21,6 @@ var english = map[string]string{
 	"读取状态失败：":       "Could not load state: ",
 	"保存状态失败：":       "Could not save state: ",
 	"请在设置中选择项目父目录。": "Choose a project parent folder in Settings.",
-	"正在扫描 Git 项目…":  "Scanning Git projects…",
 	"扫描未完成：":        "Scan incomplete: ",
 	"未找到 Git 项目。":   "No Git projects found.",
 	"Git 项目":        "Git project",

@@ -84,9 +84,6 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 						s.chooseDirectory()
 					}
 				default:
-					if s.scanning {
-						components.Text(c, s.text("正在扫描 Git 项目…")).Wrap()
-					}
 					if s.stateProblem != "" {
 						components.Text(c, s.stateProblem).Wrap().TextColor(c.Theme().TextMuted)
 					}
