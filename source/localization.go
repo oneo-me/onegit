@@ -17,6 +17,12 @@ func (s *settings) text(zh string) string {
 }
 
 var english = map[string]string{
+	"请在设置中选择项目父目录。": "Choose a project parent folder in Settings.",
+	"正在扫描 Git 项目…":  "Scanning Git projects…",
+	"扫描未完成：":        "Scan incomplete: ",
+	"未找到 Git 项目。":   "No Git projects found.",
+	"Git 项目":        "Git project",
+	"从侧边栏选择项目。分支状态与实时更新将在后续实现。": "Select a project in the sidebar. Branch status and live updates are coming later.",
 	"语言偏好": "Language preference",
 	"设置":   "Settings", "设置…": "Settings…", "关闭设置": "Close settings",
 	"主题": "Theme", "主题偏好": "Theme preference", "浅色": "Light", "深色": "Dark", "跟随系统": "System",

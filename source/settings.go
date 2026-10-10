@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -66,6 +67,12 @@ func savePreferences(path string, p preferences) error {
 }
 
 type settings struct {
+	projectTree       *projectNode
+	selectedProject   *projectNode
+	scanning          bool
+	scanProblem       string
+	scanVersion       uint64
+	scanCancel        context.CancelFunc
 	open              bool
 	choosingDirectory bool
 	view              components.SettingsState
@@ -170,7 +177,10 @@ func (s *settings) applyDirectorySelection(paths []string, err error) {
 func (s *settings) setDirectory(path string) {
 	next := s.values
 	next.ProjectParentDir = path
-	s.save(next)
+	changed := next.ProjectParentDir != s.values.ProjectParentDir
+	if s.save(next) && changed && s.window != nil {
+		s.scanProjects()
+	}
 }
 
 func (s *settings) save(next preferences) bool {
