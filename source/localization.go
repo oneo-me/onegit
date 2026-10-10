@@ -17,6 +17,9 @@ func (s *settings) text(zh string) string {
 }
 
 var english = map[string]string{
+	"（已不存在）":        " (missing)",
+	"读取状态失败：":       "Could not load state: ",
+	"保存状态失败：":       "Could not save state: ",
 	"请在设置中选择项目父目录。": "Choose a project parent folder in Settings.",
 	"正在扫描 Git 项目…":  "Scanning Git projects…",
 	"扫描未完成：":        "Scan incomplete: ",

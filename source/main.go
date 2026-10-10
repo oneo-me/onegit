@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"os"
 	"path/filepath"
 
 	"github.com/egoist/mygo"
@@ -11,6 +12,15 @@ import (
 )
 
 func main() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+	configDir := filepath.Join(home, ".oneo", "onegit")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		log.Fatal(err)
+	}
+	mygo.App.SetPath(mygo.PathUserData, configDir)
 	mygo.App.SetName("Onegit")
 	mygo.App.WhenReady(func() {
 		settings := newSettings()
@@ -38,7 +48,9 @@ func main() {
 		settings.window = shell.Window()
 		settings.scanProjects()
 		mygo.App.SetMenu(settings.menu())
+		shell.Window().OnClose(func(*mygo.CloseEvent) { settings.saveSidebarState() })
 		shell.Window().OnClosed(func() {
+			settings.scanVersion++
 			if settings.scanCancel != nil {
 				settings.scanCancel()
 			}
@@ -55,6 +67,9 @@ func (s *settings) welcome(c *ui.Context) {
 		if s.selectedProject != nil {
 			components.Text(c, filepath.Base(s.selectedProject.Path)).FontSize(24).Bold()
 			components.Text(c, s.selectedProject.Path).Wrap()
+			if s.selectedProject.Missing {
+				components.Text(c, s.text("（已不存在）")).Wrap()
+			}
 			if s.selectedProject.Repository {
 				components.Text(c, s.text("Git 项目")).Bold()
 			}

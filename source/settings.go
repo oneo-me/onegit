@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"go.yaml.in/yaml/v3"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -16,9 +17,9 @@ import (
 )
 
 type preferences struct {
-	ProjectParentDir string           `json:"projectParentDir,omitempty"`
-	Theme            mygo.ThemeSource `json:"theme,omitempty"`
-	Language         string           `json:"language,omitempty"`
+	ProjectParentDir string           `json:"projectParentDir,omitempty" yaml:"projectParentDir,omitempty"`
+	Theme            mygo.ThemeSource `json:"theme,omitempty" yaml:"theme,omitempty"`
+	Language         string           `json:"language,omitempty" yaml:"language,omitempty"`
 }
 
 func loadPreferences(path string) (preferences, error) {
@@ -30,7 +31,7 @@ func loadPreferences(path string) (preferences, error) {
 	if err != nil {
 		return p, err
 	}
-	err = json.Unmarshal(data, &p)
+	err = yaml.Unmarshal(data, &p)
 	if err != nil {
 		return preferences{}, err
 	}
@@ -44,29 +45,14 @@ func loadPreferences(path string) (preferences, error) {
 }
 
 func savePreferences(path string, p preferences) error {
-	data, err := json.MarshalIndent(p, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	file, err := os.CreateTemp(filepath.Dir(path), ".settings-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(file.Name())
-	if _, err = file.Write(append(data, '\n')); err != nil {
-		file.Close()
-		return err
-	}
-	if err = file.Close(); err != nil {
-		return err
-	}
-	return os.Rename(file.Name(), path)
+	return saveYAML(path, p)
 }
 
 type settings struct {
+	state             sidebarState
+	statePath         string
+	stateProblem      string
+	projectRoot       string
 	projectTree       *projectNode
 	selectedProject   *projectNode
 	scanning          bool
@@ -85,10 +71,22 @@ type settings struct {
 
 func newSettings() *settings {
 	s := &settings{systemLanguage: mygo.App.Locale()}
-	dir, err := os.UserConfigDir()
+	home, err := os.UserHomeDir()
 	if err == nil {
-		s.path = filepath.Join(dir, "Onegit", "settings.json")
-		s.values, err = loadPreferences(s.path)
+		dir := filepath.Join(home, ".oneo", "onegit")
+		s.path = filepath.Join(dir, "config.yaml")
+		s.statePath = filepath.Join(dir, "state.yaml")
+		legacyDir, legacyErr := os.UserConfigDir()
+		if legacyErr == nil {
+			s.values, err = loadOrMigratePreferences(s.path, filepath.Join(legacyDir, "Onegit", "settings.json"))
+		} else {
+			s.values, err = loadPreferences(s.path)
+		}
+		var stateErr error
+		s.state, stateErr = loadSidebarState(s.statePath)
+		if stateErr != nil {
+			s.stateProblem = s.text("读取状态失败：") + stateErr.Error()
+		}
 	}
 	if err != nil {
 		s.problem = s.text("读取设置失败：") + err.Error()
@@ -230,4 +228,19 @@ func (s *settings) menu() *mygo.Menu {
 		}},
 		{Role: mygo.RoleFileMenu}, {Role: mygo.RoleEditMenu}, {Role: mygo.RoleViewMenu}, {Role: mygo.RoleWindowMenu},
 	})
+}
+
+// Import the old preferences only when the new config does not exist.
+func loadOrMigratePreferences(path, legacy string) (preferences, error) {
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		return loadPreferences(path)
+	}
+	if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
+		return preferences{}, nil
+	}
+	p, err := loadPreferences(legacy)
+	if err != nil {
+		return p, err
+	}
+	return p, savePreferences(path, p)
 }

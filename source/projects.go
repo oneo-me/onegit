@@ -13,11 +13,13 @@ import (
 // projectNode retains only repositories and the folders leading to them.
 // Paths, rather than display names, identify nodes.
 type projectNode struct {
-	Path       string
-	Repository bool
-	Bare       bool
-	Open       bool
-	Children   []*projectNode
+	Path       string `yaml:"path"`
+	Repository bool   `yaml:"repository,omitempty"`
+	Bare       bool   `yaml:"bare,omitempty"`
+	Open       bool   `yaml:"open"`
+	Missing    bool   `yaml:"missing,omitempty"`
+	savedOpen  bool
+	Children   []*projectNode `yaml:"children,omitempty"`
 }
 
 func scanProjects(ctx context.Context, root string) (*projectNode, error) {
@@ -77,7 +79,7 @@ func scanProjects(ctx context.Context, root string) (*projectNode, error) {
 				objects = entry.IsDir()
 			}
 		}
-		node := &projectNode{Path: path, Open: true}
+		node := &projectNode{Path: path}
 		if marker || (head && objects) {
 			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			// --absolute-git-dir verifies repository metadata, including gitfiles

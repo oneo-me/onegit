@@ -12,7 +12,7 @@ require (
 	github.com/go-text/typesetting v0.3.5 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/tc-hib/winres v0.3.1 // indirect
-	go.yaml.in/yaml/v3 v3.0.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/image v0.46.0 // indirect
 )
 
