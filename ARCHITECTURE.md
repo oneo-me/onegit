@@ -2,15 +2,17 @@
 
 ## 当前状态
 
-Onegit 目前只有产品与架构文档，尚未实现应用。本文中的职责划分是初步设计；依赖版本、Git 访问方式、状态刷新机制和持久化方案尚未选定。
+Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口和欢迎空状态。Git 访问方式、状态刷新机制和持久化方案尚未选定；下文的业务职责划分仍是初步设计。
 
 产品以 worktree 为核心，面向 macOS，支持多仓库状态查看与侧边栏导航。范围以[产品范围](docs/product-scope.md)为准。
 
 ## 技术基础
 
-应用计划基于 Onevra 构建。[Onevra 的 README](https://github.com/oneo-me/onevra/blob/main/README.md) 将其定义为基于 MyGo 的 Go 原生桌面组件库，提供主题控件和窗口壳；其中 `shells/sidebar` 支持侧边栏与内容区域。应用状态、持久化与异步工作由调用方负责。
+应用使用 Onevra `v0.2026.1` 和其对应的 MyGo 依赖，实际版本记录在 [go.mod](source/go.mod)。[Onevra](https://github.com/oneo-me/onevra) 提供主题控件和窗口壳；应用状态、持久化与异步工作由调用方负责。
 
-因此，Onevra 负责界面基础，Onegit 负责 Git 仓库与 worktree 的业务状态。上游提供的侧边栏壳可作为应用窗口的候选基础，具体接入方式在实现时确定。
+Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系统主题。Onegit 在 MyGo 就绪后创建窗口，内容避让浮动标题栏，关闭主窗口即退出。当前界面只呈现空状态，不读取仓库或保存状态；后续 Git 仓库与 worktree 的业务状态由 Onegit 负责。
+
+构建使用同版本 Onevra Packer，通过 `go.mod` 的 `tool` 指令管理项目工具依赖，从 `source/` 使用 `go tool packer` 调用。[packer.yaml](source/packer.yaml) 与应用模块放在 `source/`，产物统一写入根目录 `dist/`，不纳入版本控制。当前配置只打包 macOS arm64 ZIP，不包含自定义图标、分发签名或公证。开发命令见 [README](README.md#开发与构建)。
 
 ## 初步职责边界
 

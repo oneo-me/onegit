@@ -1,0 +1,10 @@
+name: Onegit
+identifier: me.oneo.onegit
+version: "0.1.0"
+main: .
+out: ../dist
+openReleases: false
+platforms:
+  - darwin/arm64/zip
+macos:
+  minimumSystemVersion: "13.0"
