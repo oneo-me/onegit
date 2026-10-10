@@ -2,7 +2,7 @@
 
 ## 当前状态
 
-Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口和欢迎空状态。Git 访问方式、状态刷新机制和持久化方案尚未选定；下文的业务职责划分仍是初步设计。
+Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口、欢迎空状态和项目父目录、主题和语言设置。Git 访问方式、状态刷新机制和业务状态持久化方案尚未选定；下文的业务职责划分仍是初步设计。
 
 产品以 worktree 为核心，面向 macOS，支持多仓库状态查看与侧边栏导航。范围以[产品范围](docs/product-scope.md)为准。
 
@@ -10,7 +10,9 @@ Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口和�
 
 应用使用 Onevra `v0.2026.1` 和其对应的 MyGo 依赖，实际版本记录在 [go.mod](source/go.mod)。[Onevra](https://github.com/oneo-me/onevra) 提供主题控件和窗口壳；应用状态、持久化与异步工作由调用方负责。
 
-Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系统主题。Onegit 在 MyGo 就绪后创建窗口，内容避让浮动标题栏，关闭主窗口即退出。当前界面只呈现空状态，不读取仓库或保存状态；后续 Git 仓库与 worktree 的业务状态由 Onegit 负责。
+Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系统主题。Onegit 在 MyGo 就绪后创建窗口，内容避让浮动标题栏，关闭主窗口即退出。当前界面不读取仓库；后续 Git 仓库与 worktree 的业务状态由 Onegit 负责。
+
+设置沿用 gallery 的 `Dialog` 与 `Settings` 组件，由 Onegit 维护弹窗状态以及目录、主题和语言偏好，通过 MyGo 原生目录选择器选择单个项目父目录。偏好保存至用户配置目录下的 `Onegit/settings.json`（macOS 为 `~/Library/Application Support/Onegit/settings.json`），使用同目录临时文件替换；写入成功后才更新当前值，读取或保存失败会在设置中显示错误。主题通过 MyGo 的全局主题源立即生效，设置与侧边栏主题菜单共享同一偏好。语言覆盖应用内容及设置，跟随系统时中文区域使用简体中文，其余使用英文；系统菜单项仍由 macOS 本地化，窗口壳的辅助标签使用启动时语言。项目父目录行的右侧只提供选择按钮，路径在左侧说明中换行。选择目录不会扫描或接入仓库。
 
 构建使用同版本 Onevra Packer，通过 `go.mod` 的 `tool` 指令管理项目工具依赖，从 `source/` 使用 `go tool packer` 调用。[packer.yaml](source/packer.yaml) 与应用模块放在 `source/`，产物统一写入根目录 `dist/`，不纳入版本控制。当前配置只打包 macOS arm64 ZIP，不包含自定义图标、分发签名或公证。开发命令见 [README](README.md#开发与构建)。
 

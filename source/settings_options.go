@@ -1,0 +1,97 @@
+package main
+
+import (
+	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
+)
+
+func (s *settings) theme() mygo.ThemeSource {
+	if s.values.Theme == "" {
+		return mygo.ThemeSystem
+	}
+	return s.values.Theme
+}
+
+func (s *settings) themeLabel(value mygo.ThemeSource) string {
+	switch value {
+	case mygo.ThemeLight:
+		return s.text("浅色")
+	case mygo.ThemeDark:
+		return s.text("深色")
+	default:
+		return s.text("跟随系统")
+	}
+}
+
+func (s *settings) setTheme(value mygo.ThemeSource) {
+	next := s.values
+	next.Theme = value
+	if s.save(next) && s.window != nil {
+		mygo.Theme.SetSource(value)
+		s.window.Invalidate()
+	}
+}
+
+func (s *settings) setLanguage(value string) {
+	next := s.values
+	next.Language = value
+	if s.save(next) && s.window != nil {
+		mygo.App.SetMenu(s.menu())
+		s.window.Invalidate()
+	}
+}
+
+func (s *settings) categories() []components.SettingsCategory {
+	description := s.text("尚未选择目录")
+	if s.values.ProjectParentDir != "" {
+		description = s.values.ProjectParentDir
+	}
+	return []components.SettingsCategory{
+		{ID: "general", Title: s.text("通用"), Section: s.text("应用"), Icon: lucide.Settings(), Groups: []components.SettingsGroup{
+			{ID: "language", Items: []components.SettingsItem{{ID: "language", Title: s.text("语言"), Description: s.text("修改后立即生效，并自动保存。"), Build: func(c *ui.Context) {
+				value := s.values.Language
+				if settingsSelect(c, &value, s.text("语言偏好"), []string{"", "zh-Hans", "en"}, func(v string) string {
+					switch v {
+					case "zh-Hans":
+						return "简体中文"
+					case "en":
+						return "English"
+					default:
+						return s.text("跟随系统")
+					}
+				}).Changed() {
+					s.setLanguage(value)
+					c.Invalidate()
+				}
+			}}}},
+			{ID: "projects", Title: s.text("项目"), Items: []components.SettingsItem{{ID: "parent-directory", Title: s.text("项目父目录"), Description: description, Keywords: []string{"路径", "文件夹", "directory", "folder"}, Build: func(c *ui.Context) {
+				if components.Button(c, s.text("选择目录…"), components.ButtonSecondary).Shrink(0).Clicked() {
+					s.chooseDirectory()
+					c.Invalidate()
+				}
+			}}}},
+		}},
+		{ID: "appearance", Title: s.text("外观"), Section: s.text("应用"), Icon: lucide.Palette(), Groups: []components.SettingsGroup{{ID: "theme", Items: []components.SettingsItem{{
+			ID: "theme", Title: s.text("主题"), Description: s.text("与侧边栏底部的主题选项同步。"), Build: func(c *ui.Context) {
+				value := string(s.theme())
+				if settingsSelect(c, &value, s.text("主题偏好"), []string{"system", "light", "dark"}, func(v string) string { return s.themeLabel(mygo.ThemeSource(v)) }).Changed() {
+					s.setTheme(mygo.ThemeSource(value))
+					c.Invalidate()
+				}
+			},
+		}}}}},
+	}
+}
+
+func settingsSelect(c *ui.Context, value *string, label string, choices []string, title func(string) string) ui.Element {
+	sel := components.Select(c, value)
+	sel.Trigger.Label(label).Width(c.Theme().Space(32)).Shrink(0).Children(func() { components.Text(c, title(*value)).SingleLine() })
+	sel.Popup(func(panel ui.Element) {
+		for _, choice := range choices {
+			sel.Item(choice).Label(title(choice)).Children(func() { components.Text(c, title(choice)) })
+		}
+	})
+	return sel.Trigger
+}
