@@ -27,6 +27,7 @@ func (s *settings) startProjectScan(onMain func(func())) {
 	s.scanProblem = ""
 	root := s.values.ProjectParentDir
 	if root != s.projectRoot {
+		s.cancelWorktrees()
 		s.projectRoot = root
 		s.projectTree, s.selectedProject = s.state.Roots[root], nil
 	}
@@ -161,7 +162,7 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*pro
 	ui.Column(c).Key(node.Path).FillWidth().Shrink(0).Children(func() {
 		row := components.TreeItem(c, label, &node.Open, s.selectedProject == node, children)
 		if row.Clicked() {
-			s.selectedProject = node
+			s.selectProject(node, mygo.RunOnMain)
 		}
 		if node.Repository {
 			row.ContextMenu(func(m *ui.Menu) {

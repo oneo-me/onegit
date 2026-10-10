@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -94,7 +95,7 @@ func (s *settings) activateCommand(id string) {
 	}
 	walkProjects(s.projectTree, func(node *projectNode) {
 		if node.Repository && id == "project/"+node.Path {
-			s.selectedProject = node
+			s.selectProject(node, mygo.RunOnMain)
 			s.commands.open = false
 		}
 	})

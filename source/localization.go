@@ -18,6 +18,7 @@ func (s *settings) text(zh string) string {
 
 var english = map[string]string{
 	"搜索项目与设置": "Search projects and settings", "搜索项目与设置…": "Search projects and settings…", "搜索…": "Search…", "命令面板": "Command palette", "没有匹配的项目或设置": "No matching projects or settings",
+	"正在读取 worktree…": "Loading worktrees…", "读取 worktree 失败：": "Could not load worktrees: ",
 	"置顶": "Pinned", "其他项目": "Other Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
 	"（已不存在）":        " (missing)",
 	"读取状态失败：":       "Could not load state: ",

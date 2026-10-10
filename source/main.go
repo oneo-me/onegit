@@ -51,6 +51,7 @@ func main() {
 		mygo.App.SetMenu(settings.menu())
 		shell.Window().OnClose(func(*mygo.CloseEvent) { settings.saveSidebarState() })
 		shell.Window().OnClosed(func() {
+			settings.cancelWorktrees()
 			settings.scanVersion++
 			if settings.scanCancel != nil {
 				settings.scanCancel()
@@ -64,15 +65,18 @@ func main() {
 }
 
 func (s *settings) welcome(c *ui.Context) {
+	if s.selectedProject != nil && s.selectedProject.Repository {
+		ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c)+16, 8, 16, 8).Children(func() {
+			s.projectWorktrees(c)
+		})
+		return
+	}
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c)+32, 32, 32, 32).Gap(12).Children(func() {
 		if s.selectedProject != nil {
 			components.Text(c, filepath.Base(s.selectedProject.Path)).FontSize(24).Bold()
 			components.Text(c, s.selectedProject.Path).Wrap()
 			if s.selectedProject.Missing {
 				components.Text(c, s.text("（已不存在）")).Wrap()
-			}
-			if s.selectedProject.Repository {
-				components.Text(c, s.text("Git 项目")).Bold()
 			}
 			return
 		}

@@ -141,8 +141,8 @@ func TestProjectTreeInteraction(t *testing.T) {
 	}
 	content := ui.NewTester(s.welcome, 800, 600)
 	content.Frame()
-	if !content.HasText(s.selectedProject.Path) {
-		t.Fatal("selected path missing")
+	if content.HasText(s.selectedProject.Path) {
+		t.Fatal("project path should not appear in the compact worktree list")
 	}
 }
 

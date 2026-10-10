@@ -50,6 +50,7 @@ func savePreferences(path string, p preferences) error {
 
 type settings struct {
 	commands          commandState
+	overview          projectOverview
 	state             sidebarState
 	statePath         string
 	stateProblem      string
