@@ -1,11 +1,15 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/egoist/mygo"
 
 	"github.com/egoist/mygo/ui"
 )
@@ -172,5 +176,87 @@ func TestSystemLanguage(t *testing.T) {
 		if s.text("设置") != want {
 			t.Fatalf("incorrect system language for %s", locale)
 		}
+	}
+}
+
+func TestDirectorySelectionDoesNotBlock(t *testing.T) {
+	s := &settings{open: true, path: filepath.Join(t.TempDir(), "settings.json"), systemLanguage: "zh-CN"}
+	selected := t.TempDir()
+	opened := make(chan mygo.OpenDialogOptions, 2)
+	release := make(chan struct{})
+	defer close(release)
+	callbacks := make(chan func(), 2)
+	open := func(opts mygo.OpenDialogOptions) ([]string, error) {
+		opened <- opts
+		<-release
+		return []string{selected}, nil
+	}
+	onMain := func(fn func()) { callbacks <- fn }
+	s.startDirectorySelection(open, onMain)
+	select {
+	case opts := <-opened:
+		if !opts.Directory || opts.Multiple {
+			t.Fatal("expected single directory picker")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("picker did not start")
+	}
+	s.startDirectorySelection(open, onMain)
+	tt := ui.NewTester(s.render, 1100, 720)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	if !tt.HasText("项目父目录") {
+		t.Fatal("UI did not render while picker was waiting")
+	}
+	// Other preferences may change before the native picker returns.
+	s.setLanguage("en")
+	release <- struct{}{}
+	select {
+	case fn := <-callbacks:
+		if !s.choosingDirectory || s.values.ProjectParentDir != "" {
+			t.Fatal("worker mutated UI state")
+		}
+		fn()
+	case <-time.After(time.Second):
+		t.Fatal("picker did not finish")
+	}
+	select {
+	case <-opened:
+		t.Fatal("duplicate picker opened")
+	default:
+	}
+	if s.choosingDirectory || s.values.ProjectParentDir != selected || s.values.Language != "en" {
+		t.Fatal("incorrect completion state")
+	}
+	got, err := loadPreferences(s.path)
+	if err != nil || got != s.values {
+		t.Fatalf("selection not persisted: %+v, %v", got, err)
+	}
+}
+
+func TestDirectorySelectionResults(t *testing.T) {
+	root := t.TempDir()
+	file := filepath.Join(root, "file")
+	if err := os.WriteFile(file, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name      string
+		paths     []string
+		err       error
+		wantError bool
+	}{
+		{name: "cancel"},
+		{name: "dialog error", err: errors.New("picker failed"), wantError: true},
+		{name: "missing directory", paths: []string{filepath.Join(root, "missing")}, wantError: true},
+		{name: "file", paths: []string{file}, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &settings{path: filepath.Join(t.TempDir(), "settings.json"), values: preferences{ProjectParentDir: root}}
+			s.applyDirectorySelection(tc.paths, tc.err)
+			if s.values.ProjectParentDir != root || (s.problem != "") != tc.wantError {
+				t.Fatalf("unexpected result: %+v", s)
+			}
+		})
 	}
 }

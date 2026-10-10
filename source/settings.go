@@ -66,13 +66,14 @@ func savePreferences(path string, p preferences) error {
 }
 
 type settings struct {
-	open           bool
-	view           components.SettingsState
-	values         preferences
-	path           string
-	problem        string
-	window         *mygo.Window
-	systemLanguage string
+	open              bool
+	choosingDirectory bool
+	view              components.SettingsState
+	values            preferences
+	path              string
+	problem           string
+	window            *mygo.Window
+	systemLanguage    string
 }
 
 func newSettings() *settings {
@@ -120,10 +121,33 @@ func (s *settings) toolbar(c *ui.Context) {
 }
 
 func (s *settings) chooseDirectory() {
-	paths, err := mygo.Dialog.Open(mygo.OpenDialogOptions{
+	s.startDirectorySelection(mygo.Dialog.Open, mygo.RunOnMain)
+}
+
+func (s *settings) startDirectorySelection(open func(mygo.OpenDialogOptions) ([]string, error), onMain func(func())) {
+	if s.choosingDirectory {
+		return
+	}
+	s.choosingDirectory = true
+	opts := mygo.OpenDialogOptions{
 		Parent: s.window, Title: s.text("选择项目父目录"), Message: s.text("选择你常用的项目所在的父目录。"),
 		ButtonLabel: s.text("选择"), Directory: true, DefaultPath: s.values.ProjectParentDir,
-	})
+	}
+	// Dialog.Open waits for dismissal. Never wait inside a UI frame: native
+	// events must be able to finish that frame while the sheet is open.
+	go func() {
+		paths, err := open(opts)
+		onMain(func() {
+			s.choosingDirectory = false
+			s.applyDirectorySelection(paths, err)
+			if s.window != nil {
+				s.window.Invalidate()
+			}
+		})
+	}()
+}
+
+func (s *settings) applyDirectorySelection(paths []string, err error) {
 	if err != nil {
 		s.problem = s.text("选择目录失败：") + err.Error()
 		return

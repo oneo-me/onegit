@@ -67,7 +67,7 @@ func (s *settings) categories() []components.SettingsCategory {
 				}
 			}}}},
 			{ID: "projects", Title: s.text("项目"), Items: []components.SettingsItem{{ID: "parent-directory", Title: s.text("项目父目录"), Description: description, Keywords: []string{"路径", "文件夹", "directory", "folder"}, Build: func(c *ui.Context) {
-				if components.Button(c, s.text("选择目录…"), components.ButtonSecondary).Shrink(0).Clicked() {
+				if components.Button(c, s.text("选择目录…"), components.ButtonSecondary).Shrink(0).Disabled(s.choosingDirectory).Clicked() {
 					s.chooseDirectory()
 					c.Invalidate()
 				}
