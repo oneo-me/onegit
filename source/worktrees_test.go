@@ -143,3 +143,157 @@ func TestWorktreeSelection(t *testing.T) {
 		t.Fatal("worktree selection retained across projects")
 	}
 }
+
+func TestRememberProjectAndWorktreeSelections(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repoA, repoB := filepath.Join(root, "a"), filepath.Join(root, "b")
+	for _, repo := range []string{repoA, repoB} {
+		testGit(t, "init", repo)
+	}
+	testGit(t, "-C", repoA, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial")
+	linked := filepath.Join(root, "linked")
+	testGit(t, "-C", repoA, "worktree", "add", "-b", "feature", linked)
+	s := &settings{statePath: filepath.Join(t.TempDir(), "state.yaml"), values: preferences{ProjectParentDir: root}}
+	finishScan(t, s)
+	if s.selectedProject == nil || s.selectedProject.Path != repoA || s.overview.SelectedPath != repoA {
+		t.Fatal("first repository and worktree were not selected by default")
+	}
+	callbacks := make(chan func(), 10)
+	dispatch := func(fn func()) { callbacks <- fn }
+	finish := func(s *settings) {
+		t.Helper()
+		deadline := time.After(10 * time.Second)
+		for s.scanning || s.overview.Loading {
+			select {
+			case fn := <-callbacks:
+				fn()
+			case <-deadline:
+				t.Fatal("selection restoration timed out")
+			}
+		}
+	}
+	choose := func(repo, label, want string) {
+		t.Helper()
+		s.selectProject(findProject(s.projectTree, repo), dispatch)
+		finish(s)
+		view := ui.NewTester(s.projectWorktrees, 800, 600)
+		if err := view.Click(label); err != nil {
+			t.Fatal(err)
+		}
+		view.Frame()
+		if s.overview.SelectedPath != want {
+			t.Fatalf("selected %q, want %q", s.overview.SelectedPath, want)
+		}
+	}
+	choose(repoA, "linked", linked)
+	choose(repoB, "b", repoB)
+	s.selectProject(findProject(s.projectTree, repoA), dispatch)
+	finish(s)
+	if s.overview.SelectedPath != linked {
+		t.Fatal("switching repositories forgot the worktree")
+	}
+	// A folder click must not overwrite the last repository preference.
+	s.selectProject(s.projectTree, dispatch)
+	state, err := loadSidebarState(s.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s = &settings{state: state, statePath: s.statePath, values: s.values}
+	s.startProjectScan(dispatch)
+	if s.selectedProject == nil || s.selectedProject.Path != repoA {
+		t.Fatal("cached repository was not restored immediately")
+	}
+	finish(s)
+	view := ui.NewTester(s.projectWorktrees, 800, 600)
+	view.Frame()
+	if s.overview.SelectedPath != linked || s.overview.selectedIndex != 1 {
+		t.Fatal("restart did not restore worktree highlight")
+	}
+	s.selectProject(findProject(s.projectTree, repoB), dispatch)
+	finish(s)
+	if s.overview.SelectedPath != repoB {
+		t.Fatal("restart lost the other repository's worktree")
+	}
+	// Each parent directory retains its own last repository.
+	s.values.ProjectParentDir = t.TempDir()
+	s.startProjectScan(dispatch)
+	finish(s)
+	if s.selectedProject != nil {
+		t.Fatal("repository selection leaked across parent directories")
+	}
+	s.values.ProjectParentDir = root
+	s.startProjectScan(dispatch)
+	finish(s)
+	if s.selectedProject == nil || s.selectedProject.Path != repoB || s.overview.SelectedPath != repoB {
+		t.Fatal("switching back lost selection")
+	}
+	// A removed worktree falls back to the first current entry.
+	testGit(t, "-C", repoA, "worktree", "remove", linked)
+	s.selectProject(findProject(s.projectTree, repoA), dispatch)
+	finish(s)
+	view = ui.NewTester(s.projectWorktrees, 800, 600)
+	view.Frame()
+	if s.overview.SelectedPath != repoA || s.overview.selectedIndex != 0 {
+		t.Fatal("removed worktree did not fall back to the first entry")
+	}
+}
+
+func TestEmptyNavigationContent(t *testing.T) {
+	for _, s := range []*settings{
+		{},
+		{selectedProject: &projectNode{Path: "/repo", Repository: true}},
+	} {
+		view := ui.NewTester(s.welcome, 800, 600)
+		view.Frame()
+		if len(view.Texts()) != 0 {
+			t.Fatalf("empty content contains prompts: %v", view.Texts())
+		}
+	}
+	for _, parent := range []string{"", "/empty"} {
+		s := &settings{values: preferences{ProjectParentDir: parent}, systemLanguage: "zh-CN"}
+		view := ui.NewTester(s.worktreeSidebar, 300, 720)
+		view.Frame()
+		for _, prompt := range []string{"请在设置中选择项目父目录。", "未找到 Git 项目。"} {
+			if view.HasText(prompt) {
+				t.Fatalf("empty sidebar contains %q", prompt)
+			}
+		}
+	}
+}
+
+func TestDefaultRepositoryUsesSidebarOrder(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := filepath.Join(root, "a"), filepath.Join(root, "b")
+	for _, repo := range []string{a, b} {
+		testGit(t, "init", repo)
+	}
+	s := &settings{values: preferences{ProjectParentDir: root}}
+	finishScan(t, s)
+	first, pinned := findProject(s.projectTree, a), findProject(s.projectTree, b)
+	pinned.Pinned = true
+	s.selectedProject = nil
+	s.state.SelectedProjects[root] = "/removed"
+	callbacks := make(chan func(), 2)
+	s.restoreProjectSelection(func(fn func()) { callbacks <- fn })
+	awaitNavigation(t, s, callbacks)
+	if s.selectedProject != pinned {
+		t.Fatal("default selection ignored pinned sidebar order")
+	}
+	pinned.Missing = true
+	s.restoreProjectSelection(func(fn func()) { callbacks <- fn })
+	awaitNavigation(t, s, callbacks)
+	if s.selectedProject != first {
+		t.Fatal("missing repository did not fall back to an available repository")
+	}
+	first.Missing = true
+	s.restoreProjectSelection(func(fn func()) { callbacks <- fn })
+	if s.selectedProject != nil || s.overview.SelectedPath != "" {
+		t.Fatal("all missing repositories should leave blank content")
+	}
+}

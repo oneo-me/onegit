@@ -13,11 +13,19 @@ func finishScan(t *testing.T, s *settings) {
 	t.Helper()
 	callbacks := make(chan func(), 1)
 	s.startProjectScan(func(fn func()) { callbacks <- fn })
-	select {
-	case fn := <-callbacks:
-		fn()
-	case <-time.After(10 * time.Second):
-		t.Fatal("scan timed out")
+	awaitNavigation(t, s, callbacks)
+}
+
+func awaitNavigation(t *testing.T, s *settings, callbacks <-chan func()) {
+	t.Helper()
+	deadline := time.After(10 * time.Second)
+	for s.scanning || s.overview.Loading {
+		select {
+		case fn := <-callbacks:
+			fn()
+		case <-deadline:
+			t.Fatal("navigation timed out")
+		}
 	}
 }
 
@@ -75,12 +83,7 @@ func TestSidebarRestartAndMerge(t *testing.T) {
 	}
 	// Expand while the worker is running; completion must retain the change.
 	findProject(restarted.projectTree, group.Path).Open = true
-	select {
-	case fn := <-callbacks:
-		fn()
-	case <-time.After(10 * time.Second):
-		t.Fatal("scan timed out")
-	}
+	awaitNavigation(t, restarted, callbacks)
 	old := findProject(restarted.projectTree, repo)
 	if old == nil || !old.Missing || findProject(restarted.projectTree, added) == nil {
 		t.Fatal("merge lost old or new project")

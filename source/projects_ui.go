@@ -30,6 +30,7 @@ func (s *settings) startProjectScan(onMain func(func())) {
 		s.cancelWorktrees()
 		s.projectRoot = root
 		s.projectTree, s.selectedProject = s.state.Roots[root], nil
+		s.restoreProjectSelection(onMain)
 	}
 	var paths []string
 	walkProjects(s.projectTree, func(n *projectNode) { paths = append(paths, n.Path) })
@@ -58,6 +59,7 @@ func (s *settings) startProjectScan(onMain func(func())) {
 			}
 			s.scanning = false
 			s.projectTree = mergeProjects(s.projectTree, tree, missing)
+			s.restoreProjectSelection(onMain)
 			s.saveSidebarState()
 			if err != nil {
 				s.scanProblem = err.Error()
@@ -81,22 +83,14 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 		s.commandTrigger(c)
 		components.ScrollView(c, components.ScrollViewOptions{}).Fill().ScrollbarInsets(0).Children(func() {
 			ui.Column(c).FillWidth().Shrink(0).Padding(16, 8, 16, 8).Gap(12).Children(func() {
-				switch {
-				case s.values.ProjectParentDir == "":
-					components.Text(c, s.text("请在设置中选择项目父目录。")).Wrap().TextColor(c.Theme().TextMuted)
-					if components.Button(c, s.text("选择目录…"), components.ButtonSecondary).Clicked() {
-						s.chooseDirectory()
-					}
-				default:
+				if s.values.ProjectParentDir != "" {
 					if s.stateProblem != "" {
 						components.Text(c, s.stateProblem).Wrap().TextColor(c.Theme().TextMuted)
 					}
 					if s.scanProblem != "" {
 						components.Text(c, s.text("扫描未完成：")+s.scanProblem).Wrap().TextColor(c.Theme().TextMuted)
 					}
-					if s.projectTree == nil && s.scanProblem == "" && !s.scanning {
-						components.Text(c, s.text("未找到 Git 项目。")).Wrap().TextColor(c.Theme().TextMuted)
-					}
+
 					pinned, visible := sidebarProjects(s.projectTree)
 					components.Tree(c, func() {
 						s.projectGroup(c, "pinned", "置顶", &s.state.PinnedOpen, func() {

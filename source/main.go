@@ -71,17 +71,4 @@ func (s *settings) welcome(c *ui.Context) {
 		})
 		return
 	}
-	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c)+32, 32, 32, 32).Gap(12).Children(func() {
-		if s.selectedProject != nil {
-			components.Text(c, filepath.Base(s.selectedProject.Path)).FontSize(24).Bold()
-			components.Text(c, s.selectedProject.Path).Wrap()
-			if s.selectedProject.Missing {
-				components.Text(c, s.text("（已不存在）")).Wrap()
-			}
-			return
-		}
-		components.Text(c, s.text("欢迎使用 Onegit")).FontSize(24).Bold()
-		components.Text(c, s.text("在一个地方查看多个 Git 仓库与 worktree。")).Wrap()
-		components.Text(c, s.text("从侧边栏选择项目。分支状态与实时更新将在后续实现。")).Wrap().TextColor(c.Theme().TextMuted)
-	})
 }

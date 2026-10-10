@@ -10,9 +10,47 @@ import (
 )
 
 type sidebarState struct {
-	Roots      map[string]*projectNode `yaml:"roots,omitempty"`
-	PinnedOpen *bool                   `yaml:"pinnedOpen,omitempty"`
-	OtherOpen  *bool                   `yaml:"otherOpen,omitempty"`
+	SelectedProjects  map[string]string       `yaml:"selectedProjects,omitempty"`
+	SelectedWorktrees map[string]string       `yaml:"selectedWorktrees,omitempty"`
+	Roots             map[string]*projectNode `yaml:"roots,omitempty"`
+	PinnedOpen        *bool                   `yaml:"pinnedOpen,omitempty"`
+	OtherOpen         *bool                   `yaml:"otherOpen,omitempty"`
+}
+
+func (s *settings) restoreProjectSelection(onMain func(func())) {
+	if s.selectedProject != nil {
+		if !s.selectedProject.Missing {
+			return
+		}
+		s.cancelWorktrees()
+		s.selectedProject = nil
+	}
+	path := s.state.SelectedProjects[s.projectRoot]
+	var selected, first *projectNode
+	pinned, _ := sidebarProjects(s.projectTree)
+	for _, node := range pinned {
+		if !node.Missing {
+			first = node
+			break
+		}
+	}
+	walkProjects(s.projectTree, func(node *projectNode) {
+		if !node.Repository || node.Missing {
+			return
+		}
+		if first == nil {
+			first = node
+		}
+		if node.Path == path {
+			selected = node
+		}
+	})
+	if selected == nil {
+		selected = first
+	}
+	if selected != nil {
+		s.selectProject(selected, onMain)
+	}
 }
 
 func walkProjects(node *projectNode, visit func(*projectNode)) {
