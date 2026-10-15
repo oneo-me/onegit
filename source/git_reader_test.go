@@ -133,8 +133,6 @@ func TestRepositorySectionsRender(t *testing.T) {
 	}
 	s.repo.commits.loaded = true
 	s.repo.commits.value = []commitEntry{{Hash: strings.Repeat("a", 40), Short: "aaaaaaa", Author: "Test", Subject: "initial commit"}}
-	s.repo.branches.loaded = true
-	s.repo.branches.value = []branchEntry{{Name: "main", Current: true, Upstream: "origin/main", Subject: "initial commit"}}
 
 	for _, test := range []struct {
 		section string
@@ -142,8 +140,6 @@ func TestRepositorySectionsRender(t *testing.T) {
 	}{
 		{sectionChanges, []string{"changed.txt"}},
 		{sectionCommits, []string{"initial commit", "aaaaaaa"}},
-		{sectionBranches, []string{"main", "origin/main"}},
-		{sectionSearch, []string{"搜索提交"}},
 	} {
 		s.repo.section = test.section
 		view := ui.NewTester(s.repositoryContent, 640, 480)
@@ -198,15 +194,15 @@ func TestRunGitJobReportsFailure(t *testing.T) {
 func TestSectionPersistence(t *testing.T) {
 	s := &settings{statePath: filepath.Join(t.TempDir(), "state.yaml"), selectedProject: &projectNode{Path: "/repo", Repository: true}, systemLanguage: "zh-CN"}
 	s.repo.section = sectionChanges
-	s.setSection(sectionBranches)
+	s.setSection(sectionCommits)
 	state, err := loadSidebarState(s.statePath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.SelectedSections["/repo"] != sectionBranches {
+	if state.SelectedSections["/repo"] != sectionCommits {
 		t.Fatalf("section not persisted: %+v", state.SelectedSections)
 	}
-	if s.sectionFor(&projectNode{Path: "/repo", Repository: true}) != sectionBranches {
+	if s.sectionFor(&projectNode{Path: "/repo", Repository: true}) != sectionCommits {
 		t.Fatal("section not restored for the project")
 	}
 	if s.sectionFor(&projectNode{Path: "/other", Repository: true}) != sectionChanges {
@@ -286,47 +282,18 @@ func TestRepositoryPageLayout(t *testing.T) {
 
 	view := ui.NewTester(s.welcome, 1000, 700)
 	view.Frame()
-	for _, text := range []string{"demo", "demo-feature", "更改", "全部提交", "分支", "搜索"} {
+	for _, text := range []string{"demo", "demo-feature", "更改", "全部提交"} {
 		if !view.HasText(text) {
 			t.Fatalf("repository page missing %q: %v", text, view.Texts())
 		}
 	}
-	if err := view.Click("分支"); err != nil {
-		t.Fatal(err)
-	}
 	view.Frame()
-	if s.repo.section != sectionBranches {
-		t.Fatalf("section not switched: %q", s.repo.section)
-	}
 	if err := view.Click("全部提交"); err != nil {
 		t.Fatal(err)
 	}
 	view.Frame()
 	if s.repo.section != sectionCommits {
 		t.Fatalf("section not switched: %q", s.repo.section)
-	}
-}
-
-func TestFilteredCommits(t *testing.T) {
-	s := &settings{}
-	s.repo.commits.value = []commitEntry{
-		{Hash: "aaaaaaaa", Author: "Alice", Subject: "fix login"},
-		{Hash: "bbbbbbbb", Author: "Bob", Subject: "add search"},
-	}
-	s.repo.query = "search"
-	if got := s.filteredCommits(true); len(got) != 1 || got[0].Hash != "bbbbbbbb" {
-		t.Fatalf("filtered: %+v", got)
-	}
-	s.repo.query = "alice"
-	if got := s.filteredCommits(true); len(got) != 1 || got[0].Hash != "aaaaaaaa" {
-		t.Fatalf("author filter: %+v", got)
-	}
-	s.repo.query = ""
-	if got := s.filteredCommits(true); len(got) != 2 {
-		t.Fatalf("empty query: %+v", got)
-	}
-	if got := s.filteredCommits(false); len(got) != 2 {
-		t.Fatalf("unfiltered: %+v", got)
 	}
 }
 

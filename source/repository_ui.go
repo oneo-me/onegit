@@ -17,10 +17,8 @@ import (
 // Sections of the project sidebar. The value is persisted, so treat it as a
 // stored key independent of the translated label.
 const (
-	sectionChanges  = "changes"
-	sectionCommits  = "commits"
-	sectionBranches = "branches"
-	sectionSearch   = "search"
+	sectionChanges = "changes"
+	sectionCommits = "commits"
 )
 
 // Tabs of the commit details pane.
@@ -57,10 +55,8 @@ type repositoryState struct {
 	treeGroups map[string]*bool
 
 	changesList components.ListState
-	branchList  components.ListState
 	commitList  components.ListState
 	commitIndex int
-	query       string
 	visible     []commitEntry
 
 	job gitJob
@@ -76,7 +72,6 @@ func (r *repositoryState) reset() {
 	r.commitIndex = -1
 	r.visible = nil
 	r.changesList = components.ListState{}
-	r.branchList = components.ListState{}
 	r.commitList = components.ListState{}
 }
 
@@ -155,13 +150,10 @@ func (s *settings) ensureRepositoryData() {
 			return readBranches(ctx, dir)
 		}, s.invalidate)
 	}
-	switch s.repo.section {
-	case sectionCommits, sectionSearch, sectionBranches:
-		if s.repo.commits.needs(dir) {
-			s.repo.commits.start(dispatch, dir, func(ctx context.Context) ([]commitEntry, error) {
-				return readCommits(ctx, dir, 300)
-			}, s.invalidate)
-		}
+	if s.repo.section == sectionCommits && s.repo.commits.needs(dir) {
+		s.repo.commits.start(dispatch, dir, func(ctx context.Context) ([]commitEntry, error) {
+			return readCommits(ctx, dir, 300)
+		}, s.invalidate)
 	}
 }
 
@@ -254,8 +246,8 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 }
 
 // repositoryToolbar is the strip below the worktree tabs and above the project
-// sidebar: common Git actions on the left, the active branch in the middle and
-// navigation actions on the right, as in the reference application.
+// sidebar: common Git actions on the left and navigation actions on the right,
+// as in the reference application.
 func (s *settings) repositoryToolbar(c *ui.Context) {
 	t := c.Theme()
 	running := s.repo.job.running
@@ -276,41 +268,10 @@ func (s *settings) repositoryToolbar(c *ui.Context) {
 				s.runGitJob(s.text("正在贮藏…"), "stash", "push", "--include-untracked")
 			})
 		})
-		s.statusPill(c)
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(.5)).Children(func() {
 			s.toolbarMenuButton(c, lucide.GitBranch(), s.text("分支操作"), running, s.branchMenu)
 		})
 	})
-}
-
-// statusPill is the rounded branch summary centred in the toolbar.
-func (s *settings) statusPill(c *ui.Context) {
-	t := c.Theme()
-	name := ""
-	if s.selectedProject != nil {
-		name = filepath.Base(s.selectedProject.Path)
-	}
-	branch := s.currentBranch()
-	if s.repo.job.running {
-		branch = s.repo.job.label
-	} else if s.repo.job.problem != "" {
-		branch = s.text("操作失败")
-	}
-	head := s.repo.status.value.Head
-	pill := ui.Column(c).Width(t.Space(75)).Height(t.Space(9)).Shrink(0).Radius(t.Space(2)).
-		Background(t.Surface).Justify(ui.Center).AlignItems(ui.Center).Gap(t.Space(.25)).Children(func() {
-		components.Text(c, name).FontSize(t.Rem(.8)).Bold().SingleLine()
-		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
-			components.Icon(c, lucide.GitBranch()).Size(t.Space(3), t.Space(3)).TextColor(t.TextMuted)
-			components.Text(c, branch).FontSize(t.Rem(.75)).TextColor(t.TextMuted).SingleLine()
-			if head.Upstream != "" && (head.Ahead > 0 || head.Behind > 0) {
-				components.Text(c, fmt.Sprintf("↑%d ↓%d", head.Ahead, head.Behind)).FontSize(t.Rem(.7)).TextColor(t.TextMuted).SingleLine()
-			}
-		})
-	})
-	if s.repo.job.problem != "" {
-		components.Tooltip(c, pill, s.repo.job.problem)
-	}
 }
 
 func (s *settings) branchMenu(m *ui.Menu) {
@@ -405,11 +366,6 @@ func (s *settings) projectSidebar(c *ui.Context) {
 		})
 		s.sidebarPrimary(c, sectionChanges, s.text("更改"), lucide.FileDiff(), s.changesCountLabel())
 		s.sidebarPrimary(c, sectionCommits, s.text("全部提交"), lucide.GitCommitHorizontal(), "")
-		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Justify(ui.Center).Gap(t.Space(1)).
-			Padding(t.Space(1), 0).Border(1, t.Border).BorderWidth(0, 0, 1, 0).Children(func() {
-			s.sidebarToggle(c, sectionBranches, lucide.GitBranch(), s.text("分支"))
-			s.sidebarToggle(c, sectionSearch, lucide.Search(), s.text("搜索"))
-		})
 		components.ScrollView(c, components.ScrollViewOptions{}).Fill().Children(func() {
 			ui.Column(c).FillWidth().Shrink(0).Padding(t.Space(1), 0, t.Space(2), 0).Children(func() {
 				s.branchTree(c)
@@ -431,27 +387,6 @@ func (s *settings) sidebarPrimary(c *ui.Context, id, label string, icon *ui.SVG,
 	}).Key(id)
 	item.Padding(t.Space(1.5), t.Space(2))
 	if item.Clicked() {
-		s.setSection(id)
-	}
-}
-
-func (s *settings) sidebarToggle(c *ui.Context, id string, icon *ui.SVG, label string) {
-	t := c.Theme()
-	on := s.repo.section == id
-	b := ui.ButtonBase(c).Key("toggle-"+id).Size(t.Space(9), t.Space(7)).Radius(t.Radius).
-		Label(label).TextColor(t.TextMuted).AlignItems(ui.Center).Justify(ui.Center)
-	if on {
-		b.Background(t.Text.Alpha(.1)).TextColor(t.Text)
-	}
-	b.Draw(func(p *ui.Painter, r ui.Rect) {
-		if !on && b.Hovered() {
-			p.Fill(r, t.Text.Alpha(.06), t.Radius)
-		}
-	}).Children(func() {
-		components.Icon(c, icon).Size(t.Space(4), t.Space(4))
-	})
-	components.Tooltip(c, b, label)
-	if b.Clicked() {
 		s.setSection(id)
 	}
 }
@@ -531,16 +466,11 @@ func (s *settings) changesCountLabel() string {
 }
 
 func (s *settings) repositoryContent(c *ui.Context) {
-	switch s.repo.section {
-	case sectionCommits:
-		s.commitsView(c, false)
-	case sectionBranches:
-		s.branchesView(c)
-	case sectionSearch:
-		s.searchView(c)
-	default:
-		s.changesView(c)
+	if s.repo.section == sectionCommits {
+		s.commitsView(c)
+		return
 	}
+	s.changesView(c)
 }
 
 func (s *settings) contentState[T any](c *ui.Context, state *loadState[T]) bool {
@@ -606,11 +536,11 @@ func changeColor(t *ui.Theme, code string) ui.Color {
 	}
 }
 
-func (s *settings) commitsView(c *ui.Context, filtered bool) {
+func (s *settings) commitsView(c *ui.Context) {
 	if !s.contentState(c, &s.repo.commits) {
 		return
 	}
-	s.repo.visible = s.filteredCommits(filtered)
+	s.repo.visible = s.repo.commits.value
 	if len(s.repo.visible) == 0 {
 		s.repositoryMessage(c, s.text("没有提交。"))
 		return
@@ -857,71 +787,3 @@ func (s *settings) commitFileRow(c *ui.Context, file commitFile) {
 	})
 }
 
-func (s *settings) filteredCommits(filtered bool) []commitEntry {
-	all := s.repo.commits.value
-	if !filtered {
-		return all
-	}
-	query := strings.TrimSpace(strings.ToLower(s.repo.query))
-	if query == "" {
-		return all
-	}
-	var result []commitEntry
-	for _, entry := range all {
-		if strings.Contains(strings.ToLower(entry.Subject), query) ||
-			strings.Contains(strings.ToLower(entry.Author), query) ||
-			strings.Contains(entry.Hash, query) {
-			result = append(result, entry)
-		}
-	}
-	return result
-}
-
-func (s *settings) branchesView(c *ui.Context) {
-	if !s.contentState(c, &s.repo.branches) {
-		return
-	}
-	branches := s.repo.branches.value
-	if len(branches) == 0 {
-		s.repositoryMessage(c, s.text("没有分支。"))
-		return
-	}
-	components.List(c, &s.repo.branchList, len(branches), func(i int) {
-		s.branchRow(c, branches[i])
-	}).Fill()
-}
-
-func (s *settings) branchRow(c *ui.Context, entry branchEntry) {
-	t := c.Theme()
-	icon := lucide.GitBranch()
-	if entry.Remote {
-		icon = lucide.Cloud()
-	}
-	ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(t.Space(1), t.Space(2.5)).Children(func() {
-		components.Icon(c, icon).Size(t.Space(4), t.Space(4)).Shrink(0).TextColor(t.TextMuted)
-		components.Text(c, entry.Name).SingleLine().Grow(1).MinWidth(0).Bold()
-		if entry.Current {
-			components.Text(c, s.text("当前")).FontSize(t.Rem(.8)).TextColor(t.Accent).Shrink(0)
-		}
-		if entry.Gone {
-			components.Text(c, s.text("上游已删除")).FontSize(t.Rem(.8)).TextColor(t.Danger).Shrink(0)
-		} else if entry.Upstream != "" {
-			track := entry.Upstream
-			if entry.Ahead > 0 || entry.Behind > 0 {
-				track += fmt.Sprintf(" ↑%d ↓%d", entry.Ahead, entry.Behind)
-			}
-			components.Text(c, track).FontSize(t.Rem(.8)).TextColor(t.TextMuted).Shrink(0)
-		}
-		components.Text(c, entry.Subject).SingleLine().FontSize(t.Rem(.8)).TextColor(t.TextMuted).Shrink(0)
-	})
-}
-
-func (s *settings) searchView(c *ui.Context) {
-	t := c.Theme()
-	ui.Column(c).Fill().Children(func() {
-		components.TextBox(c, &s.repo.query, components.TextBoxOptions{LeadingIcon: lucide.Search()}).
-			FillWidth().Shrink(0).Padding(t.Space(1.5), t.Space(2)).
-			Placeholder(s.text("搜索提交…")).Label(s.text("搜索提交"))
-		s.commitsView(c, true)
-	})
-}

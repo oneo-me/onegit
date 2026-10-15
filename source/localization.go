@@ -19,7 +19,7 @@ func (s *settings) text(zh string) string {
 var english = map[string]string{
 	"搜索项目与设置": "Search projects and settings", "搜索项目与设置…": "Search projects and settings…", "搜索…": "Search…", "命令面板": "Command palette", "没有匹配的项目或设置": "No matching projects or settings",
 	"正在读取 worktree…": "Loading worktrees…", "读取 worktree 失败：": "Could not load worktrees: ",
-	"更改": "Changes", "全部提交": "All Commits", "分支": "Branches", "搜索": "Search",
+	"更改": "Changes", "全部提交": "All Commits",
 	"获取": "Fetch", "拉取": "Pull", "推送": "Push", "刷新": "Refresh", "在文件管理器中显示": "Reveal in File Manager",
 	"快速启动": "Quick Launch", "仓库设置": "Repository Settings",
 	"分支操作": "Branch",
@@ -32,8 +32,7 @@ var english = map[string]string{
 	"游离 HEAD": "Detached HEAD", "（尚无提交）": " (no commits yet)",
 	"读取失败：": "Could not read: ", "正在读取…": "Loading…",
 	"没有未提交的更改。": "No uncommitted changes.", "没有提交。": "No commits.", "没有分支。": "No branches.",
-	"当前": "Current", "上游已删除": "Upstream gone", "合并提交 · %d 个父提交": "Merge commit · %d parents",
-	"搜索提交…": "Search commits…", "搜索提交": "Search commits",
+	"合并提交 · %d 个父提交": "Merge commit · %d parents",
 	"置顶": "Pinned", "其他项目": "Other Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
 	"（已不存在）":        " (missing)",
 	"读取状态失败：":       "Could not load state: ",
