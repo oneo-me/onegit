@@ -300,3 +300,105 @@ func TestRepositoryPageLayout(t *testing.T) {
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0600)
 }
+
+func TestReadSidebarRefsCommitHashes(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	testGit(t, "init", "-b", "main", repo)
+	if err := writeFile(filepath.Join(repo, "a.txt"), "one"); err != nil {
+		t.Fatal(err)
+	}
+	commitAll(t, repo, "first")
+	if err := writeFile(filepath.Join(repo, "a.txt"), "two"); err != nil {
+		t.Fatal(err)
+	}
+	commitAll(t, repo, "second")
+	testGit(t, "-C", repo, "tag", "light")
+	testGit(t, "-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "tag", "-a", "annotated", "-m", "note")
+	if err := writeFile(filepath.Join(repo, "a.txt"), "three"); err != nil {
+		t.Fatal(err)
+	}
+	testGit(t, "-C", repo, "stash", "push")
+
+	ctx := context.Background()
+	refs, err := readSidebarRefs(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commits, err := readCommits(ctx, repo, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := map[string]string{}
+	for _, entry := range commits {
+		full[entry.Subject] = entry.Hash
+	}
+	tags := map[string]string{}
+	for _, tag := range refs.Tags {
+		tags[tag.Name] = tag.Hash
+	}
+	if tags["light"] != full["second"] || tags["annotated"] != full["second"] {
+		t.Fatalf("tag hashes: %+v, second=%s", tags, full["second"])
+	}
+	if len(refs.Stashes) != 1 || refs.Stashes[0].Hash == "" {
+		t.Fatalf("stash hash: %+v", refs.Stashes)
+	}
+	if !strings.HasPrefix(refs.Stashes[0].Name, "stash@{0}") {
+		t.Fatalf("stash name: %q", refs.Stashes[0].Name)
+	}
+	reachable := false
+	for _, entry := range commits {
+		if entry.Hash == refs.Stashes[0].Hash {
+			reachable = true
+		}
+	}
+	if !reachable {
+		t.Fatalf("stash commit %s absent from the all-refs log", refs.Stashes[0].Hash)
+	}
+}
+
+func TestSelectRefJumpsToCommit(t *testing.T) {
+	s := &settings{systemLanguage: "zh-CN", selectedProject: &projectNode{Path: "/repo", Repository: true}}
+	s.repo.section = sectionChanges
+	s.repo.branches.loaded = true
+	s.repo.branches.value = []branchEntry{
+		{Name: "main", Hash: "aaaa"},
+		{Name: "origin/main", Hash: "bbbb", Remote: true},
+	}
+	s.repo.refs.loaded = true
+	s.repo.refs.value = sidebarRefs{Tags: []refEntry{{Name: "v1", Hash: "cccc"}}}
+	s.repo.commits.loaded = true
+	s.repo.commits.value = []commitEntry{
+		{Hash: "cccc", Short: "ccccccc", Author: "Test", Subject: "tagged"},
+		{Hash: "bbbb", Short: "bbbbbbb", Author: "Test", Subject: "remote"},
+		{Hash: "aaaa", Short: "aaaaaaa", Author: "Test", Subject: "local"},
+	}
+
+	view := ui.NewTester(s.branchTree, 300, 600)
+	view.Frame()
+	if err := view.Click("main"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if s.repo.selectedRef != (refSelection{Group: "branches", Name: "main"}) || s.repo.jumpHash != "aaaa" || s.repo.section != sectionCommits {
+		t.Fatalf("branch selection: %+v jump=%q section=%q", s.repo.selectedRef, s.repo.jumpHash, s.repo.section)
+	}
+	// The content view consumes the pending jump and reveals the tip commit.
+	content := ui.NewTester(s.repositoryContent, 640, 480)
+	content.Frame()
+	if s.repo.jumpHash != "" || s.repo.commitIndex != 2 {
+		t.Fatalf("jump not applied: hash=%q index=%d", s.repo.jumpHash, s.repo.commitIndex)
+	}
+
+	// Tags default collapsed; opening the group lets its rows be selected too.
+	open := true
+	s.repo.treeGroups["tags"] = &open
+	view.Frame()
+	if err := view.Click("v1"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	content.Frame()
+	if s.repo.selectedRef != (refSelection{Group: "tags", Name: "v1"}) || s.repo.commitIndex != 0 {
+		t.Fatalf("tag selection: %+v index=%d", s.repo.selectedRef, s.repo.commitIndex)
+	}
+}

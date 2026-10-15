@@ -28,6 +28,13 @@ const (
 	detailTree
 )
 
+// refSelection is the repository sidebar ref row the user picked. Selecting a
+// row navigates the content view to the commit it points at.
+type refSelection struct {
+	Group string
+	Name  string
+}
+
 type gitJob struct {
 	running bool
 	label   string
@@ -54,6 +61,9 @@ type repositoryState struct {
 	filter     string
 	treeGroups map[string]*bool
 
+	selectedRef refSelection
+	jumpHash    string
+
 	changesList components.ListState
 	commitList  components.ListState
 	commitIndex int
@@ -71,6 +81,8 @@ func (r *repositoryState) reset() {
 	r.cancelJob()
 	r.commitIndex = -1
 	r.visible = nil
+	r.selectedRef = refSelection{}
+	r.jumpHash = ""
 	r.changesList = components.ListState{}
 	r.commitList = components.ListState{}
 }
@@ -387,6 +399,10 @@ func (s *settings) sidebarPrimary(c *ui.Context, id, label string, icon *ui.SVG,
 	}).Key(id)
 	item.Padding(t.Space(1.5), t.Space(2))
 	if item.Clicked() {
+		// A primary entry is navigation of its own, so it drops any ref row
+		// selection rather than leaving an unrelated row highlighted.
+		s.repo.selectedRef = refSelection{}
+		s.repo.jumpHash = ""
 		s.setSection(id)
 	}
 }
@@ -411,16 +427,17 @@ func (s *settings) branchTree(c *ui.Context) {
 		}
 		return strings.Contains(strings.ToLower(name), strings.ToLower(s.repo.filter))
 	}
-	var local, remote []string
+	var local, remote []refEntry
 	if s.repo.branches.loaded {
 		for _, branch := range s.repo.branches.value {
 			if !match(branch.Name) {
 				continue
 			}
+			entry := refEntry{Name: branch.Name, Hash: branch.Hash}
 			if branch.Remote {
-				remote = append(remote, branch.Name)
+				remote = append(remote, entry)
 			} else {
-				local = append(local, branch.Name)
+				local = append(local, entry)
 			}
 		}
 	}
@@ -428,10 +445,10 @@ func (s *settings) branchTree(c *ui.Context) {
 	if s.repo.refs.loaded {
 		refs = s.repo.refs.value
 	}
-	filtered := func(items []string) []string {
-		result := make([]string, 0, len(items))
+	filtered := func(items []refEntry) []refEntry {
+		result := make([]refEntry, 0, len(items))
 		for _, item := range items {
-			if match(item) {
+			if match(item.Name) {
 				result = append(result, item)
 			}
 		}
@@ -446,16 +463,29 @@ func (s *settings) branchTree(c *ui.Context) {
 	})
 }
 
-func (s *settings) treeSection(c *ui.Context, key, label string, items []string, defaultOpen bool) {
+func (s *settings) treeSection(c *ui.Context, key, label string, items []refEntry, defaultOpen bool) {
 	ui.Column(c).Key("group-" + key).FillWidth().Shrink(0).Children(func() {
 		components.TreeItem(c, label, s.groupOpen(key, defaultOpen), false, func() {
-			for _, name := range items {
-				ui.Column(c).Key("leaf-" + key + "-" + name).FillWidth().Shrink(0).Children(func() {
-					components.TreeItem(c, name, nil, false, nil)
+			for _, item := range items {
+				ui.Column(c).Key("leaf-" + key + "-" + item.Name).FillWidth().Shrink(0).Children(func() {
+					selected := s.repo.selectedRef.Group == key && s.repo.selectedRef.Name == item.Name
+					if components.TreeItem(c, item.Name, nil, selected, nil).Clicked() {
+						s.selectRef(key, item)
+					}
 				})
 			}
 		})
 	})
+}
+
+// selectRef highlights a sidebar ref row and navigates the content view to the
+// commit it points at. A submodule has no commit in this repository, so its
+// row only changes the selection.
+func (s *settings) selectRef(group string, item refEntry) {
+	s.repo.selectedRef = refSelection{Group: group, Name: item.Name}
+	s.repo.jumpHash = item.Hash
+	s.setSection(sectionCommits)
+	s.invalidate()
 }
 
 func (s *settings) changesCountLabel() string {
@@ -545,6 +575,10 @@ func (s *settings) commitsView(c *ui.Context) {
 		s.repositoryMessage(c, s.text("没有提交。"))
 		return
 	}
+	if s.repo.jumpHash != "" {
+		s.revealCommit(s.repo.jumpHash)
+		s.repo.jumpHash = ""
+	}
 	if s.repo.commitIndex >= len(s.repo.visible) {
 		s.repo.commitIndex = len(s.repo.visible) - 1
 	}
@@ -564,6 +598,21 @@ func (s *settings) commitList(c *ui.Context) {
 	components.List(c, s.commitListState(), len(s.repo.visible), func(i int) {
 		s.commitRow(c, s.repo.visible[i], rows[i], columns)
 	}).Fill()
+}
+
+// revealCommit selects a commit in the loaded list and scrolls it into view,
+// so selecting a sidebar ref lands on the commit it points at even when the
+// list is scrolled far away.
+func (s *settings) revealCommit(hash string) {
+	for i, entry := range s.repo.visible {
+		if entry.Hash != hash {
+			continue
+		}
+		s.repo.commitIndex = i
+		s.repo.commitList.ScrollIntoView(i)
+		s.ensureCommitFiles()
+		return
+	}
 }
 
 func (s *settings) commitListState() *components.ListState {

@@ -176,7 +176,7 @@ type branchEntry struct {
 
 func readBranches(ctx context.Context, dir string) ([]branchEntry, error) {
 	output, err := gitCommand(ctx, dir, "for-each-ref",
-		"--format=%(refname)%00%(refname:short)%00%(objectname:short)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(HEAD)%00%(subject)",
+		"--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(HEAD)%00%(subject)",
 		"refs/heads", "refs/remotes").Output()
 	if err != nil {
 		return nil, gitError(dir, err)
@@ -347,33 +347,59 @@ func parseCommitFiles(output string) []commitFile {
 	return files
 }
 
-// sidebarRefs groups the tag, stash and submodule names that the repository
+// refEntry is one tag, stash or submodule row of the repository sidebar, with
+// the commit its row reveals on the right when selected. Submodules leave Hash
+// empty because the recorded commit lives in the submodule's own repository.
+type refEntry struct {
+	Name string
+	Hash string
+}
+
+// sidebarRefs groups the tag, stash and submodule rows that the repository
 // sidebar lists next to the branches.
 type sidebarRefs struct {
-	Tags       []string
-	Stashes    []string
-	Submodules []string
+	Tags       []refEntry
+	Stashes    []refEntry
+	Submodules []refEntry
 }
 
 func readSidebarRefs(ctx context.Context, dir string) (sidebarRefs, error) {
 	var refs sidebarRefs
-	if output, err := gitCommand(ctx, dir, "for-each-ref", "--format=%(refname:short)", "--sort=-creatordate", "refs/tags").Output(); err == nil {
-		refs.Tags = splitLines(string(output))
-	}
-	if output, err := gitCommand(ctx, dir, "stash", "list", "--format=%gd%x00%s").Output(); err == nil {
+	// An annotated tag names a tag object; its peeled object is the commit the
+	// tag points at, which is what selecting the row should reveal.
+	if output, err := gitCommand(ctx, dir, "for-each-ref",
+		"--format=%(refname:short)%00%(objectname)%00%(*objectname)",
+		"--sort=-creatordate", "refs/tags").Output(); err == nil {
 		for _, line := range splitLines(string(output)) {
-			name, subject, _ := strings.Cut(line, "\x00")
-			if subject != "" {
-				name += " " + subject
+			fields := strings.Split(line, "\x00")
+			entry := refEntry{Name: fields[0]}
+			if len(fields) > 1 {
+				entry.Hash = fields[1]
 			}
-			refs.Stashes = append(refs.Stashes, name)
+			if len(fields) > 2 && fields[2] != "" {
+				entry.Hash = fields[2]
+			}
+			refs.Tags = append(refs.Tags, entry)
+		}
+	}
+	if output, err := gitCommand(ctx, dir, "stash", "list", "--format=%gd%x00%H%x00%s").Output(); err == nil {
+		for _, line := range splitLines(string(output)) {
+			fields := strings.SplitN(line, "\x00", 3)
+			entry := refEntry{Name: fields[0]}
+			if len(fields) > 1 {
+				entry.Hash = fields[1]
+			}
+			if len(fields) > 2 && fields[2] != "" {
+				entry.Name += " " + fields[2]
+			}
+			refs.Stashes = append(refs.Stashes, entry)
 		}
 	}
 	if output, err := gitCommand(ctx, dir, "submodule", "status").Output(); err == nil {
 		for _, line := range splitLines(string(output)) {
 			fields := strings.Fields(strings.TrimLeft(line, " +-U"))
 			if len(fields) > 0 {
-				refs.Submodules = append(refs.Submodules, fields[0])
+				refs.Submodules = append(refs.Submodules, refEntry{Name: fields[0]})
 			}
 		}
 	}
