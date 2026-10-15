@@ -157,7 +157,7 @@ func (s *settings) ensureRepositoryData() {
 	}
 	if s.repo.section == sectionCommits && s.repo.commits.needs(dir) {
 		s.repo.commits.start(dispatch, dir, func(ctx context.Context) ([]commitEntry, error) {
-			return readCommits(ctx, dir, 300)
+			return readCommits(ctx, dir, 0)
 		}, s.invalidate)
 	}
 }

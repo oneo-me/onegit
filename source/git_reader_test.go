@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -266,6 +267,34 @@ func TestReadCommitsIncludesAllBranches(t *testing.T) {
 		if !subjects[want] {
 			t.Fatalf("missing %q in %+v", want, subjects)
 		}
+	}
+}
+
+func TestReadCommitsWithoutLimitReturnsCompleteHistory(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	testGit(t, "init", "-b", "main", repo)
+	for i := 0; i < 5; i++ {
+		if err := writeFile(filepath.Join(repo, "a.txt"), fmt.Sprintf("value %d", i)); err != nil {
+			t.Fatal(err)
+		}
+		commitAll(t, repo, fmt.Sprintf("commit %d", i))
+	}
+
+	ctx := context.Background()
+	all, err := readCommits(ctx, repo, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 5 || all[0].Subject != "commit 4" || all[4].Subject != "commit 0" {
+		t.Fatalf("complete history: %+v", all)
+	}
+
+	limited, err := readCommits(ctx, repo, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited) != 3 || limited[0].Subject != "commit 4" {
+		t.Fatalf("limited history: %+v", limited)
 	}
 }
 

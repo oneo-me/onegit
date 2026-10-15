@@ -247,22 +247,24 @@ type commitFile struct {
 	Orig   string
 }
 
+// readCommits reads the revision list behind the "all commits" view. A
+// positive limit caps the list for tests; zero or less reads the complete
+// history so the view never hides older commits.
 func readCommits(ctx context.Context, dir string, limit int) ([]commitEntry, error) {
-	if limit <= 0 {
-		limit = 300
-	}
 	// --all walks every ref as well as HEAD, so the list covers local and
 	// remote branches and tags, not just the checked out worktree.
 	// --date-order keeps parents after their children, which the revision
 	// graph relies on to close its lines, without interleaving branches the
 	// way --topo-order does.
-	cmd := gitCommand(ctx, dir, "log",
-		"--all",
-		"-n", strconv.Itoa(limit),
+	args := []string{"log", "--all"}
+	if limit > 0 {
+		args = append(args, "-n", strconv.Itoa(limit))
+	}
+	args = append(args,
 		"--date-order",
 		"--date=iso-strict",
 		"--pretty=format:%H%x00%h%x00%an%x00%ae%x00%cn%x00%ce%x00%aI%x00%cI%x00%P%x00%D%x00%s%x00%b%x1e")
-	output, err := cmd.Output()
+	output, err := gitCommand(ctx, dir, args...).Output()
 	if err != nil {
 		// A repository without commits has no log yet; that is an empty history,
 		// not a read failure.
