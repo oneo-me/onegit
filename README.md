@@ -34,7 +34,7 @@ GOWORK=off go vet ./...
 
 仓库根目录的 [`.neorio/config.yaml`](.neorio/config.yaml) 为 Neorio 提供运行任务：Run 执行 `go tool mygo dev`，Build 执行 `go tool mygo build` 并在成功后打开 `dist/`，菜单中另有 Test 与 Vet；各任务都在 `source/` 下运行并设置 `GOWORK=off`。
 
-[打包配置](source/mygo.json) 默认构建当前平台，在 macOS 上把应用包与磁盘映像写入 `dist/darwin-<arch>/`，最低系统版本声明为 macOS 13；跨平台构建使用 `go tool mygo build -platform ...`，非 macOS 系统会跳过签名与磁盘映像步骤。产物仅作本地开发验证，使用临时签名，未经公证；`0.1.0` 是初始构建版本，不表示已发布。`go test` 覆盖设置交互与持久化、Git 项目识别、worktree 标签页与项目切换、工作区状态/提交/分支读取与仓库视图、提交图谱布局、目录树交互、扫描取消、缓存合并与恢复及旧设置迁移；原生目录选择器仍需人工验证。
+[打包配置](source/mygo.json) 默认构建当前平台，在 macOS 上把应用包与磁盘映像写入 `dist/darwin-<arch>/`，最低系统版本声明为 macOS 13；跨平台构建使用 `go tool mygo build -platform ...`，非 macOS 系统会跳过签名与磁盘映像步骤。应用图标保存在 [source/assets](source/assets)：macOS 使用 Icon Composer 工程 [`icon.icon`](source/assets/icon.icon)，MyGo 从同源 `icon.png` 渲染 .icns，并为 Windows 资源与 Linux 入口生成对应尺寸，`icon.ico` 是同一份渲图导出的 Windows 图标。产物仅作本地开发验证，使用临时签名，未经公证；`0.1.0` 是初始构建版本，不表示已发布。`go test` 覆盖设置交互与持久化、Git 项目识别、worktree 标签页与项目切换、工作区状态/提交/分支读取与仓库视图、提交图谱布局、目录树交互、扫描取消、缓存合并与恢复及旧设置迁移；原生目录选择器仍需人工验证。
 
 ## 项目文档
 

@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+- 应用使用自己的图标：一个仓库底座上并排三根 worktree 立柱，当前 worktree 以铜橙区分。macOS 使用 Icon Composer 工程，其他平台由同一次渲染导出 PNG 与 ICO 并接入打包配置。
+
 - 应用更名为 Onegit，配置与状态目录改为 `~/.oneo/onegit/`。
 
 - 选择侧边栏项目后，右侧顶部以 worktree 标签页展开该项目全部关联 worktree，主仓库在首项，仅有一个 worktree 时隐藏标签页；标签页下方是工具栏，再下方是项目侧边栏与内容区。记住最后选择的仓库、各仓库的 worktree 与侧边栏入口，无有效选择时默认选中首项，无可选项时显示空白内容。

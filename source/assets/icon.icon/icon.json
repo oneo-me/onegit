@@ -1,0 +1,39 @@
+{
+  "fill" : {
+    "solid" : "srgb:0.92941,0.94510,0.95686,1.00000"
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "01-worktree-current.png",
+          "name" : "01-worktree-current"
+        },
+        {
+          "image-name" : "02-worktree-main.png",
+          "name" : "02-worktree-main"
+        },
+        {
+          "image-name" : "04-worktree-rear.png",
+          "name" : "04-worktree-rear"
+        },
+        {
+          "image-name" : "03-repo-base.png",
+          "name" : "03-repo-base"
+        }
+      ],
+      "name" : "01-worktrees",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.45
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}
