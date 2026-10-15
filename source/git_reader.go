@@ -226,14 +226,25 @@ func parseBranchTrack(track string) (ahead, behind int, gone bool) {
 
 // commitEntry is one revision from `git log`.
 type commitEntry struct {
-	Hash    string
-	Short   string
-	Author  string
-	Date    time.Time
-	Parents []string
-	Refs    string
-	Subject string
-	Body    string
+	Hash           string
+	Short          string
+	Author         string
+	AuthorEmail    string
+	Committer      string
+	CommitterEmail string
+	Date           time.Time
+	CommitterDate  time.Time
+	Parents        []string
+	Refs           string
+	Subject        string
+	Body           string
+}
+
+// commitFile is one path touched by a commit, from `git show --name-status`.
+type commitFile struct {
+	Status string
+	Path   string
+	Orig   string
 }
 
 func readCommits(ctx context.Context, dir string, limit int) ([]commitEntry, error) {
@@ -243,7 +254,7 @@ func readCommits(ctx context.Context, dir string, limit int) ([]commitEntry, err
 	cmd := gitCommand(ctx, dir, "log",
 		"-n", strconv.Itoa(limit),
 		"--date=iso-strict",
-		"--pretty=format:%H%x00%h%x00%an%x00%aI%x00%P%x00%D%x00%s%x00%b%x1e")
+		"--pretty=format:%H%x00%h%x00%an%x00%ae%x00%cn%x00%ce%x00%aI%x00%cI%x00%P%x00%D%x00%s%x00%b%x1e")
 	output, err := cmd.Output()
 	if err != nil {
 		// A repository without commits has no log yet; that is an empty history,
@@ -264,23 +275,110 @@ func parseCommits(output string) []commitEntry {
 			continue
 		}
 		fields := strings.Split(record, "\x00")
-		for len(fields) < 8 {
+		for len(fields) < 12 {
 			fields = append(fields, "")
 		}
-		date, _ := time.Parse(time.RFC3339, fields[3])
+		date, _ := time.Parse(time.RFC3339, fields[6])
+		commitDate, _ := time.Parse(time.RFC3339, fields[7])
 		entry := commitEntry{
-			Hash:    fields[0],
-			Short:   fields[1],
-			Author:  fields[2],
-			Date:    date,
-			Refs:    fields[5],
-			Subject: fields[6],
-			Body:    strings.TrimRight(fields[7], "\n"),
+			Hash:           fields[0],
+			Short:          fields[1],
+			Author:         fields[2],
+			AuthorEmail:    fields[3],
+			Committer:      fields[4],
+			CommitterEmail: fields[5],
+			Date:           date,
+			CommitterDate:  commitDate,
+			Refs:           fields[9],
+			Subject:        fields[10],
+			Body:           strings.TrimRight(fields[11], "\n"),
 		}
-		if parents := strings.Fields(fields[4]); len(parents) > 0 {
+		if parents := strings.Fields(fields[8]); len(parents) > 0 {
 			entry.Parents = parents
 		}
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+// readCommitFiles lists the paths a commit changed, used by the Changes and
+// File Tree tabs of the commit details.
+func readCommitFiles(ctx context.Context, dir, hash string) ([]commitFile, error) {
+	if hash == "" {
+		return nil, nil
+	}
+	output, err := gitCommand(ctx, dir, "show", "--name-status", "--format=", "-z", hash).Output()
+	if err != nil {
+		return nil, gitError(dir, err)
+	}
+	return parseCommitFiles(string(output)), nil
+}
+
+func parseCommitFiles(output string) []commitFile {
+	var files []commitFile
+	tokens := strings.Split(output, "\x00")
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		if token == "" {
+			continue
+		}
+		parts := strings.SplitN(token, "\t", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		status, path := parts[0], parts[1]
+		entry := commitFile{Status: status, Path: path}
+		if status != "" && (status[0] == 'R' || status[0] == 'C') {
+			entry.Orig = path
+			if i+1 < len(tokens) {
+				i++
+				entry.Path = tokens[i]
+			}
+		}
+		files = append(files, entry)
+	}
+	return files
+}
+
+// sidebarRefs groups the tag, stash and submodule names that the repository
+// sidebar lists next to the branches.
+type sidebarRefs struct {
+	Tags       []string
+	Stashes    []string
+	Submodules []string
+}
+
+func readSidebarRefs(ctx context.Context, dir string) (sidebarRefs, error) {
+	var refs sidebarRefs
+	if output, err := gitCommand(ctx, dir, "for-each-ref", "--format=%(refname:short)", "--sort=-creatordate", "refs/tags").Output(); err == nil {
+		refs.Tags = splitLines(string(output))
+	}
+	if output, err := gitCommand(ctx, dir, "stash", "list", "--format=%gd%x00%s").Output(); err == nil {
+		for _, line := range splitLines(string(output)) {
+			name, subject, _ := strings.Cut(line, "\x00")
+			if subject != "" {
+				name += " " + subject
+			}
+			refs.Stashes = append(refs.Stashes, name)
+		}
+	}
+	if output, err := gitCommand(ctx, dir, "submodule", "status").Output(); err == nil {
+		for _, line := range splitLines(string(output)) {
+			fields := strings.Fields(strings.TrimLeft(line, " +-U"))
+			if len(fields) > 0 {
+				refs.Submodules = append(refs.Submodules, fields[0])
+			}
+		}
+	}
+	return refs, nil
+}
+
+func splitLines(s string) []string {
+	var lines []string
+	for _, line := range strings.Split(s, "\n") {
+		if line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return lines
 }
