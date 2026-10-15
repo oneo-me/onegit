@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -42,7 +43,16 @@ func listWorktrees(ctx context.Context, path string) ([]worktree, error) {
 		}
 		return nil, err
 	}
-	return parseWorktrees(string(output))
+	items, err := parseWorktrees(string(output))
+	if err != nil {
+		return nil, err
+	}
+	// Git reports forward slashes on Windows; normalize so paths match the
+	// filepath-based paths used for projects and selection state.
+	for i := range items {
+		items[i].Path = filepath.Clean(items[i].Path)
+	}
+	return items, nil
 }
 
 func parseWorktrees(output string) ([]worktree, error) {

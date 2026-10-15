@@ -12,6 +12,7 @@ import (
 type sidebarState struct {
 	SelectedProjects  map[string]string       `yaml:"selectedProjects,omitempty"`
 	SelectedWorktrees map[string]string       `yaml:"selectedWorktrees,omitempty"`
+	SelectedSections  map[string]string       `yaml:"selectedSections,omitempty"`
 	Roots             map[string]*projectNode `yaml:"roots,omitempty"`
 	PinnedOpen        *bool                   `yaml:"pinnedOpen,omitempty"`
 	OtherOpen         *bool                   `yaml:"otherOpen,omitempty"`

@@ -63,12 +63,3 @@ func main() {
 		log.Fatal(err)
 	}
 }
-
-func (s *settings) welcome(c *ui.Context) {
-	if s.selectedProject != nil && s.selectedProject.Repository {
-		ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c)+16, 8, 16, 8).Children(func() {
-			s.projectWorktrees(c)
-		})
-		return
-	}
-}

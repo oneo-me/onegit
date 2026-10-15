@@ -1,0 +1,32 @@
+tasks:
+  - label: Run
+    group: run
+    command: go
+    args: [tool, mygo, dev]
+    options:
+      cwd: source
+      env:
+        GOWORK: "off"
+  - label: Build
+    group: build
+    command: go
+    args: [tool, mygo, build]
+    options:
+      cwd: source
+      env:
+        GOWORK: "off"
+    outputDirectory: ../dist
+  - label: Test
+    command: go
+    args: [test, ./...]
+    options:
+      cwd: source
+      env:
+        GOWORK: "off"
+  - label: Vet
+    command: go
+    args: [tool, mygo, vet]
+    options:
+      cwd: source
+      env:
+        GOWORK: "off"

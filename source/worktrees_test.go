@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -22,7 +23,13 @@ func TestWorktreeList(t *testing.T) {
 		t.Fatalf("unborn: %+v %v", items, err)
 	}
 	testGit(t, "-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial")
-	linked := filepath.Join(root, "a linked\n路径")
+	// Windows forbids newlines in file names; keep the arbitrary-name case on
+	// platforms that can create it.
+	linkedName := "a linked 路径"
+	if runtime.GOOS != "windows" {
+		linkedName = "a linked\n路径"
+	}
+	linked := filepath.Join(root, linkedName)
 	testGit(t, "-C", repo, "worktree", "add", "-b", "feature", linked)
 	detached := filepath.Join(root, "detached")
 	testGit(t, "-C", repo, "worktree", "add", "--detach", detached)
@@ -72,7 +79,7 @@ func TestWorktreeSelectionCompletion(t *testing.T) {
 	repo := t.TempDir()
 	testGit(t, "init", repo)
 	s := &settings{}
-	callbacks := make(chan func(), 2)
+	callbacks := make(chan func(), 64)
 	dispatch := func(fn func()) { callbacks <- fn }
 	await := func() func() {
 		t.Helper()
@@ -122,7 +129,8 @@ func TestWorktreeSelection(t *testing.T) {
 	s := &settings{overview: projectOverview{Worktrees: []worktree{
 		{Path: "/repo", Main: true}, {Path: "/outside/feature"},
 	}}}
-	tt := ui.NewTester(s.projectWorktrees, 800, 600)
+	s.repo.dispatch = func(func()) {}
+	tt := ui.NewTester(s.worktreeTabs, 800, 600)
 	tt.Frame()
 	for _, row := range []struct{ label, path string }{{"feature", "/outside/feature"}, {"repo", "/repo"}} {
 		if err := tt.Click(row.label); err != nil {
@@ -161,12 +169,12 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 	if s.selectedProject == nil || s.selectedProject.Path != repoA || s.overview.SelectedPath != repoA {
 		t.Fatal("first repository and worktree were not selected by default")
 	}
-	callbacks := make(chan func(), 10)
+	callbacks := make(chan func(), 64)
 	dispatch := func(fn func()) { callbacks <- fn }
 	finish := func(s *settings) {
 		t.Helper()
 		deadline := time.After(10 * time.Second)
-		for s.scanning || s.overview.Loading {
+		for s.scanning || s.overview.Loading || s.repo.status.loading || s.repo.branches.loading || s.repo.commits.loading {
 			select {
 			case fn := <-callbacks:
 				fn()
@@ -179,14 +187,20 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 		t.Helper()
 		s.selectProject(findProject(s.projectTree, repo), dispatch)
 		finish(s)
-		view := ui.NewTester(s.projectWorktrees, 800, 600)
-		if err := view.Click(label); err != nil {
-			t.Fatal(err)
-		}
+		view := ui.NewTester(s.worktreeTabs, 800, 600)
 		view.Frame()
+		// A repository with a single worktree shows no tab strip; the only entry
+		// is already selected.
+		if _, ok := view.Find(label); ok {
+			if err := view.Click(label); err != nil {
+				t.Fatal(err)
+			}
+			view.Frame()
+		}
 		if s.overview.SelectedPath != want {
 			t.Fatalf("selected %q, want %q", s.overview.SelectedPath, want)
 		}
+		finish(s)
 	}
 	choose(repoA, "linked", linked)
 	choose(repoB, "b", repoB)
@@ -207,7 +221,7 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 		t.Fatal("cached repository was not restored immediately")
 	}
 	finish(s)
-	view := ui.NewTester(s.projectWorktrees, 800, 600)
+	view := ui.NewTester(s.worktreeTabs, 800, 600)
 	view.Frame()
 	if s.overview.SelectedPath != linked || s.overview.selectedIndex != 1 {
 		t.Fatal("restart did not restore worktree highlight")
@@ -234,7 +248,7 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 	testGit(t, "-C", repoA, "worktree", "remove", linked)
 	s.selectProject(findProject(s.projectTree, repoA), dispatch)
 	finish(s)
-	view = ui.NewTester(s.projectWorktrees, 800, 600)
+	view = ui.NewTester(s.worktreeTabs, 800, 600)
 	view.Frame()
 	if s.overview.SelectedPath != repoA || s.overview.selectedIndex != 0 {
 		t.Fatal("removed worktree did not fall back to the first entry")
@@ -244,7 +258,7 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 func TestEmptyNavigationContent(t *testing.T) {
 	for _, s := range []*settings{
 		{},
-		{selectedProject: &projectNode{Path: "/repo", Repository: true}},
+		{selectedProject: &projectNode{Path: "/folder"}},
 	} {
 		view := ui.NewTester(s.welcome, 800, 600)
 		view.Frame()
@@ -279,7 +293,7 @@ func TestDefaultRepositoryUsesSidebarOrder(t *testing.T) {
 	pinned.Pinned = true
 	s.selectedProject = nil
 	s.state.SelectedProjects[root] = "/removed"
-	callbacks := make(chan func(), 2)
+	callbacks := make(chan func(), 64)
 	s.restoreProjectSelection(func(fn func()) { callbacks <- fn })
 	awaitNavigation(t, s, callbacks)
 	if s.selectedProject != pinned {

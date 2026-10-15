@@ -8,11 +8,12 @@ import (
 	"github.com/oneo-me/onevra/source/components"
 )
 
-// Project overview is a separate navigation level from a future worktree page.
+// projectOverview owns the worktree tabs of the selected repository. The tab
+// strip replaces the former worktree list: each worktree is one tab, and the
+// strip stays hidden while the main worktree is the only entry.
 type projectOverview struct {
 	Worktrees     []worktree
 	SelectedPath  string
-	list          components.ListState
 	selectedIndex int
 	Loading       bool
 	Problem       string
@@ -25,11 +26,14 @@ func (s *settings) cancelWorktrees() {
 		s.overview.cancel()
 	}
 	s.overview = projectOverview{version: s.overview.version + 1}
+	s.repo.reset()
 }
 
 func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 	s.cancelWorktrees()
+	s.repo.dispatch = onMain
 	s.selectedProject = node
+	s.repo.section = s.sectionFor(node)
 	if node == nil || !node.Repository {
 		return
 	}
@@ -53,20 +57,12 @@ func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 			s.overview.Worktrees = items
 			s.overview.SelectedPath = ""
 			if err == nil {
-				if len(items) > 0 {
-					s.overview.SelectedPath = items[0].Path
-				}
-				for _, item := range items {
-					if item.Path == s.state.SelectedWorktrees[node.Path] {
-						s.overview.SelectedPath = item.Path
-						break
-					}
-				}
-				s.rememberWorktreeSelection()
+				s.applyWorktreeSelection(node.Path)
 			}
 			if err != nil {
 				s.overview.Problem = err.Error()
 			}
+			s.repositoryChanged()
 			if s.window != nil {
 				s.window.Invalidate()
 			}
@@ -74,40 +70,39 @@ func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 	}()
 }
 
-func (s *settings) projectWorktrees(c *ui.Context) {
-	if s.overview.Loading {
-		components.Text(c, s.text("正在读取 worktree…")).TextColor(c.Theme().TextMuted)
+// applyWorktreeSelection restores the remembered worktree of a repository and
+// falls back to the first entry Git returned.
+func (s *settings) applyWorktreeSelection(project string) {
+	s.overview.SelectedPath = ""
+	s.overview.selectedIndex = -1
+	if len(s.overview.Worktrees) == 0 {
 		return
 	}
-	if s.overview.Problem != "" {
-		components.Text(c, s.text("读取 worktree 失败：")+s.overview.Problem).Wrap().TextColor(c.Theme().TextMuted)
+	wanted := s.state.SelectedWorktrees[project]
+	for i, item := range s.overview.Worktrees {
+		if item.Path == wanted {
+			s.overview.SelectedPath = item.Path
+			s.overview.selectedIndex = i
+			break
+		}
+	}
+	if s.overview.SelectedPath == "" {
+		s.overview.SelectedPath = s.overview.Worktrees[0].Path
+		s.overview.selectedIndex = 0
+	}
+	s.rememberWorktreeSelection()
+}
+
+// selectWorktreeTab switches the active worktree and reloads its repository
+// data. It is a navigation change, never a Git branch checkout.
+func (s *settings) selectWorktreeTab(index int) {
+	if index < 0 || index >= len(s.overview.Worktrees) || index == s.overview.selectedIndex {
 		return
 	}
-	overview := &s.overview
-	if overview.list.Selected == nil {
-		overview.selectedIndex = -1
-		for i, item := range overview.Worktrees {
-			if item.Path == overview.SelectedPath {
-				overview.selectedIndex = i
-				break
-			}
-		}
-		overview.list = components.ListState{
-			Selected: &overview.selectedIndex,
-			Key:      func(i int) any { return overview.Worktrees[i].Path },
-			Label:    func(i int) string { return filepath.Base(overview.Worktrees[i].Path) },
-			OnChange: func() {
-				overview.SelectedPath = ""
-				if i := overview.selectedIndex; i >= 0 && i < len(overview.Worktrees) {
-					overview.SelectedPath = overview.Worktrees[i].Path
-				}
-				s.rememberWorktreeSelection()
-			},
-		}
-	}
-	components.List(c, &overview.list, len(overview.Worktrees), func(i int) {
-		components.Text(c, filepath.Base(overview.Worktrees[i].Path)).SingleLine().Padding(6, 8)
-	}).Fill()
+	s.overview.selectedIndex = index
+	s.overview.SelectedPath = s.overview.Worktrees[index].Path
+	s.rememberWorktreeSelection()
+	s.repositoryChanged()
 }
 
 func (s *settings) rememberWorktreeSelection() {
@@ -119,4 +114,30 @@ func (s *settings) rememberWorktreeSelection() {
 	}
 	s.state.SelectedWorktrees[s.selectedProject.Path] = s.overview.SelectedPath
 	s.saveSidebarState()
+}
+
+// worktreeTabs builds the tab strip above the repository toolbar. A repository
+// with a single main worktree shows no tabs.
+func (s *settings) worktreeTabs(c *ui.Context) {
+	if len(s.overview.Worktrees) <= 1 {
+		return
+	}
+	labels := make([]string, len(s.overview.Worktrees))
+	for i, item := range s.overview.Worktrees {
+		labels[i] = worktreeLabel(item)
+	}
+	selected := s.overview.selectedIndex
+	parts := components.Tabs(c, &selected, labels...)
+	parts.List.Padding(8, 6, 6, 6)
+	if parts.List.Changed() {
+		s.selectWorktreeTab(selected)
+	}
+}
+
+func worktreeLabel(item worktree) string {
+	label := filepath.Base(item.Path)
+	if label == "" || label == "." || label == string(filepath.Separator) {
+		label = item.Path
+	}
+	return label
 }
