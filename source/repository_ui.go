@@ -630,9 +630,9 @@ func (s *settings) commitsView(c *ui.Context, filtered bool) {
 }
 
 func (s *settings) commitList(c *ui.Context) {
-	rows, lanes := buildGraph(s.repo.visible)
+	rows, columns := buildGraph(s.repo.visible)
 	components.List(c, s.commitListState(), len(s.repo.visible), func(i int) {
-		s.commitRow(c, s.repo.visible[i], rows[i], lanes)
+		s.commitRow(c, s.repo.visible[i], rows[i], columns)
 	}).Fill()
 }
 
@@ -646,10 +646,10 @@ func (s *settings) commitListState() *components.ListState {
 }
 
 // commitRow is one revision: graph, decorations, subject, author, hash and date.
-func (s *settings) commitRow(c *ui.Context, entry commitEntry, row graphRow, lanes int) {
+func (s *settings) commitRow(c *ui.Context, entry commitEntry, row graphRow, columns int) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().MinWidth(0).Height(t.Space(5.75)).AlignItems(ui.Center).Children(func() {
-		graphCell(c, row, lanes)
+		graphCell(c, row, columns, len(entry.Parents) > 1)
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).
 			Padding(0, t.Space(1.5)).Children(func() {
 			refPills(c, entry.Refs)

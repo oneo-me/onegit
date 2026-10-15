@@ -238,6 +238,41 @@ func TestReadCommitsUnborn(t *testing.T) {
 	}
 }
 
+func TestReadCommitsIncludesAllBranches(t *testing.T) {
+	repo := filepath.Join(t.TempDir(), "repo")
+	testGit(t, "init", "-b", "main", repo)
+	if err := writeFile(filepath.Join(repo, "a.txt"), "one"); err != nil {
+		t.Fatal(err)
+	}
+	commitAll(t, repo, "base")
+	testGit(t, "-C", repo, "checkout", "-q", "-b", "feature")
+	if err := writeFile(filepath.Join(repo, "b.txt"), "two"); err != nil {
+		t.Fatal(err)
+	}
+	commitAll(t, repo, "feature work")
+	testGit(t, "-C", repo, "checkout", "-q", "main")
+	if err := writeFile(filepath.Join(repo, "c.txt"), "three"); err != nil {
+		t.Fatal(err)
+	}
+	commitAll(t, repo, "main work")
+
+	commits, err := readCommits(context.Background(), repo, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	subjects := map[string]bool{}
+	for _, entry := range commits {
+		subjects[entry.Subject] = true
+	}
+	// The feature branch is not reachable from HEAD, so it only shows up when
+	// the log covers every branch.
+	for _, want := range []string{"base", "feature work", "main work"} {
+		if !subjects[want] {
+			t.Fatalf("missing %q in %+v", want, subjects)
+		}
+	}
+}
+
 func TestRepositoryPageLayout(t *testing.T) {
 	s := &settings{systemLanguage: "zh-CN", values: preferences{Language: "zh-Hans"}, selectedProject: &projectNode{Path: "/projects/demo", Repository: true}}
 	s.repo.dispatch = func(func()) {}

@@ -150,10 +150,13 @@ func refPills(c *ui.Context, refs string) {
 	}
 }
 
-// styles the graph lane colors, one per parallel branch line.
+// graphPalette colors the graph lanes, matching the reference graph's
+// branch colors so parallel lines stay distinguishable.
 var graphPalette = []ui.Color{
-	ui.Hex("#3E9FF8"), ui.Hex("#34C84A"), ui.Hex("#E0A33E"), ui.Hex("#C678DD"),
-	ui.Hex("#E06C75"), ui.Hex("#56B6C2"), ui.Hex("#98C379"), ui.Hex("#D19A66"),
+	ui.Hex("#FF9502"), ui.Hex("#FFCC00"), ui.Hex("#FF3B30"), ui.Hex("#A2845E"),
+	ui.Hex("#64DA38"), ui.Hex("#1CADF8"), ui.Hex("#CB73E1"), ui.Hex("#8E8E91"),
+	ui.Hex("#FF2968"), ui.Hex("#30D5C8"), ui.Hex("#5856D6"), ui.Hex("#B4D435"),
+	ui.Hex("#FF6F61"),
 }
 
 func graphColor(lane int) ui.Color {
@@ -163,92 +166,184 @@ func graphColor(lane int) ui.Color {
 	return graphPalette[lane%len(graphPalette)]
 }
 
-type graphSegment struct{ From, To int }
-
-type graphRow struct {
-	Lane     int
-	Segments []graphSegment
+// graphLine is one line of a revision graph row, following the reference's
+// GraphLine: it enters the row's top edge at Top, passes through Column at the
+// row's centre and leaves the bottom edge at Bottom. -1 means the line does
+// not touch that edge, so a line either ends at the commit point (no Bottom)
+// or starts from it (no Top).
+type graphLine struct {
+	ID     int
+	Top    int
+	Column int
+	Bottom int
 }
 
-// buildGraph assigns each commit a lane and the line segments that connect it
-// to its parents, following the shape of the reference's revision graph.
+// graphRow is the revision graph of one commit: the lines that cross the row
+// and the column of the commit point itself. CommitLineID is the color of the
+// line the commit belongs to.
+type graphRow struct {
+	Lines        []graphLine
+	CommitColumn int
+	CommitLineID int
+}
+
+// maxGraphLines bounds the active lines of a graph so a repository with an
+// unusual number of open branches cannot grow it without limit.
+const maxGraphLines = 200
+
+// activeGraphLine is a line waiting for the commit it connects to next as it
+// descends from a child to a parent.
+type activeGraphLine struct {
+	next string
+	id   int
+}
+
+// buildGraph follows the reference application's revision graph layout: it
+// walks the commits newest first, keeps a line open for each parent still to
+// come and gives every line a stable id, so a branch keeps its column and
+// color while it is open and a merge folds it back into its first parent. It
+// returns the rows and the number of columns the graph needs.
 func buildGraph(commits []commitEntry) ([]graphRow, int) {
 	rows := make([]graphRow, len(commits))
-	var active []string
-	laneOf := func(hash string) int {
-		for i, h := range active {
-			if h == hash {
-				return i
-			}
-		}
-		return -1
-	}
-	firstFree := func() int {
-		for i, h := range active {
-			if h == "" {
-				return i
-			}
-		}
-		active = append(active, "")
-		return len(active) - 1
-	}
-	lanes := 0
+	// The reference alternates two line lists; each row reads one and fills
+	// the other, so a row never overwrites the state it is reading.
+	lists := [2][]activeGraphLine{}
+	parity := 0
+	nextID := 0
+	columns := 0
 	for i, commit := range commits {
-		lane := laneOf(commit.Hash)
-		if lane < 0 {
-			lane = firstFree()
-			active[lane] = commit.Hash
+		previous := lists[parity]
+		current := &lists[1-parity]
+		*current = (*current)[:0]
+		parents := commit.Parents
+		hasFirstParent := len(parents) > 0
+		firstParent := ""
+		if hasFirstParent {
+			firstParent = parents[0]
 		}
-		row := graphRow{Lane: lane}
-		for j, h := range active {
-			if h != "" && j != lane {
-				row.Segments = append(row.Segments, graphSegment{j, j})
-			}
-		}
-		firstParentAtLane := false
-		for pi, parent := range commit.Parents {
-			pl := laneOf(parent)
-			if pl < 0 {
-				if pi == 0 {
-					pl = lane
-				} else {
-					pl = firstFree()
+		commitColumn := -1
+		commitLineID := -1
+		found := false
+		var lines []graphLine
+		for j, line := range previous {
+			switch {
+			case line.next != commit.Hash:
+				// The line skips this commit: carry it down, compacted.
+				lines = append(lines, graphLine{line.id, j, len(*current), len(*current)})
+				*current = append(*current, line)
+			case !found:
+				// This is the commit's own line: it continues into the first
+				// parent, or ends here for a root commit.
+				found = true
+				commitColumn = len(*current)
+				commitLineID = line.id
+				if !hasFirstParent {
+					lines = append(lines, graphLine{line.id, j, commitColumn, -1})
+					continue
 				}
-				active[pl] = parent
-			}
-			if pl != lane {
-				row.Segments = append(row.Segments, graphSegment{lane, pl})
-			}
-			if pi == 0 && pl == lane {
-				firstParentAtLane = true
+				*current = append(*current, activeGraphLine{firstParent, line.id})
+				lines = append(lines, graphLine{line.id, j, commitColumn, commitColumn})
+			default:
+				// A duplicate occurrence of a merge's second parent ends at
+				// this commit point.
+				lines = append(lines, graphLine{line.id, j, commitColumn, -1})
 			}
 		}
-		if !firstParentAtLane {
-			active[lane] = ""
+		if len(*current) < maxGraphLines {
+			if !found && hasFirstParent {
+				// A branch tip whose child is not in the list opens a new line.
+				commitColumn = len(*current)
+				line := activeGraphLine{firstParent, nextID}
+				nextID++
+				*current = append(*current, line)
+				commitLineID = line.id
+				lines = append(lines, graphLine{line.id, -1, commitColumn, commitColumn})
+			}
+			// Merge parents after the first connect to the commit point, reusing
+			// the line already waiting for that parent when there is one.
+			if hasFirstParent {
+				for _, parent := range parents[1:] {
+					bottom := 0
+					matched := false
+					for _, line := range *current {
+						if line.next == parent {
+							lines = append(lines, graphLine{line.id, -1, commitColumn, bottom})
+							matched = true
+							break
+						}
+						bottom++
+					}
+					if !matched {
+						line := activeGraphLine{parent, nextID}
+						nextID++
+						lines = append(lines, graphLine{line.id, -1, commitColumn, len(*current)})
+						*current = append(*current, line)
+					}
+				}
+			}
+			if len(*current) > columns {
+				columns = len(*current)
+			}
 		}
-		rows[i] = row
-		if len(active) > lanes {
-			lanes = len(active)
-		}
+		rows[i] = graphRow{Lines: lines, CommitColumn: commitColumn, CommitLineID: commitLineID}
+		parity = 1 - parity
 	}
-	return rows, lanes
+	return rows, columns
 }
 
-// graphCell draws one row of the revision graph within a fixed lane width.
-func graphCell(c *ui.Context, row graphRow, lanes int) ui.Element {
+// graphStroke draws one graph line segment. A segment whose ends share a
+// column is straight; otherwise it bends with a cubic curve so branch joins
+// read as smooth merges.
+func graphStroke(p *ui.Painter, fromX, fromY, toX, toY float32, color ui.Color) {
+	var path ui.Path
+	path.MoveTo(fromX, fromY)
+	if fromX == toX {
+		path.LineTo(toX, toY)
+	} else {
+		path.CubeTo(fromX, toY-5, toX, fromY+5, toX, toY)
+	}
+	p.StrokePath(&path, 1.5, color)
+}
+
+// graphCell draws one row of the revision graph on a fixed lane grid, so the
+// rows of the list line up: lines cross the row and curve into and out of the
+// commit point. A commit is a ring in its line's color; a merge opens into a
+// larger circle with a chevron, as the reference marks merge commits.
+func graphCell(c *ui.Context, row graphRow, columns int, merge bool) ui.Element {
 	t := c.Theme()
 	const laneWidth = 12
 	const height = 23
-	width := float32(lanes)*laneWidth + 8
+	width := float32(columns)*laneWidth + laneWidth
 	return ui.Box(c).Width(width).Height(height).Shrink(0).Clip().
 		DrawOver(func(p *ui.Painter, r ui.Rect) {
-			center := func(lane int) float32 { return r.X + 6 + float32(lane)*laneWidth + laneWidth/2 }
-			for _, seg := range row.Segments {
-				p.Line(center(seg.From), r.Y, center(seg.To), r.Y+r.H, 1.5, graphColor(seg.To))
+			at := func(column int) float32 { return r.X + laneWidth/2 + float32(column)*laneWidth }
+			top, mid, bottom := r.Y, r.Y+height/2, r.Y+height
+			for _, line := range row.Lines {
+				color := graphColor(line.ID)
+				switch {
+				case line.Top < 0 && line.Bottom >= 0:
+					graphStroke(p, at(line.Column), mid, at(line.Bottom), bottom, color)
+				case line.Top >= 0 && line.Bottom < 0:
+					graphStroke(p, at(line.Top), top, at(line.Column), mid, color)
+				case line.Top >= 0 && line.Bottom >= 0:
+					graphStroke(p, at(line.Top), top, at(line.Bottom), bottom, color)
+				}
 			}
-			x, cy := center(row.Lane), r.Y+r.H/2
-			p.Fill(ui.Rect{X: x - 4, Y: cy - 4, W: 8, H: 8}, graphColor(row.Lane), 4)
-			p.Fill(ui.Rect{X: x - 1.75, Y: cy - 1.75, W: 3.5, H: 3.5}, t.Background, 2)
+			if row.CommitColumn < 0 || row.CommitLineID < 0 {
+				return
+			}
+			x, y := at(row.CommitColumn), mid
+			color := graphColor(row.CommitLineID)
+			if merge {
+				p.Fill(ui.Rect{X: x - 5.75, Y: y - 5.75, W: 11.5, H: 11.5}, t.Background, 6)
+				p.Stroke(ui.Rect{X: x - 5.75, Y: y - 5.75, W: 11.5, H: 11.5}, color, 5.75, 1.5)
+				var path ui.Path
+				path.MoveTo(x-3.5, y-1.75).LineTo(x, y+1.75).LineTo(x+3.5, y-1.75)
+				p.StrokePath(&path, 1.5, color)
+				return
+			}
+			p.Fill(ui.Rect{X: x - 4, Y: y - 4, W: 8, H: 8}, color, 4)
+			p.Fill(ui.Rect{X: x - 1.75, Y: y - 1.75, W: 3.5, H: 3.5}, t.Background, 2)
 		})
 }
 
