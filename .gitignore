@@ -1,3 +1,6 @@
 .DS_Store
 /dist/
-/source/onegit
+/source/.mygo/
+/source/source
+/source/source.exe
+/source/mygo_windows_*.syso

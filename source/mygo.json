@@ -1,0 +1,9 @@
+{
+  "name": "Onegit",
+  "identifier": "me.oneo.onegit",
+  "version": "0.1.0",
+  "out": "../dist",
+  "macos": {
+    "minimumSystemVersion": "13.0"
+  }
+}

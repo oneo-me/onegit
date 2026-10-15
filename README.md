@@ -12,25 +12,25 @@ Onegit 是基于 [Onevra](https://github.com/oneo-me/onevra) 构建的 macOS 桌
 
 ## 开发与构建
 
-需要 macOS、Go 1.27.1 或更新版本及 Xcode Command Line Tools。应用代码和 Go 模块位于 [source](source/)，依赖固定为 Onevra `v0.2026.1`。
+需要 macOS、Go 1.27.1 或更新版本及 Xcode Command Line Tools。应用代码和 Go 模块位于 [source](source/)，依赖固定为 Onevra `v0.2026.9` 和 MyGo `v0.5.1`。
 
-同版本的 Onevra Packer 已通过 `go.mod` 的 `tool` 指令声明为项目工具依赖，无需全局安装。以下命令均从仓库根目录进入 `source` 后执行：
+MyGo CLI 已通过 `go.mod` 的 `tool` 指令声明为项目工具依赖，无需全局安装。以下命令均从仓库根目录进入 `source` 后执行：
 
 ```sh
 cd source
 GOWORK=off go mod download
-go tool packer run
+go tool mygo dev
 ```
 
-`go tool packer run` 构建并运行 `dist/Onegit Dev.app`，关闭窗口退出应用；不提供热更新。也可用 `go run .` 直接启动。
+`go tool mygo dev` 构建并运行 `Onegit Dev`，修改代码后自动重建并重启；也可用 `go run .` 直接启动。
 
 ```sh
-go tool packer build
+go tool mygo build
 GOWORK=off go test ./...
 GOWORK=off go vet ./...
 ```
 
-[打包配置](source/packer.yaml) 默认生成 Apple Silicon 的 macOS ZIP，位于 `dist/releases/0.1.0/`，最低系统版本声明为 macOS 13。Intel 目标可在配置中改为 `darwin/amd64/zip`，尚未做本机运行验证。产物仅作本地开发验证，使用临时签名，未经公证；`0.1.0` 是初始构建版本，不表示已发布。`go test` 覆盖设置交互与持久化、Git 项目识别、worktree 列表读取与项目切换、目录树交互、扫描取消、缓存合并与恢复及旧设置迁移；原生目录选择器仍需人工验证。
+[打包配置](source/mygo.json) 默认构建当前平台，在 macOS 上把应用包与磁盘映像写入 `dist/darwin-<arch>/`，最低系统版本声明为 macOS 13；跨平台构建使用 `go tool mygo build -platform ...`，非 macOS 系统会跳过签名与磁盘映像步骤。产物仅作本地开发验证，使用临时签名，未经公证；`0.1.0` 是初始构建版本，不表示已发布。`go test` 覆盖设置交互与持久化、Git 项目识别、worktree 列表读取与项目切换、目录树交互、扫描取消、缓存合并与恢复及旧设置迁移；原生目录选择器仍需人工验证。
 
 ## 项目文档
 

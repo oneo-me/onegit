@@ -8,7 +8,7 @@ Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口、G
 
 ## 技术基础
 
-应用使用 Onevra `v0.2026.1` 和其对应的 MyGo 依赖，实际版本记录在 [go.mod](source/go.mod)。[Onevra](https://github.com/oneo-me/onevra) 提供主题控件和窗口壳；应用状态、持久化与异步工作由调用方负责。
+应用使用 Onevra `v0.2026.9` 和 MyGo `v0.5.1`，实际版本记录在 [go.mod](source/go.mod)。[Onevra](https://github.com/oneo-me/onevra) 提供主题控件和窗口壳；应用状态、持久化与异步工作由调用方负责。
 
 Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系统主题。Onegit 在 MyGo 就绪后创建窗口，内容避让浮动标题栏，关闭主窗口即退出。项目发现与目录树由 Onegit 负责；项目选择后读取关联 worktree；实时 Git 状态仍待实现。
 
@@ -22,7 +22,7 @@ Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系�
 
 右侧项目概览是独立导航层级：选择仓库后在后台读取 `git worktree list --porcelain -z`，包含项目父目录外的关联 worktree，按 Git 返回顺序将主仓库固定在首项；从 linked worktree 选择项目时同样显示完整列表。列表使用 Onevra List 控件，仅显示名称，裸仓库作为主仓库条目展示，不提供刷新或搜索控件。选择项目时重新读取，失败显示错误；切换项目、父目录及关闭窗口时取消读取并丢弃过期结果，不持久化列表，也不持续刷新。项目概览与后续 worktree 子界面分层，当前支持点击选中并高亮 worktree，最后选择的仓库按项目父目录保存，每个仓库的 worktree 选择按完整路径分别保存至状态文件，切换与重启后恢复。没有有效历史选择时，仓库按侧边栏顺序默认选择第一个未标记缺失的项目（置顶优先，不受折叠影响），worktree 在读取成功后默认选择 Git 列表首项；扫描合并不覆盖用户已有选择，已标记缺失的仓库会回退到可用项目。没有可选仓库或 worktree 时内容区保持空白，不显示欢迎或空状态提示；读取错误仍显示。子界面尚未实现。
 
-构建使用同版本 Onevra Packer，通过 `go.mod` 的 `tool` 指令管理项目工具依赖，从 `source/` 使用 `go tool packer` 调用。[packer.yaml](source/packer.yaml) 与应用模块放在 `source/`，产物统一写入根目录 `dist/`，不纳入版本控制。当前配置只打包 macOS arm64 ZIP，不包含自定义图标、分发签名或公证。开发命令见 [README](README.md#开发与构建)。
+构建使用 MyGo CLI，通过 `go.mod` 的 `tool` 指令管理项目工具依赖，从 `source/` 使用 `go tool mygo` 调用。[mygo.json](source/mygo.json) 与应用模块放在 `source/`，产物写入根目录 `dist/<os>-<arch>/`，不纳入版本控制。当前配置只构建当前平台，不包含自定义图标、分发签名或公证。开发命令见 [README](README.md#开发与构建)。
 
 ## 初步职责边界
 
