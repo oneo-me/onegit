@@ -123,13 +123,6 @@ func (s *settings) repositoryChanged() {
 	s.ensureRepositoryData()
 }
 
-// refreshRepository re-reads everything for the current worktree, for example
-// from the toolbar's refresh action. It also clears any previous job result.
-func (s *settings) refreshRepository() {
-	s.repo.reset()
-	s.ensureRepositoryData()
-}
-
 // reloadRepositoryData re-reads the active worktree while keeping the job
 // result, so a failed fetch or push stays visible until the next action.
 func (s *settings) reloadRepositoryData() {
@@ -266,7 +259,6 @@ func (s *settings) repositoryToolbar(c *ui.Context) {
 	ui.Row(c).FillWidth().Shrink(0).Height(t.Space(12)).AlignItems(ui.Center).
 		Background(t.Background).Padding(0, t.Space(1)).Children(func() {
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(.5)).Children(func() {
-			s.toolbarButton(c, lucide.Search(), s.text("快速启动"), false, s.openCommands)
 			s.toolbarButton(c, lucide.Download(), s.text("获取"), running, func() {
 				s.runGitJob(s.text("正在获取…"), "fetch", "--all", "--prune")
 			})
@@ -367,14 +359,6 @@ func (s *settings) projectSidebar(c *ui.Context) {
 		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(1)).
 			Padding(t.Space(2), t.Space(1.5), t.Space(1), t.Space(2)).Children(func() {
 			components.Text(c, name).Bold().FontSize(t.Rem(.95)).Grow(1).MinWidth(0).SingleLine()
-			sidebar.IconButton(c, lucide.Settings(), s.text("仓库设置")).Menu(func(m *ui.Menu) {
-				if m.Item(s.text("刷新")).Chosen() {
-					s.refreshRepository()
-				}
-				if m.Item(s.text("在文件管理器中显示")).Chosen() && s.overview.SelectedPath != "" {
-					mygo.Shell.ShowItemInFolder(s.overview.SelectedPath)
-				}
-			})
 		})
 		s.sidebarPrimary(c, sectionChanges, s.text("更改"), lucide.FileDiff(), s.changesCountLabel())
 		s.sidebarPrimary(c, sectionCommits, s.text("全部提交"), lucide.GitCommitHorizontal(), "")
