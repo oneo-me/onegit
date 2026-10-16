@@ -1,39 +1,62 @@
 {
-  "fill" : {
-    "solid" : "srgb:0.92941,0.94510,0.95686,1.00000"
-  },
-  "groups" : [
+  "fill-specializations": [
     {
-      "layers" : [
-        {
-          "image-name" : "01-worktree-current.png",
-          "name" : "01-worktree-current"
-        },
-        {
-          "image-name" : "02-worktree-main.png",
-          "name" : "02-worktree-main"
-        },
-        {
-          "image-name" : "04-worktree-rear.png",
-          "name" : "04-worktree-rear"
-        },
-        {
-          "image-name" : "03-repo-base.png",
-          "name" : "03-repo-base"
-        }
-      ],
-      "name" : "01-worktrees",
-      "shadow" : {
-        "kind" : "neutral",
-        "opacity" : 0.45
-      },
-      "translucency" : {
-        "enabled" : true,
-        "value" : 0.3
+      "value": {
+        "automatic-gradient": "display-p3:0.16,0.62,0.56,1.00000"
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "automatic-gradient": "display-p3:0.07,0.30,0.28,1.00000"
       }
     }
   ],
-  "supported-platforms" : {
-    "squares" : "shared"
+  "groups": [
+    {
+      "name": "01-current",
+      "layers": [
+        {
+          "image-name": "01-node-current.png",
+          "name": "01-node-current"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
+      }
+    },
+    {
+      "name": "02-branch",
+      "layers": [
+        {
+          "image-name": "02-nodes.png",
+          "name": "02-nodes"
+        },
+        {
+          "image-name": "03-branch-arm.png",
+          "name": "03-branch-arm"
+        },
+        {
+          "image-name": "04-trunk.png",
+          "name": "04-trunk"
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.45
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.35
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": "shared"
   }
 }

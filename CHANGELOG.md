@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 
-- 应用使用自己的图标：一个仓库底座上并排三根 worktree 立柱，当前 worktree 以铜橙区分。macOS 使用 Icon Composer 工程，其他平台由同一次渲染导出 PNG 与 ICO 并接入打包配置。
+- 应用使用自己的图标：青绿底上的白色 Git 分支枝干，当前 worktree 节点以珊瑚橙区分。macOS 使用 Icon Composer 工程，其他平台由同一次渲染导出 PNG 与 ICO 并接入打包配置。
 
 - 应用更名为 Onegit，配置与状态目录改为 `~/.oneo/onegit/`。
 
