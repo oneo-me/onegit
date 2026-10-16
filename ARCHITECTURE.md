@@ -14,7 +14,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 | `source/commands.go` | Command palette data and actions |
 | `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning and persisted sidebar state |
 | `source/worktrees*.go` | Worktree listing and the worktree tab strip |
-| `source/repository_ui.go` | Repository page and the toolbar that drives the Git view |
+| `source/repository_ui.go` | Repository page and the title bar actions that drive the Git view |
 | `source/gitview/` | Reusable Git view shared with Neorio: refs pane, changes, commit graph, details, dialogs and Git CLI layer |
 | `source/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
 | `source/mygo.json` | Packaging; output goes to `dist/` |
@@ -37,7 +37,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 **Opening a project.** Selecting a repository lists all its worktrees, including those outside the parent directory. Onegit then reads changes, commits and refs for the selected worktree. See [Repository page](docs/architecture/repository-page.md).
 
-**User Git actions.** A toolbar action runs through the Git view, one at a time in the background. Failures show as toasts, and the view rereads the worktree when the action finishes.
+**User Git actions.** A title bar action runs through the Git view, one at a time in the background. Failures show as toasts, and the view rereads the worktree when the action finishes.
 
 ## Data and state
 
@@ -61,5 +61,5 @@ Review these manually: the native directory picker, packaging and the app icon o
 | Document | When to read |
 | --- | --- |
 | [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning or the project cache |
-| [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the toolbar or how Onegit configures the Git view |
+| [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the title bar actions or how Onegit configures the Git view |
 | [Git view](docs/architecture/git-view.md) | Changing `source/gitview` or embedding it in another app |

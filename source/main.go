@@ -7,7 +7,6 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
 )
 
@@ -40,9 +39,7 @@ func main() {
 				settings.render(c)
 				settings.renderCommands(c)
 			},
-			ContentTitle: func(c *ui.Context) {
-				components.Text(c, "Onegit").Bold()
-			},
+			ContentTitle: settings.repositoryTitle,
 		})
 		settings.window = shell.Window()
 		settings.scanProjects()

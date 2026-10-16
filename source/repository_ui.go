@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 
@@ -15,8 +16,8 @@ import (
 )
 
 // repositoryState holds the selected worktree's Git view. The view owns the
-// project sidebar, content and Git dialogs; Onegit owns the toolbar that
-// starts its actions.
+// project sidebar, content and Git dialogs; Onegit's title bar starts its
+// actions.
 type repositoryState struct {
 	view     *gitview.View
 	dispatch func(func())
@@ -105,11 +106,8 @@ func (s *settings) welcome(c *ui.Context) {
 }
 
 func (s *settings) repositoryPage(c *ui.Context) {
-	t := c.Theme()
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
 		s.worktreeTabs(c)
-		s.repositoryToolbar(c)
-		ui.Box(c).FillWidth().Height(1).Shrink(0).Background(t.Border)
 		if s.overview.Loading {
 			s.repositoryMessage(c, s.text("正在读取 worktree…"))
 			return
@@ -131,29 +129,35 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 	})
 }
 
-// repositoryToolbar is the strip below the worktree tabs: the view's fetch,
-// pull and push with their commit counts, a stash, and the branch menu.
-// Every action runs through the view, which reports failures as toasts and
-// rereads the worktree.
-func (s *settings) repositoryToolbar(c *ui.Context) {
-	t := c.Theme()
+// repositoryTitle fills the window's title bar, as Neorio does, instead of
+// adding a toolbar strip: the project's name, then the view's fetch, pull and
+// push with their commit counts, a stash and the branch menu. Every action
+// runs through the view, which reports failures as toasts and rereads the
+// worktree.
+func (s *settings) repositoryTitle(c *ui.Context) {
+	project := s.selectedProject
+	if project == nil || !project.Repository {
+		components.Text(c, "Onegit").Bold()
+		return
+	}
 	view := s.gitView()
 	tr := view.Tracking()
-	ui.Row(c).FillWidth().Shrink(0).Height(t.Space(12)).AlignItems(ui.Center).
-		Background(t.Background).Padding(0, t.Space(1)).Children(func() {
-		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(.5)).Children(func() {
-			s.toolbarButton(c, gitview.OpFetch, lucide.Download(), s.text("获取"), 0, !view.CanSync(), view.Fetch)
-			s.toolbarButton(c, gitview.OpPull, lucide.ArrowDownToLine(), s.text("拉取"), tr.Behind, !view.CanPull(), view.OpenPull)
-			s.toolbarButton(c, gitview.OpPush, lucide.ArrowUpFromLine(), s.text("推送"), tr.Ahead, !view.CanSync(), view.OpenPush)
-			s.toolbarButton(c, "stash", lucide.Archive(), s.text("贮藏"), 0, !view.CanSync(), func() {
+	size := max(32, c.Theme().Rem(2))
+	ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(8).Margin(0, titleTrailing(c, size), 0, 0).Children(func() {
+		components.Text(c, filepath.Base(project.Path)).Bold().Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
+		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
+			s.titleButton(c, gitview.OpFetch, lucide.Download, s.text("获取"), size, 0, !view.CanSync()).OnClick(view.Fetch)
+			s.titleButton(c, gitview.OpPull, lucide.ArrowDownToLine, s.text("拉取"), size, tr.Behind, !view.CanPull()).OnClick(view.OpenPull)
+			s.titleButton(c, gitview.OpPush, lucide.ArrowUpFromLine, s.text("推送"), size, tr.Ahead, !view.CanSync()).OnClick(view.OpenPush)
+			s.titleButton(c, "stash", lucide.Archive, s.text("贮藏"), size, 0, !view.CanSync()).OnClick(func() {
 				view.Run("stash", s.text("贮藏失败"), func(git gitview.Git, path string) error {
 					_, err := git.Run(path, "stash", "push", "--include-untracked")
 					return err
 				})
 			})
-		})
-		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(.5)).Children(func() {
-			s.toolbarMenuButton(c, lucide.GitBranch(), s.text("分支操作"), !view.CanSync(), s.branchMenu)
+			if b := s.titleButton(c, "branch", lucide.GitBranch, s.text("分支操作"), size, 0, !view.CanSync()); !b.IsDisabled() {
+				b.Menu(s.branchMenu)
+			}
 		})
 	})
 }
@@ -176,79 +180,57 @@ func (s *settings) branchMenu(m *ui.Menu) {
 	}
 }
 
-// toolbarButton is a toolbar action with an icon over its label, sized like
-// the rest of the toolbar rather than Onevra's square icon button. A
-// running action shows a spinner, and count, when set, the commits it moves.
-func (s *settings) toolbarButton(c *ui.Context, op string, icon *ui.SVG, label string, count int, disabled bool, action func()) {
+// titleButton is a square ghost button in the title bar, matching Neorio's.
+// A running action shows a spinner, and count, when set, the commits it
+// moves.
+func (s *settings) titleButton(c *ui.Context, op string, icon func() *ui.SVG, label string, size float32, count int, disabled bool) titleAction {
 	t := c.Theme()
 	view := s.gitView()
-	b := ui.ButtonBase(c).Key("toolbar-" + op).Width(t.Space(15)).Height(t.Space(12)).
-		Column().Gap(t.Space(.5)).Radius(t.Radius).Label(label).TextColor(t.TextMuted)
+	b := components.Button(c, "", components.ButtonGhost).Key("title-"+op).Label(label).Size(size, size).
+		Padding(0).Shrink(0).Justify(ui.Center).AlignItems(ui.Center)
 	if disabled {
 		b.Disabled(true)
 	}
-	b.Draw(func(p *ui.Painter, r ui.Rect) {
-		if b.IsDisabled() {
-			return
+	b.Children(func() {
+		if view.Syncing() == op {
+			components.Spinner(c, components.SpinnerRing).Size(16, 16)
+		} else {
+			components.Icon(c, icon).Size(16, 16).Shrink(0)
 		}
-		switch {
-		case b.Pressed():
-			p.Fill(r, t.Text.Alpha(.14), t.Radius)
-		case b.Hovered():
-			p.Fill(r, t.Text.Alpha(.08), t.Radius)
+		if count > 0 {
+			ui.Box(c).Absolute().Top(1).Right(1).Height(14).MinWidth(14).Padding(0, 4).Radius(7).Center().
+				Background(t.Accent).Children(func() {
+				components.Text(c, strconv.Itoa(count)).FontSize(10).Bold().TextColor(t.AccentText).SingleLine()
+			})
 		}
-	}).Children(func() {
-		ui.Box(c).Size(t.Space(4.5), t.Space(4.5)).Children(func() {
-			if view.Syncing() == op {
-				components.Spinner(c, components.SpinnerRing).Fill()
-			} else {
-				components.Icon(c, icon).Fill().TextColor(t.Text)
-			}
-			if count > 0 {
-				ui.Box(c).Absolute().Top(-4).Left(t.Space(3)).Height(14).Padding(0, 4).Radius(7).Center().
-					Background(t.Accent).Children(func() {
-					components.Text(c, strconv.Itoa(count)).FontSize(10).Bold().TextColor(ui.RGB(255, 255, 255)).SingleLine()
-				})
-			}
-		})
-		components.Text(c, label).FontSize(t.Rem(.68)).SingleLine()
 	})
 	tip := view.ActionTooltip(op)
 	if tip == "" {
 		tip = label
 	}
 	components.Tooltip(c, b, tip)
-	if !disabled && b.Clicked() {
+	return titleAction{b}
+}
+
+// titleAction runs its action when its button is clicked.
+type titleAction struct{ ui.Element }
+
+func (a titleAction) OnClick(action func()) {
+	if !a.IsDisabled() && a.Clicked() {
 		action()
 	}
 }
 
-// toolbarMenuButton is toolbarButton with a dropdown menu.
-func (s *settings) toolbarMenuButton(c *ui.Context, icon *ui.SVG, label string, disabled bool, menu func(*ui.Menu)) {
-	t := c.Theme()
-	b := ui.ButtonBase(c).Key("toolbar-menu-" + label).Width(t.Space(15)).Height(t.Space(12)).
-		Column().Gap(t.Space(.5)).Radius(t.Radius).Label(label).TextColor(t.TextMuted)
-	if disabled {
-		b.Disabled(true)
+// titleTrailing balances the space after the title bar actions with the space
+// above them. The shell pads its header and title area; a negative margin may
+// reclaim only the title area's own padding.
+func titleTrailing(c *ui.Context, size float32) float32 {
+	if runtime.GOOS == "windows" {
+		return 0 // caption buttons follow the title area
 	}
-	b.Draw(func(p *ui.Painter, r ui.Rect) {
-		if b.IsDisabled() {
-			return
-		}
-		switch {
-		case b.Pressed():
-			p.Fill(r, t.Text.Alpha(.14), t.Radius)
-		case b.Hovered():
-			p.Fill(r, t.Text.Alpha(.08), t.Radius)
-		}
-	}).Children(func() {
-		components.Icon(c, icon).Size(t.Space(4.5), t.Space(4.5)).TextColor(t.Text)
-		components.Text(c, label).FontSize(t.Rem(.68)).SingleLine()
-	})
-	if !disabled {
-		b.Menu(menu)
-	}
-	components.Tooltip(c, b, label)
+	bar := c.TitleBar()
+	vertical := (sidebar.HeaderHeight(c) - size) / 2
+	return max(-8, vertical-max(8, bar.Right)-8)
 }
 
 // repositoryLoading reports whether the view is reading the selected
