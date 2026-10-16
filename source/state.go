@@ -8,16 +8,52 @@ import (
 
 	"go.yaml.in/yaml/v3"
 
+	"github.com/egoist/mygo"
 	"github.com/oneo-me/onegit/source/gitview"
+	"github.com/oneo-me/onevra/source/shells/sidebar"
 )
 
 type sidebarState struct {
+	Window            *mygo.WindowState       `yaml:"window,omitempty"`
+	SidebarWidth      float32                 `yaml:"sidebarWidth,omitempty"`
+	SidebarCollapsed  bool                    `yaml:"sidebarCollapsed,omitempty"`
 	SelectedProjects  map[string]string       `yaml:"selectedProjects,omitempty"`
 	SelectedWorktrees map[string]string       `yaml:"selectedWorktrees,omitempty"`
 	GitView           *gitview.State          `yaml:"gitView,omitempty"`
 	Roots             map[string]*projectNode `yaml:"roots,omitempty"`
 	PinnedOpen        *bool                   `yaml:"pinnedOpen,omitempty"`
 	OtherOpen         *bool                   `yaml:"otherOpen,omitempty"`
+}
+
+const mainWindowStateKey = "main"
+
+// windowStateStore keeps MyGo's state of the main window in state.yaml, so
+// either save writes the whole file. MyGo calls it on the main thread.
+type windowStateStore struct{ s *settings }
+
+func (w windowStateStore) LoadWindowStates() (map[string]mygo.WindowState, error) {
+	if w.s.state.Window == nil {
+		return nil, nil
+	}
+	return map[string]mygo.WindowState{mainWindowStateKey: *w.s.state.Window}, nil
+}
+
+func (w windowStateStore) SaveWindowStates(states map[string]mygo.WindowState) error {
+	state, ok := states[mainWindowStateKey]
+	if !ok {
+		return nil
+	}
+	w.s.state.Window = &state
+	return w.s.saveSidebarState()
+}
+
+// restoreShell applies the saved sidebar layout to the main window's shell.
+func (s *settings) restoreShell(shell *sidebar.Shell) {
+	s.shell = shell
+	shell.SetLeftExpanded(!s.state.SidebarCollapsed)
+	if s.state.SidebarWidth > 0 {
+		shell.SetLeftWidth(s.state.SidebarWidth)
+	}
 }
 
 func (s *settings) restoreProjectSelection(onMain func(func())) {
@@ -112,9 +148,13 @@ func saveYAML(path string, value any) error {
 	return os.Rename(f.Name(), path)
 }
 
-func (s *settings) saveSidebarState() {
+func (s *settings) saveSidebarState() error {
 	if s.statePath == "" {
-		return
+		return nil
+	}
+	if s.shell != nil {
+		s.state.SidebarWidth = s.shell.LeftWidth()
+		s.state.SidebarCollapsed = !s.shell.LeftExpanded()
 	}
 	if s.state.Roots == nil {
 		s.state.Roots = make(map[string]*projectNode)
@@ -124,10 +164,11 @@ func (s *settings) saveSidebarState() {
 	}
 	if err := saveYAML(s.statePath, s.state); err != nil {
 		s.stateProblem = s.text("保存状态失败：") + err.Error()
-		return
+		return err
 	}
 	s.stateProblem = ""
 	walkProjects(s.projectTree, func(n *projectNode) { n.savedOpen = n.Open })
+	return nil
 }
 
 // Reuse cached nodes so selection and expansion changes made during a scan survive.

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 )
 
@@ -290,5 +291,61 @@ func TestSidebarGroupCollapseAndRestore(t *testing.T) {
 	view.Frame()
 	if *restarted.state.OtherOpen || view.HasText("repo") {
 		t.Fatal("keyboard collapse failed", view.Texts())
+	}
+}
+
+func TestWindowStateStore(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.yaml")
+	s := &settings{statePath: path, state: sidebarState{SidebarWidth: 260, SidebarCollapsed: true}}
+	store := windowStateStore{s}
+	if states, err := store.LoadWindowStates(); err != nil || states != nil {
+		t.Fatal("empty state restored a window", states, err)
+	}
+	saved := mygo.WindowState{X: 10, Y: 20, Width: 1200, Height: 800, Maximized: true}
+	if err := store.SaveWindowStates(map[string]mygo.WindowState{"other": {Width: 1}, mainWindowStateKey: saved}); err != nil {
+		t.Fatal(err)
+	}
+	state, err := loadSidebarState(path)
+	if err != nil || state.Window == nil || *state.Window != saved || state.SidebarWidth != 260 || !state.SidebarCollapsed {
+		t.Fatal("window state not saved with the sidebar layout", state, err)
+	}
+	states, err := windowStateStore{&settings{state: state}}.LoadWindowStates()
+	if err != nil || len(states) != 1 || states[mainWindowStateKey] != saved {
+		t.Fatal("window state not restored", states, err)
+	}
+}
+
+func TestDataDirMigration(t *testing.T) {
+	home := t.TempDir()
+	dir, legacy := filepath.Join(home, ".onegit"), filepath.Join(home, ".oneo", "onegit")
+	if err := migrateDataDir(dir, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("created a data directory without legacy data", err)
+	}
+	if err := os.MkdirAll(legacy, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, "state.yaml"), []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDataDir(dir, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "state.yaml")); err != nil || string(data) != "old" {
+		t.Fatal("legacy data not moved", string(data), err)
+	}
+	if err := os.MkdirAll(legacy, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(legacy, "state.yaml"), []byte("stale"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDataDir(dir, legacy); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(dir, "state.yaml")); string(data) != "old" {
+		t.Fatal("legacy data overwrote the data directory")
 	}
 }

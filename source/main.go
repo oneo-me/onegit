@@ -16,17 +16,23 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	configDir := filepath.Join(home, ".oneo", "onegit")
+	configDir := filepath.Join(home, ".onegit")
+	if err := migrateDataDir(configDir, filepath.Join(home, ".oneo", "onegit")); err != nil {
+		log.Printf("Move data directory: %v", err)
+	}
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		log.Fatal(err)
 	}
 	mygo.App.SetPath(mygo.PathUserData, configDir)
 	mygo.App.SetName("Onegit")
 	mygo.App.WhenReady(func() {
-		settings := newSettings()
+		settings := newSettings(configDir)
+		// MyGo restores and saves the window's bounds through the store.
+		mygo.App.SetWindowStateStore(windowStateStore{settings})
 		shell := sidebar.NewShell(sidebar.ShellOptions{
 			Title:        "Onegit",
 			Theme:        theme.Onevra,
+			StateKey:     mainWindowStateKey,
 			Width:        1100,
 			Height:       720,
 			MinWidth:     820,
@@ -44,6 +50,7 @@ func main() {
 			ContentTitle: settings.repositoryTitle,
 		})
 		settings.window = shell.Window()
+		settings.restoreShell(shell)
 		settings.scanProjects()
 		mygo.App.SetMenu(settings.menu())
 		shell.Window().OnClose(func(*mygo.CloseEvent) { settings.saveSidebarState() })

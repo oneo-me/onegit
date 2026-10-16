@@ -21,7 +21,7 @@ The title bar's icon buttons are only an entry point; every action runs through 
 - Watching is off: the view reads when a worktree is shown and after an action.
 - No ref filter and no inserted history rows.
 - The view's layout, ref group disclosure, line wrapping and pull and push options are saved in `state.yaml` under `gitView`.
-- Commit authors' avatars are cached in `~/.oneo/onegit/avatars/`, downloaded from GitHub or Gravatar.
+- Commit authors' avatars are cached in `~/.onegit/avatars/`, downloaded from GitHub or Gravatar.
 
 ## Selection defaults
 

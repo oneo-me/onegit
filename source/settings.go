@@ -69,14 +69,14 @@ type settings struct {
 	path              string
 	problem           string
 	window            *mygo.Window
+	shell             *sidebar.Shell
 	systemLanguage    string
 }
 
-func newSettings() *settings {
+func newSettings(dir string) *settings {
 	s := &settings{systemLanguage: mygo.App.Locale()}
-	home, err := os.UserHomeDir()
-	if err == nil {
-		dir := filepath.Join(home, ".oneo", "onegit")
+	var err error
+	if dir != "" {
 		s.path = filepath.Join(dir, "config.yaml")
 		s.statePath = filepath.Join(dir, "state.yaml")
 		legacyDir, legacyErr := os.UserConfigDir()
@@ -247,4 +247,15 @@ func loadOrMigratePreferences(path, legacy string) (preferences, error) {
 		return p, err
 	}
 	return p, savePreferences(path, p)
+}
+
+// Move the earlier ~/.oneo/onegit directory once, when the data directory does not exist.
+func migrateDataDir(dir, legacy string) error {
+	if _, err := os.Lstat(dir); !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	if _, err := os.Stat(legacy); errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return os.Rename(legacy, dir)
 }

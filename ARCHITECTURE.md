@@ -41,12 +41,13 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 ## Data and state
 
-Configuration lives in `~/.oneo/onegit/config.yaml` and UI state in `~/.oneo/onegit/state.yaml`. The same directory is the MyGo user data directory.
+Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.yaml`. The same directory is the MyGo user data directory.
 
 - Both files are written to a temporary file in the same directory, synced, then renamed into place.
 - In-memory values change only after a successful write. Load and save errors appear in the UI.
+- When `~/.onegit` does not exist, an earlier `~/.oneo/onegit` directory is moved there at startup.
 - A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
-- State covers the project cache per parent directory, expansion, pinning, group collapse, the last selections and the Git view's layout and options.
+- State covers the main window's bounds and maximized or full-screen state, which MyGo saves through a window state store, the sidebar width and collapse, the project cache per parent directory, expansion, pinning, group collapse, the last selections and the Git view's layout and options.
 - Commit authors' avatars are downloaded from GitHub or Gravatar and cached in `avatars/` in the same directory.
 - Worktree lists and Git data are never persisted.
 

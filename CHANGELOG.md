@@ -2,8 +2,8 @@
 
 ## [Unreleased]
 
-- Add a native Onegit window in Onevra's default colors, with a collapsible, resizable sidebar and its own app icon.
-- Add settings for the project parent directory, theme and language, saved under `~/.oneo/onegit/` with legacy settings imported.
+- Add a native Onegit window in Onevra's default colors, with a collapsible, resizable sidebar and its own app icon; it reopens where it was, with the same size and sidebar layout.
+- Add settings for the project parent directory, theme and language, saved under `~/.onegit/`; an earlier `~/.oneo/onegit/` directory moves there and legacy settings are imported.
 - Add a background-scanned project tree that marks missing paths and remembers expansion.
 - Add project pinning to a flat, name-sorted group; both sidebar groups collapse independently.
 - Add a command palette (`⌘E`) to find projects and open settings.
