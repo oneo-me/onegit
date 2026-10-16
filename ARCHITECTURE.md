@@ -1,47 +1,63 @@
-# 架构概览
+# Onegit architecture
 
-## 当前状态
+Onegit is a single Go module in [source](source/) built on [Onevra](https://github.com/oneo-me/onevra) components and the MyGo runtime. It has three moving parts: project discovery for the sidebar, a repository page for the selected project, and settings with persisted state. All Git access goes through the `git` executable on `PATH`.
 
-Onegit 已在 `source/` 建立独立 Go 模块，提供原生侧边栏窗口、Git 项目扫描、目录树，以及以 worktree 标签页、工具栏、项目侧边栏和内容视图组成的仓库页面，还有项目父目录、主题和语言设置。项目发现使用本机 Git 验证仓库；侧边栏扫描结果与展开状态已持久化，分支状态与工作区状态在进入项目时按需读取并手动刷新。下文的业务职责划分仍是初步设计。
+Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides themed controls and the `shells/sidebar` window shell; Onegit owns application state, persistence and background work.
 
-产品以 worktree 为核心，面向 macOS，支持多仓库状态查看与侧边栏导航。范围以[产品范围](docs/product-scope.md)为准。
+## Code map
 
-## 技术基础
-
-应用使用 Onevra `v0.2026.9` 和 MyGo `v0.5.1`，实际版本记录在 [go.mod](source/go.mod)。[Onevra](https://github.com/oneo-me/onevra) 提供主题控件和窗口壳；应用状态、持久化与异步工作由调用方负责。
-
-Onevra 的 `shells/sidebar` 负责当前窗口、侧边栏折叠与缩放、系统主题。Onegit 在 MyGo 就绪后创建窗口，内容避让浮动标题栏，关闭主窗口即退出。项目发现与目录树由 Onegit 负责；项目选择后读取关联 worktree，再由后台读取工作区状态、提交与分支，结果应用到仓库页面。
-
-侧边栏顶部搜索入口与 `⌘E` 快捷键沿用 gallery 的交互，使用 Onevra CommandDialog。命令面板搜索当前父目录的缓存项目（包含折叠分组与已标记缺失的项目），按名称和路径匹配，选择后复用原项目节点进入对应仓库页面；设置命令转入现有设置弹窗的对应选项。Onegit 负责命令数据与执行，组件负责过滤、键盘导航和弹窗焦点管理；设置弹窗或原生目录选择器打开时不再打开命令面板。
-
-设置沿用 gallery 的 `Dialog` 与 `Settings` 组件，由 Onegit 维护弹窗状态以及目录、主题和语言偏好，通过 MyGo 原生目录选择器选择单个项目父目录。配置与状态参考 gallery，分别保存至 `~/.oneo/onegit/config.yaml` 和 `state.yaml`，该目录也设为 MyGo 用户数据目录；使用同目录临时文件完整写入并同步后替换。新配置不存在时自动导入原用户配置目录下的 `Onegit/settings.json`，保留原文件；写入成功后才更新当前值，读取或保存失败会在设置中显示错误。主题通过 MyGo 的全局主题源立即生效，设置与侧边栏主题菜单共享同一偏好。语言覆盖应用内容及设置，跟随系统时中文区域使用简体中文，其余使用英文；系统菜单项仍由 macOS 本地化，窗口壳的辅助标签使用启动时语言。项目父目录行的右侧只提供选择按钮，路径在左侧说明中换行。
-
-启动和保存不同项目父目录后，后台递归扫描一次，使用 PATH 中的 Git 验证真实仓库根目录，支持普通仓库、linked worktree、已初始化子模块与裸仓库。仅保留有效仓库及其祖先目录；普通子目录和无效 `.git` 不作为项目。跳过 `.git` 内部目录和符号链接子目录，任何有效仓库识别后都停止向内遍历，不继续发现其中的嵌套仓库或子模块。树形结构遵循磁盘目录，不推断仓库与外部 worktree 的关联。
-
-启动先恢复所选父目录的缓存树，后台扫描结果回到主线程按路径合并新节点，保留已有节点及用户在扫描期间改变的展开状态。缓存按所选父目录隔离；已不存在的路径保留并标记，重新出现后清除标记。缺失判断在后台检查路径，仅路径不存在时标记，权限错误或 Git 扫描失败不会被当成删除。单次 Git 验证有超时限制。更换目录或关闭窗口会取消扫描，过期结果不会覆盖新目录。扫描在后台静默进行，不显示扫描中的提示文字；未选择目录或无项目时不显示空状态提示，访问失败显示错误；部分目录失败时保留已发现项目并显示首个错误。侧边栏使用 Onevra Tree 和 ScrollView，节点默认折叠，支持展开、折叠、键盘导航与项目选择。项目右键菜单支持置顶和取消置顶：置顶项目忽略目录层级，按名称排序（忽略大小写，同名按完整路径排序）并平铺在“置顶”分组，其余项目在“其他项目”分组保留目录层级，仅包含置顶项目的祖先目录不显示。分组标题使用 Onevra Collapsible，默认展开，支持点击与键盘折叠；两个分组的折叠偏好独立于项目节点，跨父目录共用并持久化。分组展示复用缓存节点，不改变目录树、选择及展开状态；置顶偏好按父目录隔离，扫描合并与重启后保留。扫描合并、置顶或展开状态变化和正常关闭窗口时保存状态；加载与保存错误显示在侧边栏，扫描期间缓存仍可使用；不监听文件变化，扫描过程也不执行 Git 写操作。
-
-选中仓库后，右侧顶部是 worktree 标签页，主仓库在首项，只有一个 worktree 时隐藏；下方工具栏左侧为快速启动、获取、拉取、推送与贮藏，右侧为分支切换。工具栏下方由 Onevra Split 分为项目侧边栏与内容区：侧边栏显示仓库名称与仓库设置入口、“更改”“全部提交”，以及可折叠的本地分支、远程分支、标签、贮藏与子模块树和底部筛选框，“更改”与“全部提交”两个入口的选中项按项目持久化；点击分支、远程分支、标签或贮藏条目会选中该行，并在“全部提交”内容中定位到条目指向的提交，子模块条目没有本仓库可定位的提交，只更新选中行。该选中不跨项目、worktree 切换或重启保留。内容区渲染工作区改动列表，或在全部提交入口下渲染带图谱、分支标签与作者头像的提交列表和所选提交详情（“提交”“更改”“文件树”标签页）。全部提交读取本仓库的完整历史，不只覆盖当前 worktree 的分支，而是包含本地分支、远程分支与标签，并按提交的父子关系绘制分支与合并图谱。仓库读取按需进行，切换 worktree 只更换读取目录，不执行分支切换；获取、拉取、推送、贮藏与切换分支只在用户点击时运行，失败时在工具栏显示提示，完成后重新读取。进入项目时读取一次，不监听文件变化，也不持续轮询；切换项目、worktree 或关闭窗口会取消在途读取并丢弃过期结果。worktree 列表不持久化，选中项按项目保存至状态文件；没有有效历史选择时仓库按侧边栏顺序默认选中第一个未标记缺失的项目（置顶优先，不受折叠影响），worktree 默认选中 Git 列表首项，侧边栏入口默认选中“更改”。已标记缺失的仓库会回退到可用项目。没有可选仓库或 worktree 时内容区保持空白，不显示欢迎或空状态提示；读取错误仍显示。
-
-构建使用 MyGo CLI，通过 `go.mod` 的 `tool` 指令管理项目工具依赖，从 `source/` 使用 `go tool mygo` 调用。[mygo.json](source/mygo.json) 与应用模块放在 `source/`，产物写入根目录 `dist/<os>-<arch>/`，不纳入版本控制。当前配置只构建当前平台，不包含分发签名或公证。应用图标由 `mygo.json` 的 `icon` 与 `macos.icon` 指定：macOS 使用 [assets/icon.icon](source/assets/icon.icon) 工程，其余平台使用同源的 [assets/icon.png](source/assets/icon.png) 与 `assets/icon.ico`。开发命令见 [README](README.md#开发与构建)。
-
-## 初步职责边界
-
-| 职责 | 范围 |
+| Path | Responsibility |
 | --- | --- |
-| 应用界面 | 展示多个仓库及 worktree 入口，呈现所选 worktree 的分支状态。 |
-| 工作上下文 | 维护仓库与 worktree 的关联，以及当前选中的 worktree。 |
-| Git 状态读取与更新 | 按需读取各 worktree 的工作区、提交与分支状态并传给界面；获取、拉取、推送仅在用户点击时执行。 |
+| `source/main.go` | MyGo startup, window creation and the app menu |
+| `source/settings*.go` | Settings dialog, preferences file, theme and language |
+| `source/localization.go` | UI strings keyed by their Chinese text, with English translations |
+| `source/commands.go` | Command palette data and actions |
+| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning and persisted sidebar state |
+| `source/worktrees*.go` | Worktree listing and the worktree tab strip |
+| `source/git_reader.go`, `source/load.go` | Background Git reads and stale-result guarding |
+| `source/repository_*.go` | Toolbar, project sidebar, changes, commit graph and commit details |
+| `source/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
+| `source/mygo.json` | Packaging; output goes to `dist/` |
 
-这些职责不是已存在的模块，也不规定目录或接口。仓库可包含多个 worktree，分支状态应归属于对应 worktree，避免将一个仓库误当成只有一个当前分支的上下文。
+## Boundaries
 
-## 目标流程
+- The worktree is the unit of context. Branch and working tree state belong to a worktree, never to the repository as a whole.
+- Selecting a worktree changes what Onegit reads. It never runs `git checkout` or `git switch`.
+- Git write commands run only from an explicit user action: fetch, pull, push, stash and branch switch.
+- Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
+- Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
+- The sidebar tree mirrors the disk. It does not infer links between a repository and worktrees outside the parent directory.
+- Missing projects are marked, never deleted. Only a confirmed missing path counts; permission or Git errors do not.
+- Projects switch through the sidebar only. Tabs are reserved for worktrees inside one project.
+- Empty states stay blank, with no welcome or placeholder text. Errors are always shown.
 
-应用汇集纳入管理的仓库，在侧边栏提供项目入口；选中项目后以 worktree 标签页切换上下文，并在工具栏与项目侧边栏中查看工作区状态、提交和分支。导航到 worktree 表示切换应用查看的上下文，本身不意味着执行 Git 分支切换；获取、拉取、推送属于用户点击触发的 Git 操作，后续按需要扩展范围。
+## Core flows
+
+**Startup.** Onegit restores the cached tree for the selected parent directory, then scans it in the background. Scan results merge into the cache by path and keep the user's expansion changes. See [Project discovery](docs/architecture/project-discovery.md).
+
+**Opening a project.** Selecting a repository lists all its worktrees, including those outside the parent directory. Onegit then reads changes, commits and refs for the selected worktree. See [Repository page](docs/architecture/repository-page.md).
+
+**User Git actions.** A toolbar action runs one Git command in the background, shows failures in the toolbar and reloads repository data when it finishes.
+
+## Data and state
+
+Configuration lives in `~/.oneo/onegit/config.yaml` and UI state in `~/.oneo/onegit/state.yaml`. The same directory is the MyGo user data directory.
+
+- Both files are written to a temporary file in the same directory, synced, then renamed into place.
+- In-memory values change only after a successful write. Load and save errors appear in the UI.
+- A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
+- State covers the project cache per parent directory, expansion, pinning, group collapse and the last selections.
+- Worktree lists and Git data are never persisted.
+
+## Verification
+
+`go test` covers settings and persistence, project detection, scan cancellation and cache merging, legacy import, worktree tabs, Git reads, commit graph layout and repository views. Tests use real temporary Git repositories.
+
+Review these manually: the native directory picker, packaging and the app icon on macOS.
 
 ## Subjects
 
-| 文档 | 何时阅读 |
+| Document | When to read |
 | --- | --- |
-| [产品范围](docs/product-scope.md) | 确认产品目标、功能边界和仍待澄清的要求时。 |
-
-当前设计规模较小，尚不拆分独立架构主题；有明确且持久的设计内容后再补充。
+| [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning or the project cache |
+| [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the toolbar, the project sidebar or commit views |

@@ -1,23 +1,32 @@
-# 项目协作约定
+# Onegit
 
-## 项目方向
+Onegit is a worktree-centered macOS app for browsing many Git repositories. Read [ARCHITECTURE.md](ARCHITECTURE.md) fully before coding, then the relevant subjects.
 
-Onegit 是基于 Onevra 构建的 macOS 应用，目标是以 worktree 为中心汇集多个 Git 仓库，在侧边栏汇集项目，并在项目内以 worktree 标签页切换上下文，展示工作区、提交与分支状态，承接日常仓库浏览需求，不做完整复刻。
+## Principles
 
-目前已有 `source/` 下的原生应用、MyGo 打包配置、Git 项目扫描与目录树，以及以 worktree 标签页、工具栏和项目侧边栏组成的仓库页面；实时状态刷新机制与更完整的 Git 操作尚未实现。“无用户操作”的含义尚待确认，不将任何一种解释擅自转为实现约束。后续细节在明确需求后再展开。
+- Keep the scope to everyday repository browsing and worktree switching. Do not grow Onegit into a full Git client without a request.
+- The original requirement "no user operation" is still unclear. It may mean no Git writes, no manual refresh or no accounts; do not turn any reading into a constraint.
+- Live status refresh and broader Git operations are not designed yet. Ask before choosing their behavior.
+- Separate confirmed goals, proposals, open questions and implemented behavior. Never claim a feature works without code and verification.
+- Check Onevra's current API and requirements before using it. Do not copy upstream example commands as project commands.
 
-## 开发前
+## Working with the user
 
-- 完整阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，再阅读其中与任务相关的主题文档。
-- 区分已确认目标、初步设计、待定事项和已实现行为；没有实现与验证依据时，不声称功能已经可用。
-- 接入 Onevra 前核对上游当前接口与依赖要求，不将上游示例命令直接视为本项目命令。
-- 应用代码和 Go 模块放在 `source/`；从该目录执行 Go 命令，MyGo CLI 使用项目工具依赖 `go tool mygo`，不要全局安装。构建产物放在根目录 `dist/`。Neorio 的 Run、Build 与菜单任务定义在根目录的 `.neorio/config.yaml`。
+- Keep app code and the Go module in `source/`, and run Go commands from there.
+- Use the MyGo CLI through `go tool mygo`. Never install it globally.
+- Build output goes to the root `dist/`. Neorio tasks live in `.neorio/config.yaml`.
+- Commit, push or tag only when asked.
 
-## 文档维护
+## Verification
 
-- 仅在读者需要知道的事实发生变化时，更新受影响的主题、架构概览、索引或使用说明；不要求每次代码修改都增加文档。
-- README 保持入门深度；架构文档说明职责、边界和重要约束，不重复代码中的字段和函数定义。
-- 完成用户可感知的功能或行为变化时，同步维护 [CHANGELOG.md](CHANGELOG.md) 的 `Unreleased`，合并相关条目。内部整理、文档初始化和未实现计划不写成发布成果。
-- 文档与代码保存在同一 Git 分支，合并时同步协调定义、链接与验证依据，不另建分支文档副本。
-- 文档变更后检查相对链接、索引及内容一致性；项目有自有文档检查命令后运行该命令。目前尚无项目自有检查命令。
-- 实现落地后补充真实的启动、构建和测试方式，不编造尚不存在的命令。
+Commands are in [README Development](README.md#development). Run tests and vet after code changes, and launch the app for UI changes. Native dialogs and packaging need manual checks.
+
+## Documentation
+
+- Update a document only when a fact its reader needs changes.
+- Keep each document within its budget and written for its reader.
+- Record completed user-visible outcomes as short `Unreleased` bullets, merging related ones.
+- Repair documents you touch instead of only appending to them.
+- Keep `README.md` and `README.zh-CN.md` equivalent; everything else, including code comments, is English.
+- Keep documentation on the code branch and reconcile it during merges.
+- Document only commands that exist and work.

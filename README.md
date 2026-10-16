@@ -1,22 +1,35 @@
 # Onegit
 
-Onegit 是基于 [Onevra](https://github.com/oneo-me/onevra) 构建的 macOS 桌面应用，目标是以 worktree 为中心，在一个界面中汇集多个 Git 仓库，在侧边栏浏览项目，并在项目内通过 worktree 标签页查看工作区、提交与分支状态。
+**English** | [简体中文](README.zh-CN.md)
 
-目标是承接日常工作中常用的仓库浏览与 worktree 切换需求，不追求覆盖通用 Git 客户端的全部功能。
+Onegit is a worktree-centered macOS app that gathers many Git repositories in one window. It covers everyday repository browsing and worktree switching, not every feature of a general Git client.
 
-## 当前阶段
+## Features
 
-应用提供原生窗口、可折叠和调整宽度的侧边栏。可通过侧边栏底部的设置按钮、应用菜单“设置…”或 `⌘,` 打开设置弹窗，选择项目父目录、主题和语言；修改自动保存，重启后恢复。侧边栏底部也可切换主题。点击侧边栏顶部搜索框或按 `⌘E` 打开命令面板，按名称或完整路径查找项目，也可搜索并打开主题、语言和项目父目录设置；使用方向键选择、回车确认、Esc 关闭。
+- Scan a parent directory for Git repositories and browse them in a sidebar tree.
+- Pin projects to a flat, name-sorted group above the directory tree.
+- Find projects and settings with the command palette (`⌘E`).
+- Switch between all worktrees of a project with tabs.
+- Review working tree changes, the full commit graph and commit details.
+- Browse local branches, remote branches, tags, stashes and submodules, and jump to their commits.
+- Fetch, pull, push, stash and switch branches only when you click.
 
-启动先显示上次的项目树，再后台扫描并加入新项目；不存在的路径保留并标记。更换目录后也扫描一次，各父目录分别保留缓存。侧边栏节点默认折叠，记住各节点的展开状态，支持选择仓库。右键项目可置顶或取消置顶；“置顶”分组按名称排序（忽略大小写）并平铺置顶项目，“其他项目”分组保留其余项目的目录层级，两个分组默认展开，可点击标题折叠；置顶与分组折叠状态重启后恢复。配置和状态分别保存到 `~/.oneo/onegit/config.yaml` 与 `state.yaml`，首次使用新路径时自动导入旧设置。支持普通仓库、linked worktree、已初始化子模块及裸仓库；遇到有效仓库即停止向内扫描，仓库内的嵌套项目不会单独列出。
+## Run
 
-选择项目后，右侧顶部以标签页列出该项目的全部关联 worktree（包括父目录外的），主仓库排在最前；只有一个 worktree 时隐藏标签页。标签页下方是工具栏：左侧为快速启动、获取、拉取、推送与贮藏，右侧提供分支切换。工具栏下方分为项目侧边栏和内容区：侧边栏显示仓库名称与设置入口、“更改”“全部提交”，以及可折叠的本地分支、远程分支、标签、贮藏与子模块树和底部筛选框；内容区显示工作区改动，或汇总本仓库本地与远程分支及标签、带分支图谱与作者头像的提交列表和所选提交详情（“提交”“更改”“文件树”标签页）。应用记住最后选择的仓库、各仓库选择的 worktree 与侧边栏入口，切换与重启后恢复；没有有效历史选择时默认选中首项，没有可选项时内容区保持空白。选择 worktree 只是切换查看上下文，不执行 Git 分支切换；获取、拉取、推送、贮藏与切换分支只在用户点击时运行，状态来自进入项目时的读取和手动刷新，不持续轮询。运行时需能从 PATH 找到 Git。
+Onegit is not released yet. Build it from source as described in [Development](#development). Git must be on `PATH` at runtime.
 
-## 开发与构建
+## Getting started
 
-需要 macOS、Go 1.27.1 或更新版本及 Xcode Command Line Tools。应用代码和 Go 模块位于 [source](source/)，依赖固定为 Onevra `v0.2026.9` 和 MyGo `v0.5.1`。
+1. Open Settings with `⌘,` and choose the parent directory that holds your projects.
+2. Wait for the background scan to add repositories to the sidebar.
+3. Select a project, then pick a worktree tab.
+4. Choose Changes or All Commits in the project sidebar.
 
-MyGo CLI 已通过 `go.mod` 的 `tool` 指令声明为项目工具依赖，无需全局安装。以下命令均从仓库根目录进入 `source` 后执行：
+## Development
+
+Requirements: macOS, Go 1.27.1 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source/go.mod), so no global install is needed.
+
+Run from `source/`:
 
 ```sh
 cd source
@@ -24,23 +37,16 @@ GOWORK=off go mod download
 go tool mygo dev
 ```
 
-`go tool mygo dev` 构建并运行 `Onegit Dev`，修改代码后自动重建并重启；也可用 `go run .` 直接启动。
+`go tool mygo dev` runs `Onegit Dev` and restarts it after code changes.
+
+Build, test and vet from `source/`:
 
 ```sh
 go tool mygo build
 GOWORK=off go test ./...
-GOWORK=off go vet ./...
+GOWORK=off go tool mygo vet
 ```
 
-仓库根目录的 [`.neorio/config.yaml`](.neorio/config.yaml) 为 Neorio 提供运行任务：Run 执行 `go tool mygo dev`，Build 执行 `go tool mygo build` 并在成功后打开 `dist/`，菜单中另有 Test 与 Vet；各任务都在 `source/` 下运行并设置 `GOWORK=off`。
+Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization. Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml).
 
-[打包配置](source/mygo.json) 默认构建当前平台，在 macOS 上把应用包与磁盘映像写入 `dist/darwin-<arch>/`，最低系统版本声明为 macOS 13；跨平台构建使用 `go tool mygo build -platform ...`，非 macOS 系统会跳过签名与磁盘映像步骤。应用图标保存在 [source/assets](source/assets)：macOS 使用 Icon Composer 工程 [`icon.icon`](source/assets/icon.icon)，MyGo 从同源 `icon.png` 渲染 .icns，并为 Windows 资源与 Linux 入口生成对应尺寸，`icon.ico` 是同一份渲图导出的 Windows 图标。产物仅作本地开发验证，使用临时签名，未经公证；`0.1.0` 是初始构建版本，不表示已发布。`go test` 覆盖设置交互与持久化、Git 项目识别、worktree 标签页与项目切换、工作区状态/提交/分支读取与仓库视图、提交图谱布局、目录树交互、扫描取消、缓存合并与恢复及旧设置迁移；原生目录选择器仍需人工验证。
-
-## 项目文档
-
-- [产品范围](docs/product-scope.md)：已确认的方向与暂不展开的细节。
-- [架构概览](ARCHITECTURE.md)：技术基础、初步职责边界与核心流程。
-- [协作约定](AGENTS.md)：后续开发和文档维护规则。
-- [更新记录](CHANGELOG.md)：面向应用使用者的版本变化。
-
-开始开发前，完整阅读架构概览，再阅读相关主题文档。
+Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing code, and [AGENTS.md](AGENTS.md) for working rules. User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md).

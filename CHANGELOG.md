@@ -1,26 +1,14 @@
 # Changelog
 
-本文件面向 Onegit 应用使用者，记录已完成、待发布及已发布的用户可感知变化。项目尚未发布；规划中的功能不计入更新记录。
-
 ## [Unreleased]
 
-- 应用使用自己的图标：青绿底上的白色 Git 分支枝干，当前 worktree 节点以珊瑚橙区分。macOS 使用 Icon Composer 工程，其他平台由同一次渲染导出 PNG 与 ICO 并接入打包配置。
-
-- 应用更名为 Onegit，配置与状态目录改为 `~/.oneo/onegit/`。
-
-- 选择侧边栏项目后，右侧顶部以 worktree 标签页展开该项目全部关联 worktree，主仓库在首项，仅有一个 worktree 时隐藏标签页；标签页下方是工具栏，再下方是项目侧边栏与内容区。记住最后选择的仓库、各仓库的 worktree 与侧边栏入口，无有效选择时默认选中首项，无可选项时显示空白内容。
-
-- 工具栏提供获取、拉取、推送、贮藏与分支切换。
-
-- 项目侧边栏显示仓库名称、“更改”“全部提交”，以及可折叠的本地分支、远程分支、标签、贮藏与子模块树，并在底部提供筛选框，可按名称过滤这些条目。
-
-- 项目侧边栏的分支、远程分支、标签与贮藏条目可点击选中：选中后右侧切换到“全部提交”并定位到该条目指向的提交，选中行保持高亮；切换“更改”“全部提交”入口会清除该选中。子模块记录的是子模块自身仓库的提交，本仓库无法定位，选中它只改变选中行。
-
-- “全部提交”读取本仓库本地与远程分支及标签的完整历史，并以按分支分色的提交图谱展示分支与合并；列表显示分支与标签标记、作者头像、短哈希与日期，所选提交详情提供“提交”“更改”“文件树”标签页，展示作者、引用、SHA、父提交与提交说明。
-
-- 修复点击选择项目父目录时界面卡死的问题，选择器打开期间防止重复点击。
-
-- 新增侧边栏顶部搜索入口与 `⌘E` 命令面板，可按名称或路径查找项目，并快速进入主题、语言与项目父目录设置。
-- 提供 Onegit 原生窗口、可折叠与调整宽度的侧边栏。
-- 新增设置弹窗，可选择项目父目录、主题和界面语言，重启后保留偏好，并可从侧边栏底部切换主题；配置与状态统一保存在 `~/.oneo/onegit/`，自动导入旧设置。
-- 侧边栏缓存 Git 项目树，启动及更换父目录时在后台静默扫描并合并新项目，不显示扫描中的提示文字，保留并标记已不存在的路径；节点默认折叠并记住展开状态，支持将项目置顶到独立的按名称排序的平铺分组，其余项目保留目录层级，两个分组可独立折叠，重启后保留置顶与分组折叠状态。
+- Add a native Onegit window with a collapsible, resizable sidebar and its own app icon.
+- Add settings for the project parent directory, theme and language, saved under `~/.oneo/onegit/` with legacy settings imported.
+- Add a background-scanned project tree that marks missing paths and remembers expansion.
+- Add project pinning to a flat, name-sorted group; both sidebar groups collapse independently.
+- Add a command palette (`⌘E`) to find projects and open settings.
+- Add worktree tabs for each project, remembering the last project, worktree and section.
+- Add a toolbar to fetch, pull, push, stash and switch branches.
+- Add a project sidebar with filterable branches, remote branches, tags, stashes and submodules that jump to their commits.
+- Add All Commits with a colored branch graph across all refs, plus commit details.
+- Fix the UI freezing while choosing the project parent directory.
