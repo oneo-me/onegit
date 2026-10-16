@@ -25,18 +25,16 @@ func main() {
 	mygo.App.WhenReady(func() {
 		settings := newSettings()
 		shell := sidebar.NewShell(sidebar.ShellOptions{
-			Title:           "Onegit",
-			Width:           1100,
-			Height:          720,
-			MinWidth:        820,
-			MinHeight:       600,
-			LeftWidth:       240,
-			LeftMinWidth:    180,
-			LeftMaxWidth:    400,
-			LeftToggleLabel: settings.text("切换侧边栏"),
-			LeftResizeLabel: settings.text("调整侧边栏宽度"),
-			Left:            settings.worktreeSidebar,
-			LeftToolbar:     settings.toolbar,
+			Title:        "Onegit",
+			Width:        1100,
+			Height:       720,
+			MinWidth:     820,
+			MinHeight:    600,
+			LeftWidth:    240,
+			LeftMinWidth: 180,
+			LeftMaxWidth: 400,
+			Left:         settings.worktreeSidebar,
+			LeftToolbar:  settings.toolbar,
 			Content: func(c *ui.Context) {
 				settings.welcome(c)
 				settings.render(c)
@@ -52,6 +50,9 @@ func main() {
 		shell.Window().OnClose(func(*mygo.CloseEvent) { settings.saveSidebarState() })
 		shell.Window().OnClosed(func() {
 			settings.cancelWorktrees()
+			if settings.repo.view != nil {
+				settings.repo.view.Close()
+			}
 			settings.scanVersion++
 			if settings.scanCancel != nil {
 				settings.scanCancel()

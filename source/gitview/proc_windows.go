@@ -1,0 +1,18 @@
+package gitview
+
+import (
+	"os/exec"
+	"syscall"
+)
+
+// hideConsole keeps git from opening a console window.
+func hideConsole(cmd *exec.Cmd) {
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	// HideWindow alone can still let a console briefly appear. Prevent its
+	// creation as well; these commands communicate through pipes, not a TTY.
+	const createNoWindow = 0x08000000 // CREATE_NO_WINDOW
+	cmd.SysProcAttr.HideWindow = true
+	cmd.SysProcAttr.CreationFlags |= createNoWindow
+}

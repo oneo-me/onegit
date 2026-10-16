@@ -19,7 +19,7 @@ func finishScan(t *testing.T, s *settings) {
 func awaitNavigation(t *testing.T, s *settings, callbacks <-chan func()) {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
-	for s.scanning || s.overview.Loading || s.repo.status.loading || s.repo.branches.loading || s.repo.commits.loading {
+	for s.scanning || s.overview.Loading || s.repositoryLoading() {
 		select {
 		case fn := <-callbacks:
 			fn()

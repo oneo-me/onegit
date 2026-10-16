@@ -1,97 +1,25 @@
 package main
 
 import (
-	"context"
-	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onegit/source/gitview"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
 )
 
-// Sections of the project sidebar. The value is persisted, so treat it as a
-// stored key independent of the translated label.
-const (
-	sectionChanges = "changes"
-	sectionCommits = "commits"
-)
-
-// Tabs of the commit details pane.
-const (
-	detailCommit = iota
-	detailChanges
-	detailTree
-)
-
-// refSelection is the repository sidebar ref row the user picked. Selecting a
-// row navigates the content view to the commit it points at.
-type refSelection struct {
-	Group string
-	Name  string
-}
-
-type gitJob struct {
-	running bool
-	label   string
-	problem string
-	version uint64
-	cancel  context.CancelFunc
-}
-
-// repositoryState owns the project sidebar selection and the Git reads that
-// back the toolbar and the content views.
+// repositoryState holds the selected worktree's Git view. The view owns the
+// project sidebar, content and Git dialogs; Onegit owns the toolbar that
+// starts its actions.
 type repositoryState struct {
-	section      string
-	sidebarWidth float32
-	detailSplit  float32
-	dispatch     func(func())
-
-	status   loadState[statusSnapshot]
-	branches loadState[[]branchEntry]
-	commits  loadState[[]commitEntry]
-	files    loadState[[]commitFile]
-	refs     loadState[sidebarRefs]
-
-	detailTab  int
-	filter     string
-	treeGroups map[string]*bool
-
-	selectedRef refSelection
-	jumpHash    string
-
-	changesList components.ListState
-	commitList  components.ListState
-	commitIndex int
-	visible     []commitEntry
-
-	job gitJob
-}
-
-func (r *repositoryState) reset() {
-	r.status.reset()
-	r.branches.reset()
-	r.commits.reset()
-	r.files.reset()
-	r.refs.reset()
-	r.cancelJob()
-	r.commitIndex = -1
-	r.visible = nil
-	r.selectedRef = refSelection{}
-	r.jumpHash = ""
-	r.changesList = components.ListState{}
-	r.commitList = components.ListState{}
-}
-
-func (r *repositoryState) cancelJob() {
-	if r.job.cancel != nil {
-		r.job.cancel()
-	}
-	r.job = gitJob{version: r.job.version + 1}
+	view     *gitview.View
+	dispatch func(func())
 }
 
 func (s *settings) repositoryDispatch() func(func()) {
@@ -107,109 +35,68 @@ func (s *settings) invalidate() {
 	}
 }
 
-func (s *settings) sectionFor(node *projectNode) string {
-	if node != nil && node.Repository {
-		if saved := s.state.SelectedSections[node.Path]; saved != "" {
-			return saved
-		}
+// language is the effective language tag: the preference, else the system's.
+func (s *settings) language() string {
+	if s.values.Language != "" {
+		return s.values.Language
 	}
-	return sectionChanges
+	return s.systemLanguage
 }
 
-// repositoryChanged reloads every dataset after the active worktree or project
-// changed. The sidebar section is navigation state and survives the change.
+// gitView returns the repository view, creating it on first use with the
+// remembered layout. Avatars are cached beside the configuration.
+func (s *settings) gitView() *gitview.View {
+	if s.repo.view != nil {
+		return s.repo.view
+	}
+	var state gitview.State
+	if s.state.GitView != nil {
+		state = *s.state.GitView
+	}
+	avatars := ""
+	if s.path != "" {
+		avatars = filepath.Join(filepath.Dir(s.path), "avatars")
+	}
+	s.repo.view = gitview.New(gitview.Options{
+		Dispatch:   func(fn func()) { s.repositoryDispatch()(fn) },
+		Invalidate: s.invalidate,
+		Git:        gitview.Git{Env: gitEnv()},
+		Language:   s.language(),
+		AvatarDir:  avatars,
+		State:      state,
+		OnState: func(state gitview.State) {
+			s.state.GitView = &state
+			s.saveSidebarState()
+		},
+		DialogInset: sidebar.HeaderHeight,
+	})
+	return s.repo.view
+}
+
+// gitEnv drops Git overrides from a launcher or development shell, which
+// would otherwise describe every path as the launcher's repository.
+func gitEnv() []string {
+	var env []string
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GIT_") {
+			env = append(env, entry)
+		}
+	}
+	return env
+}
+
+// repositoryChanged shows the selected worktree, rereading it when it was
+// already shown.
 func (s *settings) repositoryChanged() {
-	s.repo.reset()
-	s.ensureRepositoryData()
-}
-
-// reloadRepositoryData re-reads the active worktree while keeping the job
-// result, so a failed fetch or push stays visible until the next action.
-func (s *settings) reloadRepositoryData() {
-	s.repo.status.reset()
-	s.repo.branches.reset()
-	s.repo.commits.reset()
-	s.ensureRepositoryData()
-}
-
-// ensureRepositoryData starts the reads the current section needs. Reads for a
-// path are started once and reused while the worktree stays selected.
-func (s *settings) ensureRepositoryData() {
-	dir := s.overview.SelectedPath
-	if dir == "" {
+	view := s.gitView()
+	if view.Path() == s.overview.SelectedPath {
+		view.Reload()
 		return
 	}
-	dispatch := s.repositoryDispatch()
-	if s.repo.status.needs(dir) {
-		s.repo.status.start(dispatch, dir, func(ctx context.Context) (statusSnapshot, error) {
-			return readStatus(ctx, dir)
-		}, s.invalidate)
-	}
-	if s.repo.refs.needs(dir) {
-		s.repo.refs.start(dispatch, dir, func(ctx context.Context) (sidebarRefs, error) {
-			return readSidebarRefs(ctx, dir)
-		}, s.invalidate)
-	}
-	if s.repo.branches.needs(dir) {
-		s.repo.branches.start(dispatch, dir, func(ctx context.Context) ([]branchEntry, error) {
-			return readBranches(ctx, dir)
-		}, s.invalidate)
-	}
-	if s.repo.section == sectionCommits && s.repo.commits.needs(dir) {
-		s.repo.commits.start(dispatch, dir, func(ctx context.Context) ([]commitEntry, error) {
-			return readCommits(ctx, dir, 0)
-		}, s.invalidate)
-	}
+	view.SetPath(s.overview.SelectedPath)
 }
 
-func (s *settings) setSection(section string) {
-	if s.repo.section == section {
-		return
-	}
-	s.repo.section = section
-	if s.selectedProject != nil && s.selectedProject.Repository {
-		if s.state.SelectedSections == nil {
-			s.state.SelectedSections = make(map[string]string)
-		}
-		s.state.SelectedSections[s.selectedProject.Path] = section
-		s.saveSidebarState()
-	}
-	s.ensureRepositoryData()
-}
-
-// runGitJob runs a network Git command and refreshes reads when it finishes.
-func (s *settings) runGitJob(label string, args ...string) {
-	dir := s.overview.SelectedPath
-	if dir == "" || s.repo.job.running {
-		return
-	}
-	s.repo.cancelJob()
-	version := s.repo.job.version
-	s.repo.job.running = true
-	s.repo.job.label = label
-	s.repo.job.problem = ""
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
-	s.repo.job.cancel = cancel
-	dispatch := s.repositoryDispatch()
-	go func() {
-		defer cancel()
-		_, err := runGitAction(ctx, dir, args...)
-		dispatch(func() {
-			if s.repo.job.version != version {
-				return
-			}
-			s.repo.job.running = false
-			s.repo.job.cancel = nil
-			if err != nil {
-				s.repo.job.problem = err.Error()
-			}
-			s.reloadRepositoryData()
-			s.invalidate()
-		})
-	}()
-}
-
-// welcome keeps the previous entry point; it now builds the repository page.
+// welcome builds the repository page of the selected project.
 func (s *settings) welcome(c *ui.Context) {
 	if s.selectedProject == nil || !s.selectedProject.Repository {
 		return
@@ -231,16 +118,10 @@ func (s *settings) repositoryPage(c *ui.Context) {
 			s.repositoryMessage(c, s.text("读取 worktree 失败：")+s.overview.Problem)
 			return
 		}
-		if s.repo.sidebarWidth < 1 {
-			s.repo.sidebarWidth = 220
-		}
-		if s.repo.detailSplit < 1 {
-			s.repo.detailSplit = 260
-		}
-		split := components.Split(c, &s.repo.sidebarWidth, func() { s.projectSidebar(c) }, func() { s.repositoryContent(c) }, components.SplitOptions{
-			FirstMin: 180, SecondMin: 280,
-		})
-		split.Grow(1).MinHeight(0)
+		view := s.gitView()
+		// The language preference can change while the view lives.
+		view.SetLanguage(s.language())
+		ui.Column(c).Grow(1).FillWidth().MinHeight(0).Children(func() { view.Layout(c) })
 	})
 }
 
@@ -250,573 +131,126 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 	})
 }
 
-// repositoryToolbar is the strip below the worktree tabs and above the project
-// sidebar: common Git actions on the left and navigation actions on the right,
-// as in the reference application.
+// repositoryToolbar is the strip below the worktree tabs: the view's fetch,
+// pull and push with their commit counts, a stash, and the branch menu.
+// Every action runs through the view, which reports failures as toasts and
+// rereads the worktree.
 func (s *settings) repositoryToolbar(c *ui.Context) {
 	t := c.Theme()
-	running := s.repo.job.running
+	view := s.gitView()
+	tr := view.Tracking()
 	ui.Row(c).FillWidth().Shrink(0).Height(t.Space(12)).AlignItems(ui.Center).
 		Background(t.Background).Padding(0, t.Space(1)).Children(func() {
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(.5)).Children(func() {
-			s.toolbarButton(c, lucide.Download(), s.text("获取"), running, func() {
-				s.runGitJob(s.text("正在获取…"), "fetch", "--all", "--prune")
-			})
-			s.toolbarButton(c, lucide.ArrowDownToLine(), s.text("拉取"), running, func() {
-				s.runGitJob(s.text("正在拉取…"), "pull")
-			})
-			s.toolbarButton(c, lucide.ArrowUpFromLine(), s.text("推送"), running, func() {
-				s.runGitJob(s.text("正在推送…"), "push")
-			})
-			s.toolbarButton(c, lucide.Archive(), s.text("贮藏"), running, func() {
-				s.runGitJob(s.text("正在贮藏…"), "stash", "push", "--include-untracked")
+			s.toolbarButton(c, gitview.OpFetch, lucide.Download(), s.text("获取"), 0, !view.CanSync(), view.Fetch)
+			s.toolbarButton(c, gitview.OpPull, lucide.ArrowDownToLine(), s.text("拉取"), tr.Behind, !view.CanPull(), view.OpenPull)
+			s.toolbarButton(c, gitview.OpPush, lucide.ArrowUpFromLine(), s.text("推送"), tr.Ahead, !view.CanSync(), view.OpenPush)
+			s.toolbarButton(c, "stash", lucide.Archive(), s.text("贮藏"), 0, !view.CanSync(), func() {
+				view.Run("stash", s.text("贮藏失败"), func(git gitview.Git, path string) error {
+					_, err := git.Run(path, "stash", "push", "--include-untracked")
+					return err
+				})
 			})
 		})
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Justify(ui.End).Gap(t.Space(.5)).Children(func() {
-			s.toolbarMenuButton(c, lucide.GitBranch(), s.text("分支操作"), running, s.branchMenu)
+			s.toolbarMenuButton(c, lucide.GitBranch(), s.text("分支操作"), !view.CanSync(), s.branchMenu)
 		})
 	})
 }
 
+// branchMenu switches the worktree to another local branch.
 func (s *settings) branchMenu(m *ui.Menu) {
-	if !s.repo.branches.loaded {
-		m.Item(s.text("正在读取…")).Disabled(true)
-		return
-	}
-	count := 0
-	for _, branch := range s.repo.branches.value {
-		if branch.Remote {
-			continue
-		}
-		count++
-		if m.Item(branch.Name).Checked(branch.Current).Chosen() && !branch.Current {
-			s.runGitJob(s.text("正在切换…"), "switch", branch.Name)
+	view := s.gitView()
+	current := view.Tracking().Branch
+	branches := view.LocalBranches()
+	for _, branch := range branches {
+		if m.Item(branch).Checked(branch == current).Chosen() && branch != current {
+			view.Run("switch", s.text("切换分支失败"), func(git gitview.Git, path string) error {
+				_, err := git.Run(path, "switch", branch)
+				return err
+			})
 		}
 	}
-	if count == 0 {
+	if len(branches) == 0 {
 		m.Item(s.text("没有分支。")).Disabled(true)
 	}
 }
 
-func (s *settings) currentBranch() string {
-	if s.repo.status.loaded {
-		head := s.repo.status.value.Head
-		switch {
-		case head.Detached:
-			return s.text("游离 HEAD")
-		case head.Branch != "":
-			return head.Branch
-		}
-	}
-	if i := s.overview.selectedIndex; i >= 0 && i < len(s.overview.Worktrees) {
-		item := s.overview.Worktrees[i]
-		if item.Detached {
-			return s.text("游离 HEAD")
-		}
-		if item.Branch != "" {
-			return item.Branch
-		}
-	}
-	return ""
-}
-
-func (s *settings) branchStatusLabel() string {
-	if s.repo.job.running {
-		return s.repo.job.label
-	}
-	if s.repo.job.problem != "" {
-		return s.text("Git 操作失败：") + s.repo.job.problem
-	}
-	if s.repo.status.loaded {
-		head := s.repo.status.value.Head
-		switch {
-		case head.Detached:
-			return s.text("游离 HEAD")
-		case head.Branch != "":
-			label := head.Branch
-			if head.Unborn {
-				label += s.text("（尚无提交）")
-			}
-			if head.Upstream != "" {
-				label += " → " + head.Upstream
-				if head.Ahead > 0 || head.Behind > 0 {
-					label += fmt.Sprintf(" ↑%d ↓%d", head.Ahead, head.Behind)
-				}
-			}
-			return label
-		}
-	}
-	return s.currentBranch()
-}
-
-func (s *settings) projectSidebar(c *ui.Context) {
+// toolbarButton is a toolbar action with an icon over its label, sized like
+// the rest of the toolbar rather than Onevra's square icon button. A
+// running action shows a spinner, and count, when set, the commits it moves.
+func (s *settings) toolbarButton(c *ui.Context, op string, icon *ui.SVG, label string, count int, disabled bool, action func()) {
 	t := c.Theme()
-	name := ""
-	if s.selectedProject != nil {
-		name = filepath.Base(s.selectedProject.Path)
+	view := s.gitView()
+	b := ui.ButtonBase(c).Key("toolbar-" + op).Width(t.Space(15)).Height(t.Space(12)).
+		Column().Gap(t.Space(.5)).Radius(t.Radius).Label(label).TextColor(t.TextMuted)
+	if disabled {
+		b.Disabled(true)
 	}
-	ui.Column(c).FillHeight().FillWidth().Background(t.Surface).Clip().Children(func() {
-		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(t.Space(1)).
-			Padding(t.Space(2), t.Space(1.5), t.Space(1), t.Space(2)).Children(func() {
-			components.Text(c, name).Bold().FontSize(t.Rem(.95)).Grow(1).MinWidth(0).SingleLine()
-		})
-		s.sidebarPrimary(c, sectionChanges, s.text("更改"), lucide.FileDiff(), s.changesCountLabel())
-		s.sidebarPrimary(c, sectionCommits, s.text("全部提交"), lucide.GitCommitHorizontal(), "")
-		components.ScrollView(c, components.ScrollViewOptions{}).Fill().Children(func() {
-			ui.Column(c).FillWidth().Shrink(0).Padding(t.Space(1), 0, t.Space(2), 0).Children(func() {
-				s.branchTree(c)
-			})
-		})
-		ui.Column(c).FillWidth().Shrink(0).Padding(t.Space(1), t.Space(1.5), t.Space(2), t.Space(1.5)).Children(func() {
-			components.TextBox(c, &s.repo.filter, components.TextBoxOptions{LeadingIcon: lucide.Search()}).
-				FillWidth().Placeholder(s.text("筛选…")).Label(s.text("筛选"))
-		})
-	})
-}
-
-func (s *settings) sidebarPrimary(c *ui.Context, id, label string, icon *ui.SVG, suffix string) {
-	t := c.Theme()
-	item := components.SidebarItemWithLeading(c, label+suffix, s.repo.section == id, func(c *ui.Context, size float32) {
-		if icon != nil {
-			components.Icon(c, icon).Size(size, size).TextColor(t.TextMuted)
+	b.Draw(func(p *ui.Painter, r ui.Rect) {
+		if b.IsDisabled() {
+			return
 		}
-	}).Key(id)
-	item.Padding(t.Space(1.5), t.Space(2))
-	if item.Clicked() {
-		// A primary entry is navigation of its own, so it drops any ref row
-		// selection rather than leaving an unrelated row highlighted.
-		s.repo.selectedRef = refSelection{}
-		s.repo.jumpHash = ""
-		s.setSection(id)
-	}
-}
-
-// groupOpen keeps a sidebar group's expansion across frames and worktrees.
-func (s *settings) groupOpen(key string, defaultOpen bool) *bool {
-	if s.repo.treeGroups == nil {
-		s.repo.treeGroups = map[string]*bool{}
-	}
-	if open, ok := s.repo.treeGroups[key]; ok {
-		return open
-	}
-	open := defaultOpen
-	s.repo.treeGroups[key] = &open
-	return &open
-}
-
-func (s *settings) branchTree(c *ui.Context) {
-	match := func(name string) bool {
-		if s.repo.filter == "" {
-			return true
+		switch {
+		case b.Pressed():
+			p.Fill(r, t.Text.Alpha(.14), t.Radius)
+		case b.Hovered():
+			p.Fill(r, t.Text.Alpha(.08), t.Radius)
 		}
-		return strings.Contains(strings.ToLower(name), strings.ToLower(s.repo.filter))
-	}
-	var local, remote []refEntry
-	if s.repo.branches.loaded {
-		for _, branch := range s.repo.branches.value {
-			if !match(branch.Name) {
-				continue
-			}
-			entry := refEntry{Name: branch.Name, Hash: branch.Hash}
-			if branch.Remote {
-				remote = append(remote, entry)
+	}).Children(func() {
+		ui.Box(c).Size(t.Space(4.5), t.Space(4.5)).Children(func() {
+			if view.Syncing() == op {
+				components.Spinner(c, components.SpinnerRing).Fill()
 			} else {
-				local = append(local, entry)
+				components.Icon(c, icon).Fill().TextColor(t.Text)
 			}
-		}
-	}
-	var refs sidebarRefs
-	if s.repo.refs.loaded {
-		refs = s.repo.refs.value
-	}
-	filtered := func(items []refEntry) []refEntry {
-		result := make([]refEntry, 0, len(items))
-		for _, item := range items {
-			if match(item.Name) {
-				result = append(result, item)
-			}
-		}
-		return result
-	}
-	components.Tree(c, func() {
-		s.treeSection(c, "branches", s.text("本地分支"), local, true)
-		s.treeSection(c, "remotes", s.text("远程分支"), remote, true)
-		s.treeSection(c, "tags", s.text("标签"), filtered(refs.Tags), false)
-		s.treeSection(c, "stashes", s.text("贮藏"), filtered(refs.Stashes), false)
-		s.treeSection(c, "submodules", s.text("子模块"), filtered(refs.Submodules), false)
-	})
-}
-
-func (s *settings) treeSection(c *ui.Context, key, label string, items []refEntry, defaultOpen bool) {
-	ui.Column(c).Key("group-" + key).FillWidth().Shrink(0).Children(func() {
-		components.TreeItem(c, label, s.groupOpen(key, defaultOpen), false, func() {
-			for _, item := range items {
-				ui.Column(c).Key("leaf-" + key + "-" + item.Name).FillWidth().Shrink(0).Children(func() {
-					selected := s.repo.selectedRef.Group == key && s.repo.selectedRef.Name == item.Name
-					if components.TreeItem(c, item.Name, nil, selected, nil).Clicked() {
-						s.selectRef(key, item)
-					}
+			if count > 0 {
+				ui.Box(c).Absolute().Top(-4).Left(t.Space(3)).Height(14).Padding(0, 4).Radius(7).Center().
+					Background(t.Accent).Children(func() {
+					components.Text(c, strconv.Itoa(count)).FontSize(10).Bold().TextColor(ui.RGB(255, 255, 255)).SingleLine()
 				})
 			}
 		})
+		components.Text(c, label).FontSize(t.Rem(.68)).SingleLine()
 	})
-}
-
-// selectRef highlights a sidebar ref row and navigates the content view to the
-// commit it points at. A submodule has no commit in this repository, so its
-// row only changes the selection.
-func (s *settings) selectRef(group string, item refEntry) {
-	s.repo.selectedRef = refSelection{Group: group, Name: item.Name}
-	s.repo.jumpHash = item.Hash
-	s.setSection(sectionCommits)
-	s.invalidate()
-}
-
-func (s *settings) changesCountLabel() string {
-	if s.repo.status.loaded && len(s.repo.status.value.Changes) > 0 {
-		return fmt.Sprintf(" (%d)", len(s.repo.status.value.Changes))
+	tip := view.ActionTooltip(op)
+	if tip == "" {
+		tip = label
 	}
-	return ""
+	components.Tooltip(c, b, tip)
+	if !disabled && b.Clicked() {
+		action()
+	}
 }
 
-func (s *settings) repositoryContent(c *ui.Context) {
-	if s.repo.section == sectionCommits {
-		s.commitsView(c)
-		return
+// toolbarMenuButton is toolbarButton with a dropdown menu.
+func (s *settings) toolbarMenuButton(c *ui.Context, icon *ui.SVG, label string, disabled bool, menu func(*ui.Menu)) {
+	t := c.Theme()
+	b := ui.ButtonBase(c).Key("toolbar-menu-" + label).Width(t.Space(15)).Height(t.Space(12)).
+		Column().Gap(t.Space(.5)).Radius(t.Radius).Label(label).TextColor(t.TextMuted)
+	if disabled {
+		b.Disabled(true)
 	}
-	s.changesView(c)
-}
-
-func (s *settings) contentState[T any](c *ui.Context, state *loadState[T]) bool {
-	if state.problem != "" {
-		components.Text(c, s.text("读取失败：")+state.problem).Wrap().TextColor(c.Theme().TextMuted).Padding(16)
-		return false
-	}
-	if state.loading && !state.loaded {
-		components.Text(c, s.text("正在读取…")).TextColor(c.Theme().TextMuted).Padding(16)
-		return false
-	}
-	return true
-}
-
-func (s *settings) changesView(c *ui.Context) {
-	ui.Column(c).Fill().Padding(0).Children(func() {
-		if !s.contentState(c, &s.repo.status) {
+	b.Draw(func(p *ui.Painter, r ui.Rect) {
+		if b.IsDisabled() {
 			return
 		}
-		changes := s.repo.status.value.Changes
-		if len(changes) == 0 {
-			s.repositoryMessage(c, s.text("没有未提交的更改。"))
-			return
+		switch {
+		case b.Pressed():
+			p.Fill(r, t.Text.Alpha(.14), t.Radius)
+		case b.Hovered():
+			p.Fill(r, t.Text.Alpha(.08), t.Radius)
 		}
-		components.List(c, &s.repo.changesList, len(changes), func(i int) {
-			s.changeRow(c, changes[i])
-		}).Fill()
+	}).Children(func() {
+		components.Icon(c, icon).Size(t.Space(4.5), t.Space(4.5)).TextColor(t.Text)
+		components.Text(c, label).FontSize(t.Rem(.68)).SingleLine()
 	})
+	if !disabled {
+		b.Menu(menu)
+	}
+	components.Tooltip(c, b, label)
 }
 
-func (s *settings) changeRow(c *ui.Context, entry changeEntry) {
-	t := c.Theme()
-	index, work := entry.Index, entry.Work
-	if index == " " {
-		index = "·"
-	}
-	if work == " " {
-		work = "·"
-	}
-	ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(t.Space(1), t.Space(2.5)).Children(func() {
-		components.Text(c, index).FontSize(t.Rem(.85)).TextColor(changeColor(t, entry.Index)).Shrink(0)
-		components.Text(c, work).FontSize(t.Rem(.85)).TextColor(changeColor(t, entry.Work)).Shrink(0)
-		path := entry.Path
-		if entry.Orig != "" {
-			path = entry.Orig + " → " + entry.Path
-		}
-		components.Text(c, path).SingleLine().Grow(1).MinWidth(0)
-	})
-}
-
-func changeColor(t *ui.Theme, code string) ui.Color {
-	switch code {
-	case "A", "?":
-		return t.Success
-	case "D":
-		return t.Danger
-	case "R", "C":
-		return t.Accent
-	case "M", "T", "U":
-		return t.Warning
-	default:
-		return t.TextMuted
-	}
-}
-
-func (s *settings) commitsView(c *ui.Context) {
-	if !s.contentState(c, &s.repo.commits) {
-		return
-	}
-	s.repo.visible = s.repo.commits.value
-	if len(s.repo.visible) == 0 {
-		s.repositoryMessage(c, s.text("没有提交。"))
-		return
-	}
-	if s.repo.jumpHash != "" {
-		s.revealCommit(s.repo.jumpHash)
-		s.repo.jumpHash = ""
-	}
-	if s.repo.commitIndex >= len(s.repo.visible) {
-		s.repo.commitIndex = len(s.repo.visible) - 1
-	}
-	if s.repo.commitIndex < 0 {
-		s.repo.commitIndex = 0
-	}
-	split := components.Split(c, &s.repo.detailSplit, func() {
-		s.commitList(c)
-	}, func() {
-		s.commitDetails(c, s.repo.visible[s.repo.commitIndex])
-	}, components.SplitOptions{Orientation: components.Vertical, FirstMin: 110, SecondMin: 150})
-	split.FillWidth().Grow(1).MinHeight(0)
-}
-
-func (s *settings) commitList(c *ui.Context) {
-	rows, columns := buildGraph(s.repo.visible)
-	components.List(c, s.commitListState(), len(s.repo.visible), func(i int) {
-		s.commitRow(c, s.repo.visible[i], rows[i], columns)
-	}).Fill()
-}
-
-// revealCommit selects a commit in the loaded list and scrolls it into view,
-// so selecting a sidebar ref lands on the commit it points at even when the
-// list is scrolled far away.
-func (s *settings) revealCommit(hash string) {
-	for i, entry := range s.repo.visible {
-		if entry.Hash != hash {
-			continue
-		}
-		s.repo.commitIndex = i
-		s.repo.commitList.ScrollIntoView(i)
-		s.ensureCommitFiles()
-		return
-	}
-}
-
-func (s *settings) commitListState() *components.ListState {
-	list := &s.repo.commitList
-	list.Selected = &s.repo.commitIndex
-	list.Key = func(i int) any { return s.repo.visible[i].Hash }
-	list.Label = func(i int) string { return s.repo.visible[i].Subject }
-	list.OnChange = func() { s.ensureCommitFiles() }
-	return list
-}
-
-// commitRow is one revision: graph, decorations, subject, author, hash and date.
-func (s *settings) commitRow(c *ui.Context, entry commitEntry, row graphRow, columns int) {
-	t := c.Theme()
-	ui.Row(c).FillWidth().MinWidth(0).Height(t.Space(5.75)).AlignItems(ui.Center).Children(func() {
-		graphCell(c, row, columns, len(entry.Parents) > 1)
-		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).
-			Padding(0, t.Space(1.5)).Children(func() {
-			refPills(c, entry.Refs)
-			components.Text(c, entry.Subject).SingleLine().Grow(1).MinWidth(0).FontSize(t.Rem(.82))
-			authorAvatar(c, entry.Author, t.Space(4))
-			components.Text(c, entry.Author).Width(t.Space(28)).Shrink(0).SingleLine().
-				FontSize(t.Rem(.78)).TextColor(t.TextMuted)
-			components.Text(c, entry.Short).Width(t.Space(18)).Shrink(0).
-				FontSize(t.Rem(.78)).TextColor(t.TextMuted)
-			components.Text(c, s.dateLabel(entry.Date)).Width(t.Space(33)).Shrink(0).
-				FontSize(t.Rem(.78)).TextColor(t.TextMuted).TextAlign(ui.End)
-		})
-	})
-}
-
-// ensureCommitFiles loads the changed paths of the selected commit for the
-// Changes and File Tree details tabs.
-func (s *settings) ensureCommitFiles() {
-	if s.repo.detailTab == detailCommit {
-		return
-	}
-	dir := s.overview.SelectedPath
-	if dir == "" || s.repo.commitIndex < 0 || s.repo.commitIndex >= len(s.repo.visible) {
-		return
-	}
-	entry := s.repo.visible[s.repo.commitIndex]
-	if s.repo.files.needs(entry.Hash) {
-		s.repo.files.start(s.repositoryDispatch(), entry.Hash, func(ctx context.Context) ([]commitFile, error) {
-			return readCommitFiles(ctx, dir, entry.Hash)
-		}, s.invalidate)
-	}
-}
-
-func (s *settings) setDetailTab(tab int) {
-	s.repo.detailTab = tab
-	s.ensureCommitFiles()
-}
-
-func (s *settings) commitDetails(c *ui.Context, entry commitEntry) {
-	t := c.Theme()
-	s.ensureCommitFiles()
-	ui.Column(c).FillWidth().FillHeight().Background(t.Background).Children(func() {
-		tabs := components.Tabs(c, &s.repo.detailTab, s.text("提交"), s.text("更改"), s.text("文件树"))
-		tabs.List.FillWidth().Shrink(0).Padding(t.Space(1), t.Space(1))
-		ui.Box(c).FillWidth().Height(1).Shrink(0).Background(t.Border)
-		if tabs.List.Changed() {
-			s.setDetailTab(s.repo.detailTab)
-		}
-		switch s.repo.detailTab {
-		case detailChanges:
-			s.commitFileList(c)
-		case detailTree:
-			s.commitFileTree(c)
-		default:
-			s.commitSummary(c, entry)
-		}
-	})
-}
-
-func (s *settings) detailField(c *ui.Context, label string, body func()) {
-	t := c.Theme()
-	ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Start).Gap(t.Space(2)).Children(func() {
-		components.Text(c, label).Width(t.Space(20)).Shrink(0).FontSize(t.Rem(.7)).
-			TextColor(t.TextMuted).TextAlign(ui.End).Padding(t.Space(.5), 0)
-		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1)).Children(body)
-	})
-}
-
-func (s *settings) commitSummary(c *ui.Context, entry commitEntry) {
-	t := c.Theme()
-	components.ScrollView(c, components.ScrollViewOptions{}).Fill().Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Padding(t.Space(2.5), t.Space(2.5), t.Space(3), 0).
-			Gap(t.Space(1.5)).Children(func() {
-			ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Start).Gap(t.Space(2.5)).Children(func() {
-				authorAvatar(c, entry.Author, t.Space(10.5))
-				ui.Column(c).Grow(1).MinWidth(0).Gap(t.Space(.25)).Children(func() {
-					components.Text(c, s.text("作者")).FontSize(t.Rem(.7)).TextColor(t.TextMuted)
-					ui.Row(c).AlignItems(ui.Center).Gap(t.Space(1.5)).Children(func() {
-						components.Text(c, entry.Author).FontSize(t.Rem(.88)).Bold().SingleLine()
-						components.Text(c, entry.AuthorEmail).FontSize(t.Rem(.8)).TextColor(t.TextMuted).SingleLine()
-					})
-					components.Text(c, s.dateLabel(entry.Date)).FontSize(t.Rem(.8)).TextColor(t.TextMuted)
-				})
-			})
-			if strings.TrimSpace(entry.Refs) != "" {
-				s.detailField(c, s.text("引用"), func() { refPills(c, entry.Refs) })
-			}
-			s.detailField(c, "SHA", func() {
-				components.Text(c, entry.Hash).FontSize(t.Rem(.8)).SingleLine()
-			})
-			if len(entry.Parents) > 0 {
-				s.detailField(c, "PARENTS", func() {
-					for _, parent := range entry.Parents {
-						short := parent
-						if len(short) > 8 {
-							short = short[:8]
-						}
-						components.Text(c, short).FontSize(t.Rem(.8)).TextColor(t.Accent).Shrink(0)
-					}
-				})
-			}
-			ui.Box(c).FillWidth().Height(1).Shrink(0).Background(t.Border).Margin(t.Space(1), 0)
-			components.Text(c, entry.Subject).Bold().FontSize(t.Rem(.94)).Wrap()
-			if entry.Body != "" {
-				components.Text(c, entry.Body).Wrap()
-			}
-		})
-	})
-}
-
-func (s *settings) commitFileList(c *ui.Context) {
-	if !s.contentState(c, &s.repo.files) {
-		return
-	}
-	files := s.repo.files.value
-	if len(files) == 0 {
-		s.repositoryMessage(c, s.text("没有更改的文件。"))
-		return
-	}
-	components.ScrollView(c, components.ScrollViewOptions{}).Fill().Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Children(func() {
-			for _, file := range files {
-				s.commitFileRow(c, file)
-			}
-		})
-	})
-}
-
-func (s *settings) commitFileTree(c *ui.Context) {
-	if !s.contentState(c, &s.repo.files) {
-		return
-	}
-	files := s.repo.files.value
-	if len(files) == 0 {
-		s.repositoryMessage(c, s.text("没有更改的文件。"))
-		return
-	}
-	components.ScrollView(c, components.ScrollViewOptions{}).Fill().Children(func() {
-		ui.Column(c).FillWidth().Shrink(0).Children(func() {
-			for _, folder := range commitFileFolders(files) {
-				ui.Column(c).Key("folder-" + folder.name).FillWidth().Shrink(0).Children(func() {
-					components.TreeItem(c, folder.name, s.groupOpen("commitfile-"+folder.name, true), false, func() {
-						for _, file := range folder.files {
-							ui.Column(c).Key("file-" + file.Path).FillWidth().Shrink(0).Children(func() {
-								components.TreeItem(c, filebase(file.Path), nil, false, nil)
-							})
-						}
-					})
-				})
-			}
-		})
-	})
-}
-
-func filebase(path string) string {
-	if i := strings.LastIndexAny(path, "/\\"); i >= 0 {
-		return path[i+1:]
-	}
-	return path
-}
-
-type commitFolder struct {
-	name  string
-	files []commitFile
-}
-
-func commitFileFolders(files []commitFile) []commitFolder {
-	var order []string
-	groups := map[string][]commitFile{}
-	for _, file := range files {
-		dir := file.Path
-		if i := strings.LastIndexAny(dir, "/\\"); i >= 0 {
-			dir = dir[:i]
-		} else {
-			dir = "."
-		}
-		if _, ok := groups[dir]; !ok {
-			order = append(order, dir)
-		}
-		groups[dir] = append(groups[dir], file)
-	}
-	result := make([]commitFolder, 0, len(order))
-	for _, name := range order {
-		result = append(result, commitFolder{name: name, files: groups[name]})
-	}
-	return result
-}
-
-func (s *settings) commitFileRow(c *ui.Context, file commitFile) {
-	t := c.Theme()
-	status := file.Status
-	if status == "" {
-		status = "M"
-	}
-	path := file.Path
-	if file.Orig != "" {
-		path = file.Orig + " → " + file.Path
-	}
-	ui.Row(c).FillWidth().MinWidth(0).Height(t.Space(5.5)).AlignItems(ui.Center).
-		Gap(t.Space(1.5)).Padding(0, t.Space(2)).Children(func() {
-		components.Text(c, status[:1]).Width(t.Space(3)).Shrink(0).Bold().
-			FontSize(t.Rem(.8)).TextColor(changeColor(t, status[:1]))
-		components.Icon(c, lucide.File()).Size(t.Space(3.5), t.Space(3.5)).TextColor(t.TextMuted)
-		components.Text(c, path).SingleLine().Grow(1).MinWidth(0).FontSize(t.Rem(.82))
-	})
-}
-
+// repositoryLoading reports whether the view is reading the selected
+// worktree.
+func (s *settings) repositoryLoading() bool { return s.repo.view != nil && s.repo.view.Loading() }

@@ -14,8 +14,8 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 | `source/commands.go` | Command palette data and actions |
 | `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning and persisted sidebar state |
 | `source/worktrees*.go` | Worktree listing and the worktree tab strip |
-| `source/git_reader.go`, `source/load.go` | Background Git reads and stale-result guarding |
-| `source/repository_*.go` | Toolbar, project sidebar, changes, commit graph and commit details |
+| `source/repository_ui.go` | Repository page and the toolbar that drives the Git view |
+| `source/gitview/` | Reusable Git view shared with Neorio: refs pane, changes, commit graph, details, dialogs and Git CLI layer |
 | `source/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
 | `source/mygo.json` | Packaging; output goes to `dist/` |
 
@@ -23,7 +23,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 - The worktree is the unit of context. Branch and working tree state belong to a worktree, never to the repository as a whole.
 - Selecting a worktree changes what Onegit reads. It never runs `git checkout` or `git switch`.
-- Git write commands run only from an explicit user action: fetch, pull, push, stash and branch switch.
+- Git write commands run only from an explicit user action: fetch, pull, push, stash, branch switch and ref deletion.
 - Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
 - Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
 - The sidebar tree mirrors the disk. It does not infer links between a repository and worktrees outside the parent directory.
@@ -37,7 +37,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 **Opening a project.** Selecting a repository lists all its worktrees, including those outside the parent directory. Onegit then reads changes, commits and refs for the selected worktree. See [Repository page](docs/architecture/repository-page.md).
 
-**User Git actions.** A toolbar action runs one Git command in the background, shows failures in the toolbar and reloads repository data when it finishes.
+**User Git actions.** A toolbar action runs through the Git view, one at a time in the background. Failures show as toasts, and the view rereads the worktree when the action finishes.
 
 ## Data and state
 
@@ -46,12 +46,13 @@ Configuration lives in `~/.oneo/onegit/config.yaml` and UI state in `~/.oneo/one
 - Both files are written to a temporary file in the same directory, synced, then renamed into place.
 - In-memory values change only after a successful write. Load and save errors appear in the UI.
 - A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
-- State covers the project cache per parent directory, expansion, pinning, group collapse and the last selections.
+- State covers the project cache per parent directory, expansion, pinning, group collapse, the last selections and the Git view's layout and options.
+- Commit authors' avatars are downloaded from GitHub or Gravatar and cached in `avatars/` in the same directory.
 - Worktree lists and Git data are never persisted.
 
 ## Verification
 
-`go test` covers settings and persistence, project detection, scan cancellation and cache merging, legacy import, worktree tabs, Git reads, commit graph layout and repository views. Tests use real temporary Git repositories.
+`go test` covers settings and persistence, project detection, scan cancellation and cache merging, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. Tests use real temporary Git repositories.
 
 Review these manually: the native directory picker, packaging and the app icon on macOS.
 
@@ -60,4 +61,5 @@ Review these manually: the native directory picker, packaging and the app icon o
 | Document | When to read |
 | --- | --- |
 | [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning or the project cache |
-| [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the toolbar, the project sidebar or commit views |
+| [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the toolbar or how Onegit configures the Git view |
+| [Git view](docs/architecture/git-view.md) | Changing `source/gitview` or embedding it in another app |

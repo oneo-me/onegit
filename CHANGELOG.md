@@ -7,8 +7,8 @@
 - Add a background-scanned project tree that marks missing paths and remembers expansion.
 - Add project pinning to a flat, name-sorted group; both sidebar groups collapse independently.
 - Add a command palette (`⌘E`) to find projects and open settings.
-- Add worktree tabs for each project, remembering the last project, worktree and section.
-- Add a toolbar to fetch, pull, push, stash and switch branches.
-- Add a project sidebar with filterable branches, remote branches, tags, stashes and submodules that jump to their commits.
-- Add All Commits with a colored branch graph across all refs, plus commit details.
+- Add worktree tabs for each project, remembering the last project and worktree.
+- Add a toolbar to fetch, pull, push, stash and switch branches, with pull and push dialogs and commit counts.
+- Add a project sidebar with current changes, all commits and filterable branches, remote branches and tags that jump to their commits or delete them from their menu.
+- Add All commits with a colored graph across all refs, collapsible merges, find, author avatars, and floating commit details with diffs, image previews and file contents.
 - Fix the UI freezing while choosing the project parent directory.

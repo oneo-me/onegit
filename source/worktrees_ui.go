@@ -26,14 +26,15 @@ func (s *settings) cancelWorktrees() {
 		s.overview.cancel()
 	}
 	s.overview = projectOverview{version: s.overview.version + 1}
-	s.repo.reset()
+	if s.repo.view != nil {
+		s.repo.view.SetPath("")
+	}
 }
 
 func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 	s.cancelWorktrees()
 	s.repo.dispatch = onMain
 	s.selectedProject = node
-	s.repo.section = s.sectionFor(node)
 	if node == nil || !node.Repository {
 		return
 	}
@@ -127,7 +128,7 @@ func (s *settings) worktreeTabs(c *ui.Context) {
 		labels[i] = worktreeLabel(item)
 	}
 	selected := s.overview.selectedIndex
-	parts := components.Tabs(c, &selected, labels...)
+	parts := components.Tabs(c, &selected, components.TabsUnderline, labels...)
 	parts.List.Padding(8, 6, 6, 6)
 	if parts.List.Changed() {
 		s.selectWorktreeTab(selected)
