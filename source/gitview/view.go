@@ -499,8 +499,8 @@ func withEntries(commits []Commit, entries []Entry) []Commit {
 	return all
 }
 
-// Layout builds the view: the refs pane, tinted as a sidebar, beside the
-// chosen section, and the view's dialogs. It fills the space it is given.
+// Layout builds the view: the refs pane beside the chosen section, and the
+// view's dialogs. It fills the space it is given.
 func (v *View) Layout(c *ui.Context) {
 	if v.toast != nil {
 		c.AddToast(*v.toast)
@@ -509,9 +509,8 @@ func (v *View) Layout(c *ui.Context) {
 	if v.path == "" {
 		return
 	}
-	t := c.Theme()
 	refs := func() {
-		ui.Column(c).Fill().MinHeight(0).Background(t.Text.Alpha(.03)).Children(func() { v.refsPane(c) })
+		ui.Column(c).Fill().MinHeight(0).Children(func() { v.refsPane(c) })
 	}
 	section := func() {
 		ui.Column(c).Fill().MinHeight(0).MinWidth(0).Children(func() {
@@ -636,22 +635,11 @@ func lineCounts(files []FileChange) func(*ui.Context, float32) {
 }
 
 // FilterField is a search field of a Git pane, exported so a host's project
-// list can match the refs pane's filter. A faint field keeps it quieter
-// than the rows it narrows: its edge tints the pane rather than drawing the
-// theme's opaque border over it, and turns accent only while typing.
+// list can match the refs pane's filter.
 func FilterField(c *ui.Context, value *string, label, placeholder string) {
-	t := c.Theme()
-	field := components.TextBox(c, value, components.TextBoxOptions{LeadingIcon: lucide.Search()}).
-		FillWidth().Height(t.Space(7)).FontSize(12).Background(t.Text.Alpha(.03)).
+	components.TextBox(c, value, components.TextBoxOptions{LeadingIcon: lucide.Search()}).
+		FillWidth().Height(c.Theme().Space(7)).FontSize(12).
 		Label(label).Placeholder(placeholder)
-	edge := t.Text.Alpha(.08)
-	switch {
-	case field.Focused():
-		edge = t.Accent
-	case field.Hovered():
-		edge = t.Text.Alpha(.16)
-	}
-	field.Border(1, edge)
 }
 
 // treeRow is the compact height of the refs pane's tree rows.

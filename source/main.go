@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
+	"github.com/oneo-me/onevra/source/theme"
 )
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 		settings := newSettings()
 		shell := sidebar.NewShell(sidebar.ShellOptions{
 			Title:        "Onegit",
+			Theme:        theme.Onevra,
 			Width:        1100,
 			Height:       720,
 			MinWidth:     820,

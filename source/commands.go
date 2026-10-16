@@ -32,13 +32,6 @@ func (s *settings) commandTrigger(c *ui.Context) {
 		trigger := components.Button(c, "", components.ButtonSecondary).
 			Label(s.text("搜索项目与设置")).FillWidth().MinWidth(0).
 			Padding(t.Space(1.5), t.Space(2.5)).Gap(t.Space(2)).TextColor(t.TextMuted)
-		tint, borderAlpha := float32(.08), float32(.18)
-		if trigger.Pressed() {
-			tint, borderAlpha = .18, .4
-		} else if trigger.Hovered() {
-			tint, borderAlpha = .12, .3
-		}
-		trigger.Background(t.Background.Mix(t.Text, tint).Alpha(.3)).Border(1, t.Text.Alpha(borderAlpha))
 		trigger.Children(func() {
 			components.Icon(c, lucide.Search()).Size(t.Space(4), t.Space(4)).Shrink(0)
 			components.Text(c, s.text("搜索…")).Grow(1).MinWidth(0).SingleLine()
