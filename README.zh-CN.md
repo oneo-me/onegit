@@ -39,14 +39,16 @@ go tool mygo dev
 
 `go tool mygo dev` 运行 `Onegit Dev`，代码修改后自动重启。
 
-在 `source/` 下构建、测试与检查：
+在 `source/` 下格式检查、测试、检查与构建：
 
 ```sh
-go tool mygo build
+gofmt -l .
 GOWORK=off go test ./...
+GOWORK=off go test -race ./...
 GOWORK=off go tool mygo vet
+GOWORK=off go tool mygo build
 ```
 
-产物写入 `dist/<os>-<arch>/`，使用临时签名且未经公证。Neorio 用户可从 [.neorio/config.yaml](.neorio/config.yaml) 获得相同的 Run、Build、Test 与 Vet 任务。
+测试均为无界面运行，不会打开窗口或原生对话框。目录选择器、打包与应用图标需人工检查。产物写入 `dist/<os>-<arch>/`，使用临时签名且未经公证。Neorio 用户可从 [.neorio/config.yaml](.neorio/config.yaml) 获得相同的 Run、Build、Test 与 Vet 任务。
 
 修改代码前先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，协作规则见 [AGENTS.md](AGENTS.md)。用户可感知的变化记录在 [CHANGELOG.md](CHANGELOG.md)。

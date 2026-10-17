@@ -39,14 +39,16 @@ go tool mygo dev
 
 `go tool mygo dev` runs `Onegit Dev` and restarts it after code changes.
 
-Build, test and vet from `source/`:
+Format, test, vet and build from `source/`:
 
 ```sh
-go tool mygo build
+gofmt -l .
 GOWORK=off go test ./...
+GOWORK=off go test -race ./...
 GOWORK=off go tool mygo vet
+GOWORK=off go tool mygo build
 ```
 
-Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization. Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml).
+Tests are headless and never open windows or native dialogs. The directory picker, packaging and the app icon need manual review. Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization. Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml).
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing code, and [AGENTS.md](AGENTS.md) for working rules. User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md).
