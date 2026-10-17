@@ -65,6 +65,9 @@ type Options struct {
 	// OnSelect reports that the shown section or selected history row
 	// changed; Selected reads the row.
 	OnSelect func()
+	// OnWrite reports that a Git write the view ran, named op, finished,
+	// whether or not it failed.
+	OnWrite func(op string)
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)
@@ -293,6 +296,13 @@ func (v *View) Selected() (entry, hash string) {
 		return id, ""
 	}
 	return "", v.history.selected
+}
+
+// RevealEntry shows the history with the entry's row selected and
+// scrolled into view, once read.
+func (v *View) RevealEntry(id string) {
+	v.seekChanges, v.ref = false, ""
+	v.revealCommit(entryPrefix + id)
 }
 
 // Loading reports whether the worktree's repository or changes are being

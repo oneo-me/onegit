@@ -104,13 +104,21 @@ func TestViewHidesFilteredRefsAndShowsEntries(t *testing.T) {
 	if !view.HasText("draft.txt") {
 		t.Fatalf("entry changes: %v", view.Texts())
 	}
+
+	// A host reveals the entry's row after choosing another one.
+	v.revealCommit(commits[1].Hash)
+	v.RevealEntry("task")
+	if entry, _ := v.Selected(); entry != "task" || v.history.cursor != 0 {
+		t.Fatalf("revealed: %q at %d", entry, v.history.cursor)
+	}
 }
 
 func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 	repo := testRepo(t)
 	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("2\n"), 0644)
 	var saved State
-	v, pump := testView(t, Options{Language: "zh-Hans", OnState: func(s State) { saved = s }})
+	var written []string
+	v, pump := testView(t, Options{Language: "zh-Hans", OnState: func(s State) { saved = s }, OnWrite: func(op string) { written = append(written, op) }})
 	v.SetPath(repo)
 	pump(func() bool { return v.repo.loaded && !v.repo.loading && v.current.loaded && !v.current.loading })
 
@@ -136,6 +144,9 @@ func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 		t.Fatalf("syncing %q", v.Syncing())
 	}
 	pump(func() bool { return v.Syncing() == "" })
+	if len(written) != 1 || written[0] != "stash" {
+		t.Fatalf("written: %v", written)
+	}
 	pump(func() bool { return v.current.loaded && !v.current.loading })
 	if v.section != sectionCommits || v.hasCurrentChanges() {
 		t.Fatalf("after stash: section %v, files %v", v.section, v.current.changes.Files)

@@ -153,6 +153,9 @@ func (v *View) syncRepository(op, failed string, run func(git Git, path string) 
 			if v.closed {
 				return
 			}
+			if v.opts.OnWrite != nil {
+				v.opts.OnWrite(op)
+			}
 			if err != nil {
 				v.toast = &ui.Toast{Title: failed, Description: err.Error(), Type: components.ToastError}
 			}

@@ -13,7 +13,7 @@
 
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
 - Toolbar entries: `Fetch`, `OpenPull`, `OpenPush` and `Run` for host-defined Git writes. `CanSync` and `CanPull` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches.
-- `Selected` names the selected history row. `OnSelect` reports changes to the section or row.
+- `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
 
 Options:
 
@@ -24,6 +24,7 @@ Options:
 | `RefFilter` | Hides refs from the pane and the history, with the commits only they reach |
 | `Entries` | Rows the host inserts above a revision. Each row has its own columns and file readers |
 | `Busy` | Disables Git writes while host work runs |
+| `OnWrite` | Reports each finished Git write, such as to refresh a host's project list |
 | `Watch` | Rereads on file changes via MyGo `WatchFiles`; off reads only when asked |
 | `State`, `OnState` | Remembered layout and options for the host to persist |
 | `Language`, `Text` | Built-in English and Chinese strings. `Text` overrides them by key |
@@ -38,11 +39,9 @@ Options:
 
 ## Neorio mapping
 
-Neorio can replace its Git window's content with this view:
+Neorio's Git window shows this view; its project sidebar and title bar stay in Neorio.
 
 - `RefFilter` hides `neorio/*` branches.
-- `Entries` adds a row per task worktree, with its agents and working time.
-- `Busy` reports landings, and `Overlay` shows the command panel.
+- `Entries` adds a row per task worktree, with its agents and working time, and `RevealEntry` selects the task the window opens for.
+- `Busy` reports landings, `Overlay` shows the command panel, and `OnWrite` rereads the sidebar's status.
 - `Watch` stays on.
-
-The project sidebar and title bar stay in Neorio. Neorio is not switched over yet.
