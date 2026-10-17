@@ -12,7 +12,7 @@ Switching tabs only changes the path the view shows. Switching projects or workt
 
 The title bar's icon buttons are only an entry point; every action runs through the view.
 
-- Fetch calls the view's fetch. Pull and Push open the view's dialogs, and show the commits a pull would bring or a push would send.
+- Fetch, Pull and Push open the view's dialogs; Pull and Push show the commits a pull would bring or a push would send.
 - Stash and the branch menu run `git stash push --include-untracked` and `git switch` through the view's `Run`.
 - The view runs one action at a time, shows failures as toasts and rereads the worktree after each action.
 
@@ -20,7 +20,7 @@ The title bar's icon buttons are only an entry point; every action runs through 
 
 - Watching is off: the view reads when a worktree is shown and after an action.
 - No ref filter and no inserted history rows.
-- The view's layout, ref group disclosure, line wrapping and pull and push options are saved in `state.yaml` under `gitView`.
+- The view's layout, ref group disclosure, line wrapping and fetch, pull and push options are saved in `state.yaml` under `gitView`.
 - Commit authors' avatars are cached in `~/.onegit/avatars/`, downloaded from GitHub or Gravatar.
 
 ## Selection defaults

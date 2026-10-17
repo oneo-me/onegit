@@ -69,6 +69,13 @@ func (v *View) Fetch() {
 	}
 }
 
+// OpenFetch opens the dialog choosing what a fetch updates.
+func (v *View) OpenFetch() {
+	if v.CanSync() {
+		v.openSync(OpFetch)
+	}
+}
+
 // OpenPull opens the dialog choosing what a pull brings.
 func (v *View) OpenPull() {
 	if v.CanPull() {
@@ -167,9 +174,11 @@ func (v *View) syncRepository(op, failed string, run func(git Git, path string) 
 	}()
 }
 
-// syncDialog chooses what a pull brings or a push sends; remotes is what
-// the worktree offers, nil while it is read. A pull brings branch from
-// remote into the checked out branch; a push sends the local branch to to.
+// syncDialog chooses what a fetch updates, a pull brings or a push sends;
+// remotes is what the worktree offers, nil while it is read. A fetch updates
+// branch of remote unless it updates every remote, a pull brings branch from
+// remote into the checked out branch, and a push sends the local branch to
+// to.
 type syncDialog struct {
 	op         string
 	open       bool
@@ -181,7 +190,7 @@ type syncDialog struct {
 	force      bool
 }
 
-// openSync opens the pull or push dialog and reads the remotes and
+// openSync opens the fetch, pull or push dialog and reads the remotes and
 // branches it offers.
 func (v *View) openSync(op string) {
 	path := v.path
@@ -270,8 +279,8 @@ func pushTargets(r Remotes, branch string) []RemoteBranch {
 	return targets
 }
 
-// syncDialogView is the pull or push dialog: the operation's choices and
-// options.
+// syncDialogView is the fetch, pull or push dialog: the operation's
+// choices and options.
 func (v *View) syncDialogView(c *ui.Context) {
 	d := &v.dialog
 	title := v.text(d.op)
@@ -289,6 +298,8 @@ func (v *View) syncDialogView(c *ui.Context) {
 			components.Spinner(c, components.SpinnerRing).Size(16, 16)
 		case len(r.Names) == 0:
 			components.Text(c, v.text("no_remotes")).Wrap().FillWidth().TextColor(t.TextMuted)
+		case d.op == OpFetch:
+			ready = v.fetchFields(c, r)
 		case d.op == OpPull:
 			ready = v.pullFields(c, r)
 		default:
@@ -307,10 +318,19 @@ func (v *View) syncDialogView(c *ui.Context) {
 	})
 }
 
-// runSyncDialog pulls or pushes as the dialog chose.
+// runSyncDialog fetches, pulls or pushes as the dialog chose.
 func (v *View) runSyncDialog() {
 	d := v.dialog
-	if d.op == OpPull {
+	switch {
+	case d.op == OpFetch && !v.state.FetchBranch:
+		v.Fetch()
+		return
+	case d.op == OpFetch:
+		v.syncRepository(OpFetch, v.text("fetch_failed"), func(git Git, path string) error {
+			return git.FetchBranch(path, d.remote, d.branch)
+		})
+		return
+	case d.op == OpPull:
 		o := PullOptions{Remote: d.remote, Branch: d.branch, Rebase: v.state.PullRebase, Stash: v.state.PullStash}
 		v.syncRepository(OpPull, v.text("pull_failed"), func(git Git, path string) error { return git.Pull(path, o) })
 		return
@@ -319,11 +339,42 @@ func (v *View) runSyncDialog() {
 	v.syncRepository(OpPush, v.text("push_failed"), func(git Git, path string) error { return git.PushBranch(path, o) })
 }
 
+// fetchFields choose the remote branch a fetch updates, or every remote;
+// they report whether the fetch can run.
+func (v *View) fetchFields(c *ui.Context, r *Remotes) bool {
+	d := &v.dialog
+	all := !v.state.FetchBranch
+	v.remoteField(c, r, all)
+	v.remoteBranchField(c, r, all)
+	ui.Row(c).FillWidth().Padding(0, 0, 0, c.Theme().Space(syncLabelWidth+3)).Children(func() {
+		components.Switch(c, &all, v.text("fetch_all"))
+	})
+	if all == v.state.FetchBranch {
+		v.state.FetchBranch = !all
+		v.saveState()
+	}
+	return all || d.remote != "" && slices.Contains(r.Branches[d.remote], d.branch)
+}
+
 // pullFields choose the remote and its branch a pull brings into the
 // checked out branch, and how; they report whether the pull can run.
 func (v *View) pullFields(c *ui.Context, r *Remotes) bool {
 	d := &v.dialog
-	syncField(c, v.text("sync_remote"), func() {
+	v.remoteField(c, r, false)
+	v.remoteBranchField(c, r, false)
+	syncField(c, v.text("sync_into"), false, func() {
+		ui.Row(c).Padding(0, c.Theme().Space(2.5)).Children(func() { branchChoice(c, r.Current) })
+	})
+	v.syncOption(c, &v.state.PullRebase, v.text("pull_rebase"), true)
+	v.syncOption(c, &v.state.PullStash, v.text("pull_stash"), true)
+	return r.Current != "" && d.remote != "" && slices.Contains(r.Branches[d.remote], d.branch)
+}
+
+// remoteField chooses the dialog's remote, moving its branch to the
+// remote's default; a disabled one only shows it.
+func (v *View) remoteField(c *ui.Context, r *Remotes, disabled bool) {
+	d := &v.dialog
+	syncField(c, v.text("sync_remote"), disabled, func() {
 		before := d.remote
 		sel := components.Select(c, &d.remote)
 		sel.Trigger.Label(v.text("sync_remote")).FillWidth().Children(func() { v.remoteChoice(c, d.remote) })
@@ -338,7 +389,13 @@ func (v *View) pullFields(c *ui.Context, r *Remotes) bool {
 			d.branch = pullBranch(*r, d.remote)
 		}
 	})
-	syncField(c, v.text("sync_branch"), func() {
+}
+
+// remoteBranchField chooses a branch of the dialog's remote; a disabled one
+// only shows it.
+func (v *View) remoteBranchField(c *ui.Context, r *Remotes, disabled bool) {
+	d := &v.dialog
+	syncField(c, v.text("sync_branch"), disabled, func() {
 		sel := components.Select(c, &d.branch)
 		sel.Trigger.Label(v.text("sync_branch")).FillWidth().Children(func() { branchChoice(c, d.branch) })
 		sel.Popup(func(panel ui.Element) {
@@ -349,19 +406,13 @@ func (v *View) pullFields(c *ui.Context, r *Remotes) bool {
 			})
 		})
 	})
-	syncField(c, v.text("sync_into"), func() {
-		ui.Row(c).Padding(0, c.Theme().Space(2.5)).Children(func() { branchChoice(c, r.Current) })
-	})
-	v.syncOption(c, &v.state.PullRebase, v.text("pull_rebase"), true)
-	v.syncOption(c, &v.state.PullStash, v.text("pull_stash"), true)
-	return r.Current != "" && d.remote != "" && slices.Contains(r.Branches[d.remote], d.branch)
 }
 
 // pushFields choose the local branch a push sends and the remote branch it
 // goes to, and how; they report whether the push can run.
 func (v *View) pushFields(c *ui.Context, r *Remotes) bool {
 	d := &v.dialog
-	syncField(c, v.text("sync_branch"), func() {
+	syncField(c, v.text("sync_branch"), false, func() {
 		before := d.branch
 		sel := components.Select(c, &d.branch)
 		sel.Trigger.Label(v.text("sync_branch")).FillWidth().Children(func() { branchChoice(c, d.branch) })
@@ -387,7 +438,7 @@ func (v *View) pushFields(c *ui.Context, r *Remotes) bool {
 		}
 		return name
 	}
-	syncField(c, v.text("sync_to"), func() {
+	syncField(c, v.text("sync_to"), false, func() {
 		sel := components.Select(c, &d.to)
 		sel.Trigger.Label(v.text("sync_to")).FillWidth().Children(func() { branchChoice(c, label(d.to)) })
 		sel.Popup(func(panel ui.Element) {
@@ -406,11 +457,15 @@ func (v *View) pushFields(c *ui.Context, r *Remotes) bool {
 // syncLabelWidth is the width of syncField's labels in theme spaces.
 const syncLabelWidth = 16
 
-// syncField is a dialog row with its label aligned to the others' end.
-func syncField(c *ui.Context, label string, value func()) {
+// syncField is a dialog row with its label aligned to the others' end; a
+// disabled one takes no input.
+func syncField(c *ui.Context, label string, disabled bool, value func()) {
 	t := c.Theme()
-	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(3)).Children(func() {
-		components.Text(c, label).Width(t.Space(syncLabelWidth)).Shrink(0).TextAlign(ui.End).SingleLine()
+	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(3)).Disabled(disabled).Children(func() {
+		text := components.Text(c, label).Width(t.Space(syncLabelWidth)).Shrink(0).TextAlign(ui.End).SingleLine()
+		if disabled {
+			text.TextColor(t.TextMuted)
+		}
 		ui.Row(c).Grow(1).MinWidth(0).Children(value)
 	})
 }

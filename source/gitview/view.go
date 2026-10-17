@@ -86,11 +86,13 @@ type State struct {
 	Groups map[string]bool `yaml:"groups,omitempty" json:"groups,omitempty"`
 	// DiffWrap wraps diff and file lines.
 	DiffWrap bool `yaml:"diffWrap,omitempty" json:"diffWrap,omitempty"`
-	// PullRebase, PullStash and PushTags are the pull and push dialogs'
-	// remembered options.
-	PullRebase bool `yaml:"pullRebase,omitempty" json:"pullRebase,omitempty"`
-	PullStash  bool `yaml:"pullStash,omitempty" json:"pullStash,omitempty"`
-	PushTags   bool `yaml:"pushTags,omitempty" json:"pushTags,omitempty"`
+	// FetchBranch, PullRebase, PullStash and PushTags are the fetch, pull
+	// and push dialogs' remembered options; FetchBranch fetches the chosen
+	// branch instead of every remote.
+	FetchBranch bool `yaml:"fetchBranch,omitempty" json:"fetchBranch,omitempty"`
+	PullRebase  bool `yaml:"pullRebase,omitempty" json:"pullRebase,omitempty"`
+	PullStash   bool `yaml:"pullStash,omitempty" json:"pullStash,omitempty"`
+	PushTags    bool `yaml:"pushTags,omitempty" json:"pushTags,omitempty"`
 }
 
 // Entry is a row the host inserts into the history right above the commit
@@ -156,7 +158,7 @@ type View struct {
 	history historyState
 	// tracking compares the worktree's branch with its upstream; syncing
 	// names the Git write running, and toast reports the last one that
-	// failed; dialog chooses a pull's or push's branches.
+	// failed; dialog chooses a fetch's, pull's or push's branches.
 	tracking           Tracking
 	trackingGeneration uint64
 	syncing            string

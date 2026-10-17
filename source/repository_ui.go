@@ -146,7 +146,7 @@ func (s *settings) repositoryTitle(c *ui.Context) {
 	ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(8).Margin(0, titleTrailing(c, size), 0, 0).Children(func() {
 		components.Text(c, filepath.Base(project.Path)).Bold().Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
 		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
-			s.titleButton(c, gitview.OpFetch, lucide.Download, s.text("获取"), size, 0, !view.CanSync()).OnClick(view.Fetch)
+			s.titleButton(c, gitview.OpFetch, lucide.Download, s.text("获取"), size, 0, !view.CanSync()).OnClick(view.OpenFetch)
 			s.titleButton(c, gitview.OpPull, lucide.ArrowDownToLine, s.text("拉取"), size, tr.Behind, !view.CanPull()).OnClick(view.OpenPull)
 			s.titleButton(c, gitview.OpPush, lucide.ArrowUpFromLine, s.text("推送"), size, tr.Ahead, !view.CanSync()).OnClick(view.OpenPush)
 			s.titleButton(c, "stash", lucide.Archive, s.text("贮藏"), size, 0, !view.CanSync()).OnClick(func() {

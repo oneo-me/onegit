@@ -695,7 +695,13 @@ func (g Git) Fetch(path string) error {
 	return g.network(path, "fetch", "--all", "--prune", "--quiet")
 }
 
-// Remotes are the remotes and branches a pull or push chooses from.
+// FetchBranch updates one remote branch of the repository containing path,
+// with the tags pointing into its commits.
+func (g Git) FetchBranch(path, remote, branch string) error {
+	return g.network(path, "fetch", "--quiet", remote, "refs/heads/"+branch)
+}
+
+// Remotes are the remotes and branches a fetch, pull or push chooses from.
 type Remotes struct {
 	// Current is the checked out branch, empty for a detached HEAD.
 	Current string

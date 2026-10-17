@@ -172,3 +172,50 @@ func TestViewShowsErrorOutsideRepository(t *testing.T) {
 		t.Fatalf("view: %v", view.Texts())
 	}
 }
+
+func TestViewFetchDialog(t *testing.T) {
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	seed := filepath.Join(dir, "seed")
+	git(t, dir, "clone", "-q", origin, seed)
+	git(t, seed, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, seed, "push", "-q", "origin", "main")
+	mine := filepath.Join(dir, "mine")
+	git(t, dir, "clone", "-q", origin, mine)
+	git(t, seed, "commit", "-q", "--allow-empty", "-m", "theirs")
+	git(t, seed, "push", "-q", "origin", "main", "main:other")
+
+	var saved State
+	v, pump := testView(t, Options{OnState: func(s State) { saved = s }})
+	v.SetPath(mine)
+	pump(func() bool { return v.repo.loaded && !v.repo.loading && v.tracking.Upstream != "" })
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+
+	// The dialog fetches every remote unless switched to the checked out
+	// branch's upstream, which it then remembers.
+	v.OpenFetch()
+	pump(func() bool { return v.dialog.remotes != nil })
+	view.Frame()
+	if v.dialog.remote != "origin" || v.dialog.branch != "main" || !view.HasText("Fetch all remotes") {
+		t.Fatalf("dialog %+v: %v", v.dialog, view.Texts())
+	}
+	if err := view.Click("Fetch all remotes"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !saved.FetchBranch {
+		t.Fatalf("state %+v", saved)
+	}
+	// The switch took focus; the fetch button follows Cancel.
+	view.Key(0, ui.KeyTab)
+	view.Key(0, ui.KeyTab)
+	view.Key(0, ui.KeyEnter)
+	if v.Syncing() != OpFetch {
+		t.Fatalf("fetch did not start: %q", v.Syncing())
+	}
+	pump(func() bool { return v.Syncing() == "" && v.tracking.Behind == 1 })
+	if out, _ := v.git.Run(mine, "branch", "-r", "--list", "origin/other"); out != "" {
+		t.Fatalf("fetched other branches: %q", out)
+	}
+}

@@ -7,12 +7,12 @@
 - **Refs pane.** Current changes, shown only while the worktree has uncommitted changes. All commits with its count. Branches, remote branches and tags as folder trees, with a filter at the bottom. Choosing a ref selects its commit. A ref's context menu deletes it after a confirmation, optionally on its remote too.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
 - **All commits.** A graph of every shown ref, the checked out commit and host entries. Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
-- **Dialogs.** Pull and push dialogs, and ref deletion.
+- **Dialogs.** Fetch, pull and push dialogs, and ref deletion. Fetch updates every remote, or with its switch off one remote branch.
 
 ## Host API
 
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
-- Toolbar entries: `Fetch`, `OpenPull`, `OpenPush` and `Run` for host-defined Git writes. `CanSync` and `CanPull` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches.
+- Toolbar entries: `OpenFetch`, `OpenPull`, `OpenPush` and `Run` for host-defined Git writes. `CanSync` and `CanPull` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
 - `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
 
 Options:
