@@ -64,6 +64,7 @@ func TestViewHidesFilteredRefsAndShowsEntries(t *testing.T) {
 		RefFilter: func(kind RefKind, name string) bool { return kind != RefBranch || !strings.HasPrefix(name, "host/") },
 		Entries: func() []Entry {
 			return []Entry{{ID: "task", Title: "My task", Head: "host/task", Watch: wt,
+				Lead:    func(c *ui.Context) { components.Text(c, "Lead") },
 				Author:  func(c *ui.Context) { components.Text(c, "Agent") },
 				Changes: func(git Git) (Changes, error) { return git.WorktreeChanges(wt, "main") },
 				Files:   func(git Git) (Changes, error) { return git.WorktreeFiles(wt) }}}
@@ -86,7 +87,7 @@ func TestViewHidesFilteredRefsAndShowsEntries(t *testing.T) {
 		t.Fatalf("count: %d", v.repo.count)
 	}
 	view := ui.NewTester(viewFrame(v), 1000, 700)
-	if !view.HasText("My task") || !view.HasText("Agent") || !view.HasText("All commits") || !view.HasText("Branches") {
+	if !view.HasText("My task") || !view.HasText("Lead") || !view.HasText("Agent") || !view.HasText("All commits") || !view.HasText("Branches") {
 		t.Fatalf("view: %v", view.Texts())
 	}
 

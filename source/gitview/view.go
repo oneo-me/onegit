@@ -99,9 +99,11 @@ type State struct {
 // Head names, which the row descends from in the graph. Its own commits,
 // from Head down, join the history even when no shown ref reaches them.
 type Entry struct {
-	// ID tells entries apart; Title names the row and Icon leads it.
+	// ID tells entries apart; Title names the row and Icon leads it, unless
+	// Lead draws the leading mark itself, such as an animated one.
 	ID, Title string
 	Icon      func() *ui.SVG
+	Lead      func(c *ui.Context)
 	// Head is a revision such as a branch or commit.
 	Head string
 	// Author and Date fill those columns, which stay blank when nil.

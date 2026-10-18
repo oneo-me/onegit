@@ -492,19 +492,23 @@ func (v *View) commitRow(c *ui.Context, commit Commit, row graphRow) {
 }
 
 // entryRow shows a host entry's row in the graph above the commit it
-// names: its icon and bold title, and the author and date columns the host
-// fills.
+// names: its icon or the host's leading mark, its bold title, and the
+// author and date columns the host fills.
 func (v *View) entryRow(c *ui.Context, e Entry, row graphRow) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().MinWidth(0).Height(commitRowHeight).AlignItems(ui.Center).Padding(0, t.Space(2)).Children(func() {
 		graphCell(c, row, commitRowHeight, nil)
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(0, 0, 0, t.Space(1)).Children(func() {
 			ui.Row(c).Grow(1).MinWidth(120).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
-				icon := e.Icon
-				if icon == nil {
-					icon = lucide.FileDiff
+				if e.Lead != nil {
+					e.Lead(c)
+				} else {
+					icon := e.Icon
+					if icon == nil {
+						icon = lucide.FileDiff
+					}
+					components.Icon(c, icon).Size(13, 13).Shrink(0).TextColor(t.Accent)
 				}
-				components.Icon(c, icon).Size(13, 13).Shrink(0).TextColor(t.Accent)
 				components.Text(c, e.Title).FontSize(13).Bold().MinWidth(0).SingleLine().Ellipsis("…")
 			})
 			ui.Row(c).Width(140).Shrink(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Children(func() {

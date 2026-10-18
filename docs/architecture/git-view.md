@@ -23,7 +23,7 @@ Options:
 | `Dispatch` | Required. Runs results on the UI thread |
 | `Git` | Environment for the `git` executable, or a `Host` that runs git, reads files and watches them on another computer |
 | `RefFilter` | Hides refs from the pane and the history, with the commits only they reach |
-| `Entries` | Rows the host inserts above a revision. Each row has its own columns and file readers |
+| `Entries` | Rows the host inserts above a revision. Each row has its own leading mark, columns and file readers |
 | `Busy` | Disables Git writes while host work runs |
 | `OnWrite` | Reports each finished Git write, such as to refresh a host's project list |
 | `Watch` | Rereads on file changes via MyGo `WatchFiles`, or the host's watch; off reads only when asked |
@@ -43,7 +43,7 @@ Options:
 Neorio's Git window shows this view; its project sidebar and title bar stay in Neorio.
 
 - `RefFilter` hides `neorio/*` branches.
-- `Entries` adds a row per task worktree, with its agents and working time, and `RevealEntry` selects the task the window opens for.
+- `Entries` adds a row per task worktree, led by a robot animated while it works, with its agents and working time, and `RevealEntry` selects the task the window opens for.
 - `Busy` reports landings, `Overlay` shows the command panel, and `OnWrite` rereads the sidebar's status.
 - `Watch` stays on.
 - `Git.Host` runs git and reads files through the server of the task's device, this computer's or an SSH host's.
