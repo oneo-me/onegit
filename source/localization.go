@@ -19,12 +19,7 @@ func (s *settings) text(zh string) string {
 var english = map[string]string{
 	"搜索项目与设置": "Search projects and settings", "搜索项目与设置…": "Search projects and settings…", "搜索…": "Search…", "命令面板": "Command palette", "没有匹配的项目或设置": "No matching projects or settings",
 	"正在读取 worktree…": "Loading worktrees…", "读取 worktree 失败：": "Could not load worktrees: ",
-	"获取": "Fetch", "拉取": "Pull", "推送": "Push",
-	"分支操作": "Branch",
-	"贮藏":   "Stash",
-	"贮藏失败": "Stash failed", "切换分支失败": "Switch failed",
-	"没有分支。": "No branches.",
-	"置顶":    "Pinned", "其他项目": "Other Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
+	"置顶": "Pinned", "其他项目": "Other Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
 	"（已不存在）":        " (missing)",
 	"读取状态失败：":       "Could not load state: ",
 	"保存状态失败：":       "Could not save state: ",

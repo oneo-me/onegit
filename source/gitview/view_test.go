@@ -3,6 +3,7 @@ package gitview
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -114,12 +115,22 @@ func TestViewHidesFilteredRefsAndShowsEntries(t *testing.T) {
 	}
 }
 
-func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
+func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	repo := testRepo(t)
+	git(t, repo, "branch", "feature")
+	git(t, repo, "branch", "host/task")
 	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("2\n"), 0644)
 	var saved State
 	var written []string
-	v, pump := testView(t, Options{Language: "zh-Hans", OnState: func(s State) { saved = s }, OnWrite: func(op string) { written = append(written, op) }})
+	v, pump := testView(t, Options{
+		Language: "zh-Hans",
+		Git:      Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t"),
+		RefFilter: func(kind RefKind, name string) bool {
+			return kind != RefBranch || !strings.HasPrefix(name, "host/")
+		},
+		OnState: func(s State) { saved = s },
+		OnWrite: func(op string) { written = append(written, op) },
+	})
 	v.SetPath(repo)
 	pump(func() bool { return v.repo.loaded && !v.repo.loading && v.current.loaded && !v.current.loading })
 
@@ -132,20 +143,22 @@ func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 		t.Fatalf("view: %v", view.Texts())
 	}
 
-	// A host action runs one at a time and rereads the view; the emptied
-	// changes stay shown.
-	if !v.CanSync() {
-		t.Fatal("cannot sync")
+	// The toolbar offers every action. Its stash runs one write at a time
+	// and rereads the view; the emptied changes stay shown.
+	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 400, 48)
+	for _, label := range []string{"获取", "拉取", "推送", "贮藏", "分支操作"} {
+		if _, ok := toolbar.Find(label); !ok {
+			t.Fatalf("%s missing from the toolbar", label)
+		}
 	}
-	v.Run("stash", "stash failed", func(git Git, path string) error {
-		_, err := git.Run(path, "-c", "user.name=t", "-c", "user.email=t@t", "stash", "push", "--include-untracked")
-		return err
-	})
-	if v.Syncing() != "stash" || v.CanSync() {
+	if err := toolbar.Click("贮藏"); err != nil {
+		t.Fatal(err)
+	}
+	if v.Syncing() != OpStash || v.CanSync() {
 		t.Fatalf("syncing %q", v.Syncing())
 	}
 	pump(func() bool { return v.Syncing() == "" })
-	if len(written) != 1 || written[0] != "stash" {
+	if len(written) != 1 || written[0] != OpStash {
 		t.Fatalf("written: %v", written)
 	}
 	pump(func() bool { return v.current.loaded && !v.current.loading })
@@ -156,6 +169,20 @@ func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 	if !view.HasText("当前更改") || !view.HasText("没有更改") {
 		t.Fatalf("after stash: %v", view.Texts())
 	}
+
+	// The branch menu lists the shown local branches and switches to one.
+	pump(func() bool { return !v.Loading() && v.tracking.Branch == "main" })
+	toolbar.Frame()
+	if err := toolbar.Click("分支操作"); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolbar.Menu(); !slices.Equal(got, []string{"feature", "main"}) {
+		t.Fatalf("branch menu: %v", got)
+	}
+	if err := toolbar.ChooseMenuItem("feature"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return v.Syncing() == "" && !v.Loading() && v.tracking.Branch == "feature" })
 
 	// A clean worktree opens on the history and still offers its changes.
 	v.SetPath(t.TempDir())

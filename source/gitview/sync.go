@@ -13,12 +13,14 @@ import (
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
-// Git writes the view runs. A host's toolbar starts the first three; Syncing
+// Git writes the view runs. Its toolbar starts all but deletion; Syncing
 // reports the running one.
 const (
 	OpFetch  = "fetch"
 	OpPull   = "pull"
 	OpPush   = "push"
+	OpStash  = "stash"
+	OpSwitch = "switch"
 	opDelete = "delete"
 )
 
