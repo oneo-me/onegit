@@ -146,6 +146,12 @@ func (v *View) loadTracking() {
 // syncRepository runs a Git write in the worktree, then rereads the view; a
 // failure shows as a toast titled failed.
 func (v *View) syncRepository(op, failed string, run func(git Git, path string) error) {
+	v.write(op, failed, run, nil)
+}
+
+// write runs a Git write as syncRepository does, then done unless it is nil
+// or the write failed.
+func (v *View) write(op, failed string, run func(git Git, path string) error, done func()) {
 	path := v.path
 	if v.syncing != "" || path == "" {
 		return
@@ -165,6 +171,8 @@ func (v *View) syncRepository(op, failed string, run func(git Git, path string) 
 			}
 			if err != nil {
 				v.toast = &ui.Toast{Title: failed, Description: err.Error(), Type: components.ToastError}
+			} else if done != nil {
+				done()
 			}
 			if v.path == path {
 				v.Reload()

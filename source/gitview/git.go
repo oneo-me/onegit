@@ -44,11 +44,19 @@ func (g Git) runFor(timeout time.Duration, dir string, args ...string) (string, 
 
 // output runs git and returns its standard output untrimmed.
 func (g Git) output(timeout time.Duration, dir string, args ...string) ([]byte, error) {
+	return g.outputWith(timeout, dir, nil, args...)
+}
+
+// outputWith runs git with input as its standard input, unless it is nil.
+func (g Git) outputWith(timeout time.Duration, dir string, input []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	hideConsole(cmd)
 	cmd.Dir = dir
+	if input != nil {
+		cmd.Stdin = bytes.NewReader(input)
+	}
 	if g.Env != nil {
 		cmd.Env = g.Env
 		if path := lookGit(g.Env); path != "" {
@@ -398,7 +406,22 @@ type FileChange struct {
 	// Added and Deleted count changed lines; both are zero for a binary
 	// file.
 	Added, Deleted int
+	// Area tells a worktree's staged changes from its unstaged ones.
+	Area Area
 }
+
+// Area is where a worktree's change lies.
+type Area uint8
+
+const (
+	// AreaAll compares the worktree or a commit with Changes.From,
+	// whatever the index holds.
+	AreaAll Area = iota
+	// AreaStaged compares the index with Changes.From.
+	AreaStaged
+	// AreaUnstaged compares the worktree with the index.
+	AreaUnstaged
+)
 
 // Changes are the files a worktree changes since a commit, or a commit
 // changes since its first parent, or the files a commit or worktree holds.
@@ -443,6 +466,59 @@ func (g Git) WorktreeChanges(path, base string) (Changes, error) {
 		}
 	}
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	return changes, nil
+}
+
+// WorktreeStatus lists the changes the index of the worktree containing path
+// stages since its checked out commit, then those of the worktree since the
+// index, including untracked files, each sorted by path. Before the first
+// commit, every staged file is an addition and From is empty.
+func (g Git) WorktreeStatus(path string) (Changes, error) {
+	top, err := g.Top(path)
+	if err != nil {
+		return Changes{}, err
+	}
+	changes := Changes{Top: top}
+	staged := []string{"diff", "--cached"}
+	if !g.Unborn(top) {
+		// Pin the commit so the files read later match this list.
+		if changes.From, err = g.Run(top, "rev-parse", "--verify", "HEAD^{commit}"); err != nil {
+			return Changes{}, err
+		}
+		staged = append(staged, changes.From)
+	}
+	index, err := g.diffFiles(top, staged...)
+	if err != nil {
+		return Changes{}, err
+	}
+	for _, f := range index {
+		// A conflicted file has no single staged version; it lists as
+		// unstaged.
+		if f.Status != 'U' {
+			f.Area = AreaStaged
+			changes.Files = append(changes.Files, f)
+		}
+	}
+	worktree, err := g.diffFiles(top, "diff")
+	if err != nil {
+		return Changes{}, err
+	}
+	untracked, err := g.Run(top, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return Changes{}, err
+	}
+	for name := range strings.SplitSeq(untracked, "\x00") {
+		if name != "" {
+			worktree = append(worktree, FileChange{Path: name, OldPath: name, Status: 'A',
+				Added: textLines(filepath.Join(top, filepath.FromSlash(name)))})
+		}
+	}
+	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	slices.SortFunc(worktree, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	for _, f := range worktree {
+		f.Area = AreaUnstaged
+		changes.Files = append(changes.Files, f)
+	}
 	return changes, nil
 }
 
@@ -532,17 +608,27 @@ func isBinary(data []byte) bool {
 }
 
 // FileVersions reads a changed file at the commit changes compare with and
-// in the worktree, or at the commit changes are of. The side a change
-// lacks, before an addition or after a deletion, is nil. A symbolic link
-// reads as its target, as Git stores it.
+// in the worktree, or at the commit changes are of. A staged change reads
+// its new version from the index, and an unstaged one its old version. The
+// side a change lacks, before an addition or after a deletion, is nil. A
+// symbolic link reads as its target, as Git stores it.
 func (g Git) FileVersions(changes Changes, f FileChange) (before, after []byte, err error) {
 	if f.Status != 'A' {
-		if before, err = g.FileAt(changes.Top, changes.From, f.OldPath); err != nil {
+		if f.Area == AreaUnstaged {
+			before, err = g.IndexFile(changes.Top, f.OldPath)
+		} else {
+			before, err = g.FileAt(changes.Top, changes.From, f.OldPath)
+		}
+		if err != nil {
 			return nil, nil, err
 		}
 	}
 	if f.Status == 'D' {
 		return before, nil, nil
+	}
+	if f.Area == AreaStaged {
+		after, err = g.IndexFile(changes.Top, f.Path)
+		return before, after, err
 	}
 	if changes.To != "" {
 		after, err = g.FileAt(changes.Top, changes.To, f.Path)
@@ -564,6 +650,88 @@ func (g Git) FileVersions(changes Changes, f FileChange) (before, after []byte, 
 // FileAt reads the file at path, relative to the repository's top, in commit.
 func (g Git) FileAt(top, commit, path string) ([]byte, error) {
 	return g.output(readTimeout, top, "cat-file", "blob", commit+":"+path)
+}
+
+// IndexFile reads the file at path, relative to the repository's top, as
+// the index stages it.
+func (g Git) IndexFile(top, path string) ([]byte, error) {
+	return g.output(readTimeout, top, "cat-file", "blob", ":"+path)
+}
+
+// pathsOf lists the paths files change, both of a rename's.
+func pathsOf(files []FileChange) []string {
+	var paths []string
+	for _, f := range files {
+		paths = append(paths, f.Path)
+		if f.OldPath != "" && f.OldPath != f.Path {
+			paths = append(paths, f.OldPath)
+		}
+	}
+	return paths
+}
+
+// Stage stages the worktree's versions of files in the worktree at top,
+// their deletion included.
+func (g Git) Stage(top string, files ...FileChange) error {
+	_, err := g.Run(top, append([]string{"--literal-pathspecs", "add", "--all", "--"}, pathsOf(files)...)...)
+	return err
+}
+
+// Unstage puts the checked out commit's versions of files back in the index
+// of the worktree at top, leaving the worktree as it is. Before the first
+// commit, it removes them from the index.
+func (g Git) Unstage(top string, files ...FileChange) error {
+	args := []string{"--literal-pathspecs", "restore", "--staged", "--"}
+	if g.Unborn(top) {
+		args = []string{"--literal-pathspecs", "rm", "--cached", "--quiet", "-r", "--"}
+	}
+	_, err := g.Run(top, append(args, pathsOf(files)...)...)
+	return err
+}
+
+// StageText stages text as the version of the file at path, relative to the
+// worktree's top, keeping the mode the index or checked out commit gives it,
+// else the worktree file's.
+func (g Git) StageText(top, path string, text []byte) error {
+	mode, err := g.fileMode(top, path)
+	if err != nil {
+		return err
+	}
+	blob, err := g.outputWith(readTimeout, top, text, "hash-object", "-w", "--stdin")
+	if err != nil {
+		return err
+	}
+	_, err = g.Run(top, "update-index", "--add", "--cacheinfo", mode+","+strings.TrimSpace(string(blob))+","+path)
+	return err
+}
+
+func (g Git) fileMode(top, path string) (string, error) {
+	out, err := g.Run(top, "--literal-pathspecs", "ls-files", "--stage", "--", path)
+	if err != nil {
+		return "", err
+	}
+	if mode, _, ok := strings.Cut(out, " "); ok {
+		return mode, nil
+	}
+	if !g.Unborn(top) {
+		if out, err = g.Run(top, "--literal-pathspecs", "ls-tree", "HEAD", "--", path); err != nil {
+			return "", err
+		}
+		if mode, _, ok := strings.Cut(out, " "); ok {
+			return mode, nil
+		}
+	}
+	if info, err := os.Stat(filepath.Join(top, filepath.FromSlash(path))); err == nil && info.Mode()&0o111 != 0 {
+		return "100755", nil
+	}
+	return "100644", nil
+}
+
+// Commit records what the index of the worktree at top stages as a new
+// commit with message, cleaned up as Git's editor would.
+func (g Git) Commit(top, message string) error {
+	_, err := g.outputWith(networkTimeout, top, []byte(message), "commit", "--quiet", "--cleanup=strip", "--file=-")
+	return err
 }
 
 // CommitChanges lists the files a commit changes since its first parent, or

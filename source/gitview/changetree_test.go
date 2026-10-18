@@ -40,3 +40,21 @@ func TestChangeTreeGroupsFilesByDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestChangeTreeGroupsAreas(t *testing.T) {
+	tree := newChangeTree([]FileChange{
+		{Path: "a/b/x.go", Status: 'M', Area: AreaUnstaged},
+		{Path: "a/b/x.go", Status: 'M', Area: AreaStaged},
+		{Path: "y.go", Status: 'A', Area: AreaUnstaged},
+	})
+	staged, unstaged := areaKeys[AreaStaged], areaKeys[AreaUnstaged]
+	if !slices.Equal(tree.roots, []string{unstaged, staged}) {
+		t.Fatalf("roots = %q", tree.roots)
+	}
+	if got := tree.children(unstaged); !slices.Equal(got, []string{unstaged + "a/b/", unstaged + "y.go"}) || tree.nodes[got[0]].name != "a/b" {
+		t.Fatalf("unstaged = %q", got)
+	}
+	if got := tree.ancestors(unstaged + "a/b/x.go"); !slices.Equal(got, []string{unstaged, unstaged + "a/b/"}) {
+		t.Fatalf("ancestors = %q", got)
+	}
+}

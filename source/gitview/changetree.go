@@ -8,7 +8,8 @@ import (
 // changeTree arranges changed files by directory. A file's key is its path; a
 // directory's is its path with a trailing slash, so the two never collide. A
 // directory with a single subdirectory and no files merges into one row, as
-// in VS Code's compact folders.
+// in VS Code's compact folders. Staged and unstaged files group under a row
+// of their area, whose key prefixes theirs (fileKey).
 type changeTree struct {
 	roots []string
 	nodes map[string]*changeNode
@@ -21,7 +22,16 @@ type changeNode struct {
 	// children is nil for a file and lists a directory's rows otherwise.
 	children []string
 	file     FileChange
+	// area is set on the row grouping an area's files.
+	area Area
 }
+
+// areaKeys are the keys of the rows grouping each area's files, which end
+// in a slash like a directory's but start with a byte no path does.
+var areaKeys = map[Area]string{AreaStaged: "\x00staged/", AreaUnstaged: "\x00unstaged/"}
+
+// fileKey is the tree key of a file's row.
+func fileKey(f FileChange) string { return areaKeys[f.Area] + f.Path }
 
 func newChangeTree(files []FileChange) changeTree {
 	t := changeTree{nodes: map[string]*changeNode{}}
@@ -33,20 +43,34 @@ func newChangeTree(files []FileChange) changeTree {
 		}
 	}
 	for _, f := range files {
-		parent := ""
-		for i, r := range f.Path {
-			if r != '/' {
+		parent := areaKeys[f.Area]
+		if parent != "" && t.nodes[parent] == nil {
+			t.nodes[parent] = &changeNode{children: []string{}, area: f.Area}
+			add("", parent)
+		}
+		key := fileKey(f)
+		for i := len(parent); i < len(key); i++ {
+			if key[i] != '/' {
 				continue
 			}
-			key := f.Path[:i+1]
-			if t.nodes[key] == nil {
-				t.nodes[key] = &changeNode{name: f.Path[len(parent) : len(key)-1], children: []string{}}
-				add(parent, key)
+			dir := key[:i+1]
+			if t.nodes[dir] == nil {
+				t.nodes[dir] = &changeNode{name: key[len(parent):i], children: []string{}}
+				add(parent, dir)
 			}
-			parent = key
+			parent = dir
 		}
-		t.nodes[f.Path] = &changeNode{name: f.Path[len(parent):], file: f}
-		add(parent, f.Path)
+		t.nodes[key] = &changeNode{name: key[len(parent):], file: f}
+		add(parent, key)
+	}
+	if len(t.roots) > 0 && t.nodes[t.roots[0]].area != AreaAll {
+		// The staged files come last, above the commit's message.
+		slices.SortFunc(t.roots, func(a, b string) int { return cmp.Compare(t.nodes[b].area, t.nodes[a].area) })
+		for _, key := range t.roots {
+			n := t.nodes[key]
+			n.children = t.compact(n.children)
+		}
+		return t
 	}
 	t.roots = t.compact(t.roots)
 	return t

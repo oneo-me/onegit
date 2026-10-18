@@ -6,6 +6,7 @@
 
 - **Refs pane.** Current changes, shown only while the worktree has uncommitted changes. All commits with its count. Branches, remote branches and tags as folder trees, with a filter at the bottom. Choosing a ref selects its commit. A ref's context menu deletes it after a confirmation, optionally on its remote too.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
+- **Staging.** Current changes group into unstaged files above staged ones, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or lines selected by their numbers stage or unstage; group and file menus do so too. A commit box below the tree commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
 - **All commits.** A graph of every shown ref, the checked out commit and host entries. Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - **Dialogs.** Fetch, pull and push dialogs, and ref deletion. Fetch updates every remote, or with its switch off one remote branch.
 
@@ -34,7 +35,7 @@ Options:
 ## Boundaries
 
 - Frame builders do no I/O. Git runs in goroutines, and results carry a generation so stale ones are dropped.
-- The view writes only from user actions: fetch, pull, push, ref deletion and the host's `Run`. It never checks out on its own.
+- The view writes only from user actions: fetch, pull, push, ref deletion, staging, commits and the host's `Run`. It never checks out on its own.
 - Network commands run with `GIT_TERMINAL_PROMPT=0`, so missing credentials fail instead of hanging.
 
 ## Neorio mapping

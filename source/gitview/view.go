@@ -153,9 +153,11 @@ type View struct {
 	seekChanges bool
 
 	repo repositoryState
-	// current holds the worktree's uncommitted changes.
-	current *filePane
-	history historyState
+	// current holds the worktree's staged and unstaged changes, and
+	// messages the commit message typed for each worktree.
+	current  *filePane
+	messages map[string]string
+	history  historyState
 	// tracking compares the worktree's branch with its upstream; syncing
 	// names the Git write running, and toast reports the last one that
 	// failed; dialog chooses a fetch's, pull's or push's branches.
@@ -199,7 +201,7 @@ type repositoryState struct {
 
 // New creates a view showing nothing until SetPath.
 func New(opts Options) *View {
-	v := &View{opts: opts, git: opts.Git, state: opts.State, section: sectionCommits, groups: map[string]*bool{}}
+	v := &View{opts: opts, git: opts.Git, state: opts.State, section: sectionCommits, groups: map[string]*bool{}, messages: map[string]string{}}
 	if v.state.RefsWidth <= 0 {
 		v.state.RefsWidth = refsWidth
 	}
@@ -359,8 +361,7 @@ func (v *View) leaveEmptyChanges() bool {
 	return true
 }
 
-// loadChanges rereads the worktree's uncommitted files. A worktree without
-// commits has none to compare.
+// loadChanges rereads the worktree's staged and unstaged files.
 func (v *View) loadChanges() {
 	path := v.path
 	if path == "" {
@@ -368,12 +369,7 @@ func (v *View) loadChanges() {
 		v.current.key = ""
 		return
 	}
-	v.loadFiles(v.current, path, func(git Git) (Changes, error) {
-		if _, err := git.Top(path); err == nil && git.Unborn(path) {
-			return Changes{}, nil
-		}
-		return git.WorktreeChanges(path, "")
-	})
+	v.loadFiles(v.current, path, func(git Git) (Changes, error) { return git.WorktreeStatus(path) })
 }
 
 // loadRepository rereads the refs and worktrees, and the history when they

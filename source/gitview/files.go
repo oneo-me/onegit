@@ -3,6 +3,7 @@ package gitview
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/egoist/mygo/ui/editor"
@@ -30,7 +31,8 @@ type filePane struct {
 	loading, loaded bool
 	err             string
 	changes         Changes
-	selected        string
+	// selected is the tree key of the chosen file (fileKey).
+	selected string
 	// tree arranges the files by directory; cursor is its focused row.
 	// shown lists the directories already seen, which keep the expansion
 	// the user chose, while new ones open unless the pane browses.
@@ -40,8 +42,11 @@ type filePane struct {
 	shown     map[string]bool
 	// diff compares the selected file once read, view shows a browsed one
 	// and preview shows an image instead; note replaces them for a file
-	// that cannot be shown.
+	// that cannot be shown. file is the file shown and before and after
+	// its versions the diff compares, which staging its lines picks from.
 	diff           *editor.DiffState
+	file           FileChange
+	before, after  []byte
 	view           *editor.State
 	preview        *imagePreview
 	path           string
@@ -54,6 +59,7 @@ func (v *View) newFilePane(browse bool) *filePane {
 	p := &filePane{browse: browse}
 	p.treeState.List.Selected = &p.cursor
 	p.treeState.List.Label = func(i int) string { return p.tree.nodes[p.treeState.Item(i)].name }
+	p.treeState.List.OnSubmit = func(i int) { v.submitFile(p, i) }
 	p.treeState.List.OnChange = func() {
 		if p.cursor >= 0 && p.cursor < p.treeState.Rows() {
 			if key := p.treeState.Item(p.cursor); p.tree.children(key) == nil {
@@ -72,6 +78,7 @@ func (v *View) clearFiles(p *filePane, reason string) {
 	p.again = nil
 	p.loading, p.loaded, p.err, p.changes = false, reason != "", reason, Changes{}
 	p.selected, p.diff, p.view, p.preview, p.path, p.fileLoading, p.note = "", nil, nil, nil, "", false, ""
+	p.file, p.before, p.after = FileChange{}, nil, nil
 	p.shown, p.cursor = nil, 0
 	arrangeFiles(p)
 }
@@ -140,18 +147,34 @@ func arrangeFiles(p *filePane) {
 	p.cursor = p.tree.row(selected, p.treeState.Open.Has)
 }
 
-// keptSelection keeps the selected file while it is still listed, and
-// otherwise chooses the first one.
+// keptSelection keeps the selected file's key while it is still listed, or
+// follows the file to its other area, as after staging it whole, and
+// otherwise chooses the first file.
 func keptSelection(files []FileChange, selected string) string {
+	moved := ""
 	for _, f := range files {
-		if f.Path == selected {
+		key := fileKey(f)
+		if key == selected {
 			return selected
 		}
+		if moved == "" && f.Area != AreaAll && strings.TrimPrefix(selected, areaKeys[otherArea(f.Area)]) == f.Path {
+			moved = key
+		}
+	}
+	if moved != "" {
+		return moved
 	}
 	if len(files) > 0 {
-		return files[0].Path
+		return fileKey(files[0])
 	}
 	return ""
+}
+
+func otherArea(a Area) Area {
+	if a == AreaStaged {
+		return AreaUnstaged
+	}
+	return AreaStaged
 }
 
 func (v *View) selectFile(p *filePane, path string) {
@@ -170,18 +193,21 @@ func (v *View) loadFile(p *filePane) {
 	var file FileChange
 	found := false
 	for _, f := range p.changes.Files {
-		if f.Path == p.selected {
+		if fileKey(f) == p.selected {
 			file, found = f, true
 			break
 		}
 	}
 	if !found {
 		p.diff, p.view, p.preview, p.path, p.note, p.fileLoading = nil, nil, nil, "", "", false
+		p.file, p.before, p.after = FileChange{}, nil, nil
 		return
 	}
-	if p.path != file.Path {
+	if fileKey(p.file) != fileKey(file) || p.path == "" {
 		p.diff, p.view, p.preview, p.path, p.note = nil, nil, nil, file.Path, ""
+		p.before, p.after = nil, nil
 	}
+	p.file = file
 	generation, changes, browse := p.fileGeneration, p.changes, p.browse
 	p.fileLoading = true
 	git := v.git
@@ -226,6 +252,7 @@ func (v *View) loadFile(p *filePane) {
 				}
 				return
 			}
+			p.before, p.after = before, after
 			if p.diff == nil {
 				lang := editor.LanguageFor(file.Path)
 				old, cur := editor.NewBuffer(string(before)), editor.NewBuffer(string(after))
@@ -258,9 +285,21 @@ func (v *View) filesView(c *ui.Context, p *filePane, empty string) {
 	}
 }
 
+// fileTree lists the pane's files, with a commit's message under the
+// worktree's staged and unstaged ones.
 func (v *View) fileTree(c *ui.Context, p *filePane, empty string) {
-	t := c.Theme()
+	staging := p == v.current
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		v.fileList(c, p, empty)
+		if staging {
+			v.commitBox(c, p)
+		}
+	})
+}
+
+func (v *View) fileList(c *ui.Context, p *filePane, empty string) {
+	t := c.Theme()
+	ui.Column(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		message := ""
 		switch {
 		case !p.loaded:
@@ -278,6 +317,10 @@ func (v *View) fileTree(c *ui.Context, p *filePane, empty string) {
 		// pane's edges.
 		components.TreeVirtualized(c, &p.treeState, p.tree.roots, p.tree.children, func(key string) {
 			n := p.tree.nodes[key]
+			if n.area != AreaAll {
+				v.areaRow(c, p, n.area)
+				return
+			}
 			if p.browse && n.children == nil {
 				ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 					fileIcon(c, n.name, 14)
@@ -288,6 +331,9 @@ func (v *View) fileTree(c *ui.Context, p *filePane, empty string) {
 			row := changeTreeRow(c, n.name, n.file.Status, n.file.Added, n.file.Deleted)
 			if n.file.Status == 'R' {
 				components.Tooltip(c, row, n.file.OldPath+" → "+n.file.Path)
+			}
+			if n.children == nil && n.file.Area != AreaAll {
+				v.stageMenu(row, n.file)
 			}
 		}).Fill().Padding(t.Space(1), 8, 8, 8)
 	})
@@ -307,6 +353,7 @@ func (v *View) fileContent(c *ui.Context, p *filePane) {
 			// example, since the editor's default reads larger.
 			p.diff.Font = ui.Font{Size: t.FontSize - 1}
 			p.diff.Wrap = v.state.DiffWrap
+			v.stagingDiff(p)
 			editor.DiffView(c, p.diff).Grow(1).MinHeight(0).FillWidth()
 			return
 		case p.view != nil:
@@ -347,6 +394,7 @@ func (v *View) fileHeader(c *ui.Context, p *filePane) {
 	ui.Row(c).FillWidth().Shrink(0).Height(size+t.Space(2)).AlignItems(ui.Center).Gap(8).Padding(0, t.Space(2), 0, t.Space(3)).
 		Children(func() {
 			components.Text(c, p.path).Bold().FontSize(13).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").Selectable()
+			v.stagingActions(c, p, size)
 			if p.diff != nil || p.view != nil {
 				if iconButton(c, v.text("wrap_lines"), lucide.TextWrap, size, v.state.DiffWrap).Clicked() {
 					v.state.DiffWrap = !v.state.DiffWrap
