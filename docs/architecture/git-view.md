@@ -4,18 +4,29 @@
 
 ## What it shows
 
-- **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included. A ref's context menu deletes it after a confirmation, optionally on its remote too.
+- **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included.
+- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below. Writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or selected lines stage or unstage. Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
 - **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. A commit box below the lists commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
 - **All commits.** A graph of every shown ref, the checked out commit and host entries. Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, Stash, and a menu switching to a shown local branch.
-- **Dialogs.** Fetch, pull, push and stash dialogs, and ref deletion. A stash takes an optional message and includes untracked files unless unchecked. Fetch updates every remote, or with its switch off one remote branch.
+- **Dialogs.** Fetch, pull, push and stash dialogs, ref deletion and the menus' writes. A stash takes an optional message and includes untracked files unless unchecked. Fetch updates every remote, or with its switch off one remote branch.
+
+| Menu item | Git |
+| --- | --- |
+| Checkout | A dialog for a local branch, the one tracking a remote branch, a new branch tracking a remote branch, or a detached tag or commit; local changes stay, are stashed and reapplied, or are discarded, leaving untracked files |
+| Checkout as Worktree | `worktree add` beside the main worktree, with the same choices |
+| Pull into | Remote branches only: the pull dialog, preset to that branch |
+| Merge into, Rebase on | `merge --no-edit` or `rebase` of the checked out branch, optionally `--no-ff` or `--autostash`; conflicts stay for the user |
+| New Branch, New Tag | A branch, checked out by default, or a tag, annotated when given a message |
+| Delete | Refs only, after a confirmation, optionally on the remote too |
+| Copy | The ref's name or the commit's full hash |
 
 ## Host API
 
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
-- `Toolbar` builds the Git actions in a host's title bar. Their parts serve hosts adding their own: `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` for host-defined Git writes. `CanSync`, `CanPull` and `CanStash` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
+- `Toolbar` builds the Git actions in a host's title bar. `OpWorktree` names the write adding a worktree, for `OnWrite`. Their parts serve hosts adding their own: `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` for host-defined Git writes. `CanSync`, `CanPull` and `CanStash` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
 - `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
 
 Options:
@@ -37,7 +48,7 @@ Options:
 ## Boundaries
 
 - Frame builders do no I/O. Git runs in goroutines, and results carry a generation so stale ones are dropped.
-- The view writes only from user actions: fetch, pull, push, stash, branch switch, ref deletion, staging, discarding, commits and the host's `Run`. It never checks out on its own.
+- The view writes only from user actions: the toolbar, the ref and commit menus, staging, discarding, commits and the host's `Run`. It never checks out on its own.
 - Network commands run with `GIT_TERMINAL_PROMPT=0`, so missing credentials fail instead of hanging.
 
 ## Neorio mapping

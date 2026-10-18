@@ -32,17 +32,9 @@ func (v *View) Tracking() Tracking { return v.tracking }
 // branch menu; Tracking names the checked out one.
 func (v *View) LocalBranches() []string {
 	var names []string
-	var walk func([]*refNode)
-	walk = func(nodes []*refNode) {
-		for _, n := range nodes {
-			if n.children != nil {
-				walk(n.children)
-			} else {
-				names = append(names, n.path)
-			}
-		}
+	for _, n := range refLeaves(v.repo.refTrees.branches) {
+		names = append(names, n.path)
 	}
-	walk(v.repo.refTrees.branches)
 	slices.Sort(names)
 	return names
 }
@@ -73,21 +65,34 @@ func (v *View) Fetch() {
 // OpenFetch opens the dialog choosing what a fetch updates.
 func (v *View) OpenFetch() {
 	if v.CanSync() {
-		v.openSync(OpFetch)
+		v.openSync(OpFetch, RemoteBranch{})
 	}
 }
 
 // OpenPull opens the dialog choosing what a pull brings.
 func (v *View) OpenPull() {
 	if v.CanPull() {
-		v.openSync(OpPull)
+		v.openSync(OpPull, RemoteBranch{})
 	}
+}
+
+// openPull opens the pull dialog bringing a remote branch, such as
+// origin/main, when the view knows its remote.
+func (v *View) openPull(ref string) {
+	if !v.CanPull() {
+		return
+	}
+	from := RemoteBranch{}
+	if remote := refRemote(v.repo.github, ref); remote != "" {
+		from = RemoteBranch{Remote: remote, Branch: ref[len(remote)+1:]}
+	}
+	v.openSync(OpPull, from)
 }
 
 // OpenPush opens the dialog choosing what a push sends.
 func (v *View) OpenPush() {
 	if v.CanSync() {
-		v.openSync(OpPush)
+		v.openSync(OpPush, RemoteBranch{})
 	}
 }
 
@@ -200,8 +205,9 @@ type syncDialog struct {
 }
 
 // openSync opens the fetch, pull or push dialog and reads the remotes and
-// branches it offers.
-func (v *View) openSync(op string) {
+// branches it offers; a pull brings from, when set and still offered,
+// instead of its default.
+func (v *View) openSync(op string, from RemoteBranch) {
 	path := v.path
 	v.dialog = syncDialog{op: op, open: true, generation: v.dialog.generation + 1}
 	generation, git := v.dialog.generation, v.git
@@ -226,6 +232,9 @@ func (v *View) openSync(op string) {
 				d.remote = fallbackRemote(remotes)
 			}
 			d.branch = pullBranch(remotes, d.remote)
+			if slices.Contains(remotes.Branches[from.Remote], from.Branch) {
+				d.remote, d.branch = from.Remote, from.Branch
+			}
 			if op == OpPush {
 				d.branch = remotes.Current
 				if d.branch == "" && len(remotes.Local) > 0 {
@@ -469,9 +478,14 @@ const syncLabelWidth = 16
 // syncField is a dialog row with its label aligned to the others' end; a
 // disabled one takes no input.
 func syncField(c *ui.Context, label string, disabled bool, value func()) {
+	formField(c, syncLabelWidth, label, disabled, value)
+}
+
+// formField is syncField with labels width theme spaces wide.
+func formField(c *ui.Context, width float32, label string, disabled bool, value func()) {
 	t := c.Theme()
 	ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(t.Space(3)).Disabled(disabled).Children(func() {
-		text := components.Text(c, label).Width(t.Space(syncLabelWidth)).Shrink(0).TextAlign(ui.End).SingleLine()
+		text := components.Text(c, label).Width(t.Space(width)).Shrink(0).TextAlign(ui.End).SingleLine()
 		if disabled {
 			text.TextColor(t.TextMuted)
 		}
@@ -482,14 +496,19 @@ func syncField(c *ui.Context, label string, disabled bool, value func()) {
 // syncOption is a dialog check box aligned with the fields' values; a
 // remembered option is saved when it changes.
 func (v *View) syncOption(c *ui.Context, checked *bool, label string, remember bool) {
-	t := c.Theme()
 	before := *checked
-	ui.Row(c).FillWidth().Padding(0, 0, 0, t.Space(syncLabelWidth+3)).Children(func() {
-		components.Checkbox(c, checked, label)
-	})
+	formOption(c, syncLabelWidth, checked, label)
 	if remember && *checked != before {
 		v.saveState()
 	}
+}
+
+// formOption is a check box aligned with the values of formFields whose
+// labels are width theme spaces wide.
+func formOption(c *ui.Context, width float32, checked *bool, label string) {
+	ui.Row(c).FillWidth().Padding(0, 0, 0, c.Theme().Space(width+3)).Children(func() {
+		components.Checkbox(c, checked, label)
+	})
 }
 
 // syncChoices scrolls a select's options when they outgrow the window.

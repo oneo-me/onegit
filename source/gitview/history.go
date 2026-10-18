@@ -78,12 +78,17 @@ func (v *View) initHistory() {
 			v.selectCommit(v.repo.commits[h.rows[h.cursor]].Hash)
 		}
 	}
-	// A double click or Enter opens the chosen commit's details.
+	// A double click or Enter opens the chosen commit's details and asks to
+	// check it out; an entry's row only opens.
 	h.list.OnSubmit = func(i int) {
 		if i >= 0 && i < len(h.rows) {
+			commit := v.repo.commits[h.rows[i]]
 			v.ref = ""
-			v.selectCommit(v.repo.commits[h.rows[i]].Hash)
+			v.selectCommit(commit.Hash)
 			h.open = true
+			if _, entry := entryID(commit.Hash); !entry {
+				v.openCheckout(commitTarget(commit))
+			}
 		}
 	}
 }
@@ -464,7 +469,9 @@ func (v *View) commitRow(c *ui.Context, commit Commit, row graphRow) {
 		}
 		merge = &mergeToggle{collapsed: collapsed, label: label, toggle: func() { v.history.toggle = commit.Hash }}
 	}
-	ui.Row(c).FillWidth().MinWidth(0).Height(commitRowHeight).AlignItems(ui.Center).Padding(0, t.Space(2)).Children(func() {
+	ui.Row(c).FillWidth().MinWidth(0).Height(commitRowHeight).AlignItems(ui.Center).Padding(0, t.Space(2)).ContextMenu(func(m *ui.Menu) {
+		v.refMenu(c, m, commitTarget(commit), nil)
+	}).Children(func() {
 		graphCell(c, row, commitRowHeight, merge)
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(0, 0, 0, t.Space(1)).Children(func() {
 			if len(commit.Refs) > 0 {

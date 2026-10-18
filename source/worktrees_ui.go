@@ -44,6 +44,24 @@ func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 	s.state.SelectedProjects[s.projectRoot] = node.Path
 	s.saveSidebarState()
 	s.overview.Loading = true
+	s.readWorktrees(node, onMain)
+}
+
+// reloadWorktrees lists the selected repository's worktrees again, such as
+// after the view added one, keeping the shown worktree.
+func (s *settings) reloadWorktrees() {
+	if node := s.selectedProject; node != nil && node.Repository {
+		s.readWorktrees(node, s.repositoryDispatch())
+	}
+}
+
+// readWorktrees lists the repository's worktrees in the background, then
+// shows the remembered one, dropping an earlier listing still running.
+func (s *settings) readWorktrees(node *projectNode, onMain func(func())) {
+	if s.overview.cancel != nil {
+		s.overview.cancel()
+	}
+	s.overview.version++
 	version := s.overview.version
 	ctx, cancel := context.WithCancel(context.Background())
 	s.overview.cancel = cancel
@@ -57,13 +75,16 @@ func (s *settings) selectProject(node *projectNode, onMain func(func())) {
 			s.overview.Loading = false
 			s.overview.Worktrees = items
 			s.overview.SelectedPath = ""
+			s.overview.Problem = ""
 			if err == nil {
 				s.applyWorktreeSelection(node.Path)
 			}
 			if err != nil {
 				s.overview.Problem = err.Error()
 			}
-			s.repositoryChanged()
+			if view := s.gitView(); view.Path() != s.overview.SelectedPath {
+				view.SetPath(s.overview.SelectedPath)
+			}
 			if s.window != nil {
 				s.window.Invalidate()
 			}

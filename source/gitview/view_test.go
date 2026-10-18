@@ -324,3 +324,156 @@ func TestViewFetchDialog(t *testing.T) {
 		t.Fatalf("fetched other branches: %q", out)
 	}
 }
+
+func TestViewRefAndCommitMenus(t *testing.T) {
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	mine := filepath.Join(dir, "mine")
+	git(t, dir, "clone", "-q", origin, mine)
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, mine, "tag", "v1")
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "second")
+	git(t, mine, "push", "-q", "origin", "main", "main:other")
+	git(t, mine, "branch", "feature")
+
+	v, pump := testView(t, Options{Git: Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")})
+	v.SetPath(mine)
+	ready := func() bool { return !v.Loading() && v.Syncing() == "" && v.tracking.Branch != "" }
+	pump(ready)
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+
+	// A local branch's menu offers checking it out, integrating it and
+	// branching from it; a new branch is checked out by default.
+	if err := view.RightClick("feature"); err != nil {
+		t.Fatal(err)
+	}
+	menu := view.Menu()
+	for _, item := range []string{"Checkout…", "Checkout as Worktree…", "Merge into 'main'…", "Rebase 'main' on 'feature'…", "New Branch…", "New Tag…", "Delete…", "Copy Branch Name"} {
+		if !slices.Contains(menu, item) {
+			t.Fatalf("%q missing from %v", item, menu)
+		}
+	}
+	if err := view.ChooseMenuItem("New Branch…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !v.action.open || !view.HasText("New branch at feature") {
+		t.Fatalf("dialog: %v", view.Texts())
+	}
+	view.Frame()
+	view.Type("feature")
+	view.Frame()
+	if !view.HasText("A branch named feature already exists.") {
+		t.Fatalf("taken name: %v", view.Texts())
+	}
+	view.Type("-2")
+	view.Frame()
+	if err := view.Click("Create Branch"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && v.tracking.Branch == "feature-2" })
+
+	// A commit's menu copies its hash, and clicking its row still selects
+	// it.
+	view.Frame()
+	if err := view.RightClick("init"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Copy Commit Hash"); err != nil {
+		t.Fatal(err)
+	}
+	initHash, _ := v.git.Run(mine, "rev-parse", "HEAD~1")
+	if view.Clipboard() != initHash {
+		t.Fatalf("copied %q, want %q", view.Clipboard(), initHash)
+	}
+	view.Advance(time.Second)
+	if err := view.Click("init"); err != nil {
+		t.Fatal(err)
+	}
+	if v.history.selected != initHash || v.action.open {
+		t.Fatalf("selected %q, dialog %v", v.history.selected, v.action.open)
+	}
+
+	// Double-clicking a tag or a branch in the refs pane asks as well.
+	view.Advance(time.Second)
+	if err := view.Click("Tags"); err != nil {
+		t.Fatal(err)
+	}
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("v1"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if !v.action.open || !view.HasText("Checkout Tag") {
+		t.Fatalf("tag dialog: %v", view.Texts())
+	}
+	if err := view.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("feature"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if !v.action.open || !view.HasText("Checkout Branch") {
+		t.Fatalf("branch dialog: %v", view.Texts())
+	}
+	if err := view.Click("Checkout"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && v.tracking.Branch == "feature" })
+
+	// Double-clicking a commit asks to check it out detached, here setting
+	// uncommitted changes aside and back.
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("init"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if !v.action.open || !view.HasText("Checkout Commit") || !view.HasText("Commit to checkout:") {
+		t.Fatalf("commit dialog: %v", view.Texts())
+	}
+	os.WriteFile(filepath.Join(mine, "draft.txt"), []byte("draft\n"), 0644)
+	if err := view.Click("Stash and reapply"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if err := view.Click("Checkout"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return !v.Loading() && v.Syncing() == "" && v.repo.head == initHash })
+	if v.tracking.Branch != "" {
+		t.Fatalf("still on %q", v.tracking.Branch)
+	}
+	if _, err := os.Stat(filepath.Join(mine, "draft.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	git(t, mine, "switch", "-q", "main")
+	v.Reload()
+	pump(func() bool { return ready() && v.tracking.Branch == "main" })
+
+	// A remote branch's pull starts from it.
+	if err := view.Click("Remote branches"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if err := view.RightClick("other"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Pull into 'main'…"); err != nil {
+		t.Fatalf("%v: %v", err, view.Menu())
+	}
+	pump(func() bool { return v.dialog.remotes != nil })
+	if v.dialog.op != OpPull || v.dialog.remote != "origin" || v.dialog.branch != "other" {
+		t.Fatalf("pull dialog %+v", v.dialog)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"testing"
 )
 
@@ -195,5 +196,139 @@ func TestDeleteRefs(t *testing.T) {
 	}
 	if out, _ := g.Run(mine, "tag"); out != "" {
 		t.Fatalf("local tags %q", out)
+	}
+}
+
+func TestCheckoutWorktreesMergeRebaseAndCreate(t *testing.T) {
+	t.Parallel()
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	mine := filepath.Join(dir, "mine")
+	git(t, dir, "clone", "-q", origin, mine)
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, mine, "tag", "v1")
+	git(t, mine, "switch", "-q", "-c", "topic")
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "topic")
+	git(t, mine, "push", "-q", "origin", "main", "topic")
+	git(t, mine, "switch", "-q", "main")
+	git(t, mine, "branch", "-q", "-D", "topic")
+	head := func(path string) (branch, upstream string) {
+		t.Helper()
+		tr, err := g.Tracking(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return tr.Branch, tr.Upstream
+	}
+
+	// A remote branch checks out as a new branch tracking it, a tag
+	// detached, and a local branch by name.
+	if err := g.Checkout(mine, CheckoutOptions{Branch: "topic", Start: "refs/remotes/origin/topic", Track: true}); err != nil {
+		t.Fatal(err)
+	}
+	if b, up := head(mine); b != "topic" || up != "origin/topic" {
+		t.Fatalf("checked out %q tracking %q", b, up)
+	}
+	if err := g.Checkout(mine, CheckoutOptions{Start: "refs/tags/v1"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := head(mine); b != "" {
+		t.Fatalf("tag checked out on %q", b)
+	}
+	if err := g.Checkout(mine, CheckoutOptions{Branch: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := head(mine); b != "main" {
+		t.Fatalf("checked out %q", b)
+	}
+
+	// Worktrees check out a local branch, a new branch or a detached tag.
+	for i, o := range []CheckoutOptions{{Branch: "topic"}, {Branch: "fix", Start: "refs/tags/v1"}, {Start: "refs/tags/v1"}} {
+		wt := filepath.Join(dir, "wt"+strconv.Itoa(i))
+		if err := g.AddWorktree(mine, wt, o); err != nil {
+			t.Fatal(err)
+		}
+		if b, _ := head(wt); b != o.Branch {
+			t.Fatalf("worktree %d on %q", i, b)
+		}
+	}
+	if err := g.AddWorktree(mine, filepath.Join(dir, "again"), CheckoutOptions{Branch: "topic"}); err == nil {
+		t.Fatal("checked out a branch twice")
+	}
+
+	// A merge fast-forwards unless told to record a merge commit.
+	if err := g.Merge(mine, "refs/heads/topic", IntegrateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if merges, _ := g.Run(mine, "rev-list", "--count", "--merges", "HEAD"); merges != "0" {
+		t.Fatalf("fast-forward merged: %s", merges)
+	}
+	git(t, mine, "reset", "-q", "--hard", "refs/tags/v1")
+	if err := g.Merge(mine, "refs/heads/topic", IntegrateOptions{NoFastForward: true}); err != nil {
+		t.Fatal(err)
+	}
+	if merges, _ := g.Run(mine, "rev-list", "--count", "--merges", "HEAD"); merges != "1" {
+		t.Fatalf("merges: %s", merges)
+	}
+
+	// A rebase replays the branch's commits, setting changes aside.
+	git(t, mine, "reset", "-q", "--hard", "refs/tags/v1")
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "mine")
+	os.WriteFile(filepath.Join(mine, "dirty.txt"), []byte("x\n"), 0644)
+	git(t, mine, "add", "dirty.txt")
+	if err := g.Rebase(mine, "refs/heads/topic", IntegrateOptions{}); err == nil {
+		t.Fatal("rebased over staged changes")
+	}
+	if err := g.Rebase(mine, "refs/heads/topic", IntegrateOptions{Stash: true}); err != nil {
+		t.Fatal(err)
+	}
+	if log, _ := g.Run(mine, "log", "--format=%s"); log != "mine\ntopic\ninit" {
+		t.Fatalf("rebased: %q", log)
+	}
+	if _, err := os.Stat(filepath.Join(mine, "dirty.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Branches start anywhere without moving the worktree, and tags are
+	// lightweight unless they carry a message.
+	if err := g.CreateBranch(mine, "later", "refs/remotes/origin/main"); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := head(mine); b != "main" {
+		t.Fatalf("created branch checked out: %q", b)
+	}
+	if err := g.CreateTag(mine, "light", "HEAD", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.CreateTag(mine, "notes", "refs/heads/later", "Release\n\n# dropped\nnotes\n"); err != nil {
+		t.Fatal(err)
+	}
+	if kinds, _ := g.Run(mine, "for-each-ref", "--format=%(objecttype) %(contents)", "refs/tags/light", "refs/tags/notes"); kinds != "commit mine\n\ntag Release\n\nnotes" {
+		t.Fatalf("tags: %q", kinds)
+	}
+
+	// A checkout sets uncommitted changes aside and back, or drops them.
+	os.WriteFile(filepath.Join(mine, "f.txt"), []byte("1\n"), 0644)
+	git(t, mine, "add", "f.txt")
+	git(t, mine, "commit", "-q", "-m", "f")
+	git(t, mine, "branch", "side")
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "main only")
+	os.WriteFile(filepath.Join(mine, "f.txt"), []byte("2\n"), 0644)
+	if err := g.Checkout(mine, CheckoutOptions{Branch: "side", Changes: StashChanges}); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(filepath.Join(mine, "f.txt")); string(data) != "2\n" {
+		t.Fatalf("stashed change lost: %q", data)
+	}
+	if stash, _ := g.Run(mine, "stash", "list"); stash != "" {
+		t.Fatalf("stash kept: %q", stash)
+	}
+	if err := g.Checkout(mine, CheckoutOptions{Branch: "main", Changes: DiscardChanges}); err != nil {
+		t.Fatal(err)
+	}
+	if status, _ := g.Run(mine, "status", "--porcelain", "--untracked-files=no"); status != "" {
+		t.Fatalf("changes kept: %q", status)
 	}
 }

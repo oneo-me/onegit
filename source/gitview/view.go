@@ -2,8 +2,8 @@
 // worktree's uncommitted changes, the history and the branches, remote
 // branches and tags, beside the chosen section, either the changed files or
 // the revision graph with the selected commit's details. It also runs the
-// fetch, pull, push, stash and ref deletions its host's toolbar and menus ask
-// for, with their dialogs.
+// Git writes its toolbar and its refs' and commits' menus ask for, with
+// their dialogs.
 //
 // The host owns the window, the project list and the toolbar; the view owns
 // everything inside its area. Git runs off the UI thread and results return
@@ -182,9 +182,11 @@ type View struct {
 	stashDialog        stashDialog
 	toast              *ui.Toast
 	// deletion and discarding confirm deleting a ref from the refs pane and
-	// discarding a worktree's changes.
+	// discarding a worktree's changes; action asks for what another write
+	// of a ref's or commit's menu needs.
 	deletion   refDeletion
 	discarding discarding
+	action     refAction
 	// watches follow the repository's Git directory and shown worktrees.
 	watches map[string]*gitWatch
 	closed  bool
@@ -569,6 +571,7 @@ func (v *View) Layout(c *ui.Context) {
 	v.stashDialogView(c)
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
+	v.refActionDialog(c)
 }
 
 // overlay floats the host's overlay at the top of the section, measuring
@@ -794,10 +797,13 @@ func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*ref
 				if n.name != n.path {
 					components.Tooltip(c, row, n.path)
 				}
-				row.ContextMenu(func(m *ui.Menu) { v.refDeleteItem(m, group, n) })
+				row.ContextMenu(func(m *ui.Menu) { v.refMenu(c, m, nodeTarget(group, n), n) })
 				if row.Clicked() {
 					v.revealCommit(n.hash)
 					v.ref = id
+				}
+				if row.DoubleClicked() {
+					v.openCheckout(nodeTarget(group, n))
 				}
 			})
 			continue

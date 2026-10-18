@@ -1162,3 +1162,134 @@ func (g Git) StashChanges(path, hash string) (Changes, error) {
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
 	return changes, nil
 }
+
+// CheckoutOptions choose what a checkout or a new worktree has checked out.
+type CheckoutOptions struct {
+	// Branch is an existing local branch when Start is empty, else a new
+	// branch starting at Start; without one, Start is checked out detached.
+	Branch, Start string
+	// Track sets a new branch to track Start, a remote branch.
+	Track bool
+	// Changes is what a checkout does with uncommitted changes; a new
+	// worktree leaves them where they are.
+	Changes LocalChanges
+}
+
+// LocalChanges is what a checkout does with the worktree's uncommitted
+// changes.
+type LocalChanges int
+
+const (
+	// KeepChanges carries them along, refusing when they would be lost.
+	KeepChanges LocalChanges = iota
+	// StashChanges sets them aside, untracked files included, and applies
+	// them again after the checkout.
+	StashChanges
+	// DiscardChanges drops the changes to tracked files; untracked files
+	// stay.
+	DiscardChanges
+)
+
+// args are the switch or worktree add arguments checking out o, with dir
+// for a new worktree.
+func (o CheckoutOptions) args(dir ...string) []string {
+	switch {
+	case o.Start == "":
+		return append(dir, o.Branch)
+	case o.Branch == "":
+		return append(append([]string{"--detach"}, dir...), o.Start)
+	}
+	args := []string{"--no-track"}
+	if o.Track {
+		args[0] = "--track"
+	}
+	if len(dir) > 0 {
+		return append(append(args, "-b", o.Branch), append(dir, o.Start)...)
+	}
+	return append(args, "--create", o.Branch, o.Start)
+}
+
+// Checkout switches the worktree at path as o chooses, doing with its
+// uncommitted changes what o.Changes says. Stashed changes come back when the
+// switch fails; when applying them again conflicts, the stash keeps them.
+func (g Git) Checkout(path string, o CheckoutOptions) error {
+	args := []string{"switch", "--quiet"}
+	if o.Changes == DiscardChanges {
+		args = append(args, "--discard-changes")
+	}
+	stashed := false
+	if o.Changes == StashChanges {
+		before, _ := g.Run(path, "rev-parse", "--quiet", "--verify", "refs/stash")
+		if _, err := g.Run(path, "stash", "push", "--quiet", "--include-untracked"); err != nil {
+			return err
+		}
+		after, _ := g.Run(path, "rev-parse", "--quiet", "--verify", "refs/stash")
+		stashed = after != before
+	}
+	_, err := g.Run(path, append(args, o.args()...)...)
+	if stashed {
+		if _, popErr := g.Run(path, "stash", "pop", "--quiet", "--index"); err == nil {
+			err = popErr
+		}
+	}
+	return err
+}
+
+// AddWorktree checks out o in a new worktree at dir of the repository
+// containing path.
+func (g Git) AddWorktree(path, dir string, o CheckoutOptions) error {
+	_, err := g.Run(path, append([]string{"worktree", "add", "--quiet"}, o.args(dir)...)...)
+	return err
+}
+
+// IntegrateOptions choose how a merge or rebase brings in a revision.
+type IntegrateOptions struct {
+	// NoFastForward records a merge commit even when the branch could move
+	// ahead; a rebase ignores it. Stash sets uncommitted changes aside
+	// meanwhile.
+	NoFastForward, Stash bool
+}
+
+// Merge merges rev into the branch checked out at path with Git's default
+// message. A conflict stops it, leaving the conflicted files to resolve as
+// git merge does.
+func (g Git) Merge(path, rev string, o IntegrateOptions) error {
+	args := []string{"merge", "--quiet", "--no-edit", "--no-autostash"}
+	if o.NoFastForward {
+		args = append(args, "--no-ff")
+	}
+	if o.Stash {
+		args[3] = "--autostash"
+	}
+	_, err := g.runFor(networkTimeout, path, append(args, rev)...)
+	return err
+}
+
+// Rebase replays the commits of the branch checked out at path onto rev. A
+// conflict stops it, leaving the rebase to continue or abort as git rebase
+// does.
+func (g Git) Rebase(path, rev string, o IntegrateOptions) error {
+	args := []string{"rebase", "--quiet", "--no-autostash"}
+	if o.Stash {
+		args[2] = "--autostash"
+	}
+	_, err := g.runFor(networkTimeout, path, append(args, rev)...)
+	return err
+}
+
+// CreateBranch creates a local branch at start, without checking it out.
+func (g Git) CreateBranch(path, branch, start string) error {
+	_, err := g.Run(path, "branch", "--no-track", branch, start)
+	return err
+}
+
+// CreateTag tags rev, with an annotated tag holding message unless it is
+// empty.
+func (g Git) CreateTag(path, tag, rev, message string) error {
+	if strings.TrimSpace(message) == "" {
+		_, err := g.Run(path, "tag", tag, rev)
+		return err
+	}
+	_, err := g.outputWith(readTimeout, path, []byte(message), "tag", "--annotate", "--cleanup=strip", "--file=-", tag, rev)
+	return err
+}

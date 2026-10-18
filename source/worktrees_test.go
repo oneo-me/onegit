@@ -112,6 +112,36 @@ func TestWorktreeSelectionCompletion(t *testing.T) {
 	}
 }
 
+// A worktree added from the view gets its tab, keeping the shown one.
+func TestWorktreesReloadAfterAdding(t *testing.T) {
+	repo := t.TempDir()
+	testGit(t, "init", repo)
+	testGit(t, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+	s := &settings{}
+	callbacks := make(chan func(), 64)
+	// The view's own reads share the queue.
+	pump := func(done func() bool) {
+		t.Helper()
+		for !done() {
+			select {
+			case fn := <-callbacks:
+				fn()
+			case <-time.After(10 * time.Second):
+				t.Fatal("worktree read timed out")
+			}
+		}
+	}
+	s.selectProject(&projectNode{Path: repo, Repository: true}, func(fn func()) { callbacks <- fn })
+	pump(func() bool { return len(s.overview.Worktrees) == 1 })
+	shown := s.overview.SelectedPath
+	testGit(t, "-C", repo, "worktree", "add", "-q", filepath.Join(t.TempDir(), "added"))
+	s.reloadWorktrees()
+	pump(func() bool { return len(s.overview.Worktrees) == 2 })
+	if s.overview.Loading || s.overview.SelectedPath != shown || s.gitView().Path() != shown {
+		t.Fatalf("reread: %+v", s.overview)
+	}
+}
+
 func TestProjectWorktreeContent(t *testing.T) {
 	s := &settings{systemLanguage: "zh-CN", selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
 		{Path: "/repo", Branch: "main", Main: true}, {Path: "/outside/feature", Branch: "feature"},

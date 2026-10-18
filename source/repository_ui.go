@@ -68,6 +68,12 @@ func (s *settings) gitView() *gitview.View {
 			s.saveSidebarState()
 		},
 		DialogInset: sidebar.HeaderHeight,
+		// A worktree added from a ref's menu gets its tab.
+		OnWrite: func(op, _ string) {
+			if op == gitview.OpWorktree {
+				s.reloadWorktrees()
+			}
+		},
 	})
 	return s.repo.view
 }

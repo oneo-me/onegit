@@ -1,0 +1,397 @@
+package gitview
+
+import (
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
+)
+
+// OpWorktree is the Git write adding a worktree, after which a host listing
+// the repository's worktrees reads them again.
+const OpWorktree = "worktree"
+
+// Git writes of the refs' menus, besides OpSwitch, OpWorktree and deletion.
+const (
+	opCheckout = "checkout"
+	opMerge    = "merge"
+	opRebase   = "rebase"
+	opBranch   = "branch"
+	opTag      = "tag"
+)
+
+// refTarget is what a menu of the refs pane or the history acts on: a ref of
+// the refs pane's group, "branches", "remotes" or "tags", or a commit, whose
+// group is "commit", name its short hash and subject its message's.
+type refTarget struct {
+	group, name, hash, subject string
+	upstream                   RemoteBranch
+}
+
+func nodeTarget(group string, n *refNode) refTarget {
+	return refTarget{group: group, name: n.path, hash: n.hash, upstream: n.upstream}
+}
+
+func commitTarget(c Commit) refTarget {
+	return refTarget{group: "commit", name: c.Short, hash: c.Hash, subject: c.Subject}
+}
+
+// rev names the target to Git unambiguously.
+func (t refTarget) rev() string {
+	switch t.group {
+	case "branches":
+		return "refs/heads/" + t.name
+	case "remotes":
+		return "refs/remotes/" + t.name
+	case "tags":
+		return "refs/tags/" + t.name
+	}
+	return t.hash
+}
+
+// refAction is the dialog of a refs menu's write, op, on target: a checkout
+// or new worktree, a merge or rebase, or a new branch or tag. name is the new
+// branch or tag, path the new worktree's directory and message an annotated
+// tag's; suggested is the directory offered for path while not edited.
+// checkout also checks out a new branch, changes is what a checkout does
+// with uncommitted changes, and options tell a merge or rebase how.
+type refAction struct {
+	open                           bool
+	op                             string
+	target                         refTarget
+	name, path, suggested, message string
+	checkout                       bool
+	changes                        LocalChanges
+	options                        IntegrateOptions
+}
+
+// refLeaves lists the refs of a ref tree, leaving out its folders.
+func refLeaves(nodes []*refNode) []*refNode {
+	var refs []*refNode
+	for _, n := range nodes {
+		if n.children != nil {
+			refs = append(refs, refLeaves(n.children)...)
+		} else {
+			refs = append(refs, n)
+		}
+	}
+	return refs
+}
+
+// hasRef reports whether a ref tree has a ref named name.
+func hasRef(nodes []*refNode, name string) bool {
+	return slices.ContainsFunc(refLeaves(nodes), func(n *refNode) bool { return n.path == name })
+}
+
+// checkedOut reports whether a worktree has the local branch checked out.
+func (v *View) checkedOut(branch string) bool {
+	return slices.ContainsFunc(v.repo.checkouts, func(c Checkout) bool { return c.Branch == branch })
+}
+
+// checkedOutName names the checked out branch, or HEAD when detached.
+func (v *View) checkedOutName() string {
+	if v.tracking.Branch != "" {
+		return v.tracking.Branch
+	}
+	return "HEAD"
+}
+
+// refMenu fills the menu of a ref or commit: checking it out, here or in a
+// new worktree, pulling a remote branch, merging it or rebasing onto it,
+// branching or tagging from it, deleting a ref and copying its name. Writes
+// are disabled while one runs or host work does.
+func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
+	can := v.CanSync()
+	args := map[string]any{"Name": t.name, "Current": v.checkedOutName()}
+	local := t.group == "branches"
+	checkout, label := v.checkoutTarget(t), v.text("ref_checkout")
+	if checkout.name != t.name {
+		label = v.textf("ref_checkout_branch", map[string]any{"Name": checkout.name})
+	}
+	if m.Item(label).Disabled(!can || !v.canCheckout(checkout)).Chosen() {
+		v.openRefAction(opCheckout, checkout)
+	}
+	if m.Item(v.text("ref_worktree")).Disabled(!can || local && v.checkedOut(t.name)).Chosen() {
+		v.openRefAction(OpWorktree, t)
+	}
+	if t.group == "remotes" {
+		m.Separator()
+		if m.Item(v.textf("ref_pull", args)).Disabled(!v.CanPull()).Chosen() {
+			v.openPull(t.name)
+		}
+	}
+	m.Separator()
+	// Integrating the checked out branch or commit with itself does nothing.
+	own := local && t.name == v.tracking.Branch || t.hash == v.repo.head
+	if m.Item(v.textf("ref_merge", args)).Disabled(!can || own).Chosen() {
+		v.openRefAction(opMerge, t)
+	}
+	if m.Item(v.textf("ref_rebase", args)).Disabled(!can || own || v.tracking.Branch == "").Chosen() {
+		v.openRefAction(opRebase, t)
+	}
+	m.Separator()
+	if m.Item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
+		v.openRefAction(opBranch, t)
+	}
+	if m.Item(v.text("ref_new_tag")).Disabled(!can).Chosen() {
+		v.openRefAction(opTag, t)
+	}
+	if n != nil {
+		m.Separator()
+		v.refDeleteItem(m, t.group, n)
+	}
+	m.Separator()
+	copyLabel, copied := v.text("ref_copy_"+t.group), t.name
+	if t.group == "commit" {
+		copied = t.hash
+	}
+	if m.Item(copyLabel).Chosen() {
+		c.WriteClipboard(copied)
+	}
+}
+
+// checkoutTarget is what checking out t switches to: the local branch
+// tracking a remote branch when there is one, else t.
+func (v *View) checkoutTarget(t refTarget) refTarget {
+	if t.group != "remotes" {
+		return t
+	}
+	for _, n := range refLeaves(v.repo.refTrees.branches) {
+		if n.upstream.Remote != "" && n.upstream.Remote+"/"+n.upstream.Branch == t.name {
+			return nodeTarget("branches", n)
+		}
+	}
+	return t
+}
+
+// canCheckout reports whether checking out t changes the worktree: a local
+// branch no worktree has checked out, or a tag or commit other than the
+// detached HEAD's.
+func (v *View) canCheckout(t refTarget) bool {
+	switch t.group {
+	case "branches":
+		return !v.checkedOut(t.name)
+	case "remotes":
+		return true
+	}
+	return v.tracking.Branch != "" || t.hash != v.repo.head
+}
+
+// openCheckout asks before checking out t, as a double click does; it does
+// nothing when that would change nothing or a write may not start.
+func (v *View) openCheckout(t refTarget) {
+	if t = v.checkoutTarget(t); v.CanSync() && v.canCheckout(t) {
+		v.openRefAction(opCheckout, t)
+	}
+}
+
+// switchBranch checks out a local branch in the worktree.
+func (v *View) switchBranch(branch string) {
+	v.Run(OpSwitch, v.text("switch_failed"), func(git Git, path string) error {
+		return git.Checkout(path, CheckoutOptions{Branch: branch})
+	})
+}
+
+// openRefAction opens the dialog of op on t, suggesting a new branch named
+// after a remote branch and a worktree beside the main one named after its
+// branch.
+func (v *View) openRefAction(op string, t refTarget) {
+	a := refAction{open: true, op: op, target: t, checkout: true}
+	if t.group == "remotes" && (op == opCheckout || op == OpWorktree) {
+		if remote := refRemote(v.repo.github, t.name); remote != "" {
+			a.name = t.name[len(remote)+1:]
+		} else {
+			_, a.name, _ = strings.Cut(t.name, "/")
+		}
+	}
+	if op == OpWorktree {
+		a.suggested = v.suggestedPath(t, a.name)
+		a.path = a.suggested
+	}
+	v.action = a
+	v.invalidate()
+}
+
+// suggestedPath is a directory for a new worktree checking out t, or a new
+// branch name at it, beside the main worktree and named after both.
+func (v *View) suggestedPath(t refTarget, name string) string {
+	main := v.path
+	if len(v.repo.checkouts) > 0 {
+		main = v.repo.checkouts[0].Path
+	}
+	if t.group == "branches" || name == "" {
+		name = t.name
+	}
+	name = strings.Map(func(r rune) rune {
+		if strings.ContainsRune(`/\: `, r) {
+			return '-'
+		}
+		return r
+	}, name)
+	return filepath.Join(filepath.Dir(main), filepath.Base(main)+"-"+name)
+}
+
+// actionReady reports whether the dialog's write can run as filled in,
+// with the problem to show when a name is taken.
+func (v *View) actionReady() (ready bool, problem string) {
+	a := v.action
+	name := strings.TrimSpace(a.name)
+	switch {
+	case (a.op == opBranch || a.op == opTag) && name == "", a.op == OpWorktree && strings.TrimSpace(a.path) == "":
+		return false, ""
+	case a.op == opTag && hasRef(v.repo.refTrees.tags, name):
+		return false, v.textf("ref_tag_exists", map[string]any{"Name": name})
+	case a.op != opTag && name != "" && hasRef(v.repo.refTrees.branches, name):
+		return false, v.textf("ref_branch_exists", map[string]any{"Name": name})
+	}
+	return true, ""
+}
+
+// refLabelWidth is the width of the refs dialogs' labels in theme spaces.
+const refLabelWidth = 34
+
+// refActionDialog asks for what a refs menu's write needs before running
+// it.
+func (v *View) refActionDialog(c *ui.Context) {
+	a := &v.action
+	args := map[string]any{"Name": a.target.name, "Current": v.checkedOutName()}
+	// A checkout's text depends on what it checks out.
+	key := "ref_" + a.op
+	if a.op == opCheckout {
+		key += "_" + a.target.group
+	}
+	title := v.textf(key+"_title", args)
+	components.Dialog(c, &a.open, components.DialogOptions{Label: title, Inset: v.dialogInset(c)}, func(panel ui.Element) {
+		t := c.Theme()
+		panel.Width(t.Space(110))
+		ui.Column(c).FillWidth().Gap(t.Space(1)).Children(func() {
+			components.Text(c, title).Bold().FontSize(t.Rem(1.1)).Wrap().FillWidth()
+			components.Text(c, v.textf(key+"_description", args)).Wrap().FillWidth().TextColor(t.TextMuted)
+		})
+		field := func(label string, value *string, placeholder string, focus bool) {
+			formField(c, refLabelWidth, label, false, func() {
+				box := components.TextBox(c, value, components.TextBoxOptions{}).FillWidth().Label(label).Placeholder(placeholder)
+				if focus {
+					box.AutoFocus()
+				}
+			})
+		}
+		switch a.op {
+		case opCheckout:
+			formField(c, refLabelWidth, v.text("ref_checkout_target_"+a.target.group), false, func() { v.targetChoice(c, a.target) })
+			if a.target.group == "remotes" {
+				field(v.text("ref_branch_name"), &a.name, v.text("ref_detached"), true)
+			}
+			formField(c, refLabelWidth, v.text("ref_local_changes"), false, func() {
+				ui.Column(c).Gap(t.Space(2)).Children(func() {
+					components.Radio(c, &a.changes, KeepChanges, v.text("ref_keep_changes"))
+					components.Radio(c, &a.changes, StashChanges, v.text("ref_stash_changes"))
+					components.Radio(c, &a.changes, DiscardChanges, v.text("ref_discard_changes"))
+				})
+			})
+		case OpWorktree:
+			before := a.name
+			if a.target.group == "branches" {
+				formField(c, refLabelWidth, v.text("sync_branch"), false, func() { branchChoice(c, a.target.name) })
+			} else {
+				field(v.text("ref_branch_name"), &a.name, v.text("ref_detached"), true)
+			}
+			// The suggested directory follows the name until edited.
+			if a.name != before && a.path == a.suggested {
+				a.suggested = v.suggestedPath(a.target, a.name)
+				a.path = a.suggested
+			}
+			field(v.text("ref_path"), &a.path, "", a.target.group == "branches")
+		case opBranch:
+			field(v.text("ref_branch_name"), &a.name, "", true)
+			formOption(c, refLabelWidth, &a.checkout, v.text("ref_checkout_created"))
+		case opTag:
+			field(v.text("ref_tag_name"), &a.name, "", true)
+			field(v.text("ref_tag_message"), &a.message, v.text("ref_tag_lightweight"), false)
+		case opMerge:
+			formOption(c, refLabelWidth, &a.options.NoFastForward, v.text("ref_no_ff"))
+			formOption(c, refLabelWidth, &a.options.Stash, v.text("pull_stash"))
+		case opRebase:
+			formOption(c, refLabelWidth, &a.options.Stash, v.text("pull_stash"))
+		}
+		ready, problem := v.actionReady()
+		if problem != "" {
+			components.Text(c, problem).Wrap().FillWidth().TextColor(t.Danger)
+		}
+		ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(t.Space(2)).Children(func() {
+			if components.Button(c, v.text("cancel"), components.ButtonSecondary).Clicked() {
+				a.open = false
+			}
+			confirm := components.Button(c, v.text("ref_"+a.op+"_confirm"), components.ButtonPrimary).Disabled(!ready || !v.CanSync())
+			if a.op == opMerge || a.op == opRebase || a.op == opCheckout && a.target.group != "remotes" {
+				confirm.AutoFocus()
+			}
+			if confirm.Clicked() {
+				a.open = false
+				v.runRefAction()
+			}
+		})
+	})
+}
+
+// runRefAction runs the dialog's write.
+func (v *View) runRefAction() {
+	a := v.action
+	t, name := a.target, strings.TrimSpace(a.name)
+	checkout := CheckoutOptions{Branch: name, Start: t.rev(), Track: t.group == "remotes" && name != ""}
+	switch a.op {
+	case opCheckout:
+		op := opCheckout
+		switch t.group {
+		case "branches":
+			op, checkout = OpSwitch, CheckoutOptions{Branch: t.name}
+		case "tags", "commit":
+			checkout = CheckoutOptions{Start: t.rev()}
+		}
+		checkout.Changes = a.changes
+		v.Run(op, v.text("ref_checkout_failed"), func(git Git, path string) error { return git.Checkout(path, checkout) })
+	case OpWorktree:
+		if t.group == "branches" {
+			checkout = CheckoutOptions{Branch: t.name}
+		}
+		dir := strings.TrimSpace(a.path)
+		v.Run(OpWorktree, v.text("ref_worktree_failed"), func(git Git, path string) error { return git.AddWorktree(path, dir, checkout) })
+	case opMerge:
+		v.Run(opMerge, v.text("ref_merge_failed"), func(git Git, path string) error { return git.Merge(path, t.rev(), a.options) })
+	case opRebase:
+		v.Run(opRebase, v.text("ref_rebase_failed"), func(git Git, path string) error { return git.Rebase(path, t.rev(), a.options) })
+	case opBranch:
+		v.Run(opBranch, v.text("ref_branch_failed"), func(git Git, path string) error {
+			if a.checkout {
+				return git.Checkout(path, CheckoutOptions{Branch: name, Start: t.rev()})
+			}
+			return git.CreateBranch(path, name, t.rev())
+		})
+	case opTag:
+		v.Run(opTag, v.text("ref_tag_failed"), func(git Git, path string) error { return git.CreateTag(path, name, t.rev(), a.message) })
+	}
+}
+
+// targetChoice shows what a dialog acts on: a commit's short hash and
+// subject, or a ref's name with its group's mark.
+func (v *View) targetChoice(c *ui.Context, t refTarget) {
+	th := c.Theme()
+	icon := lucide.GitBranch
+	switch t.group {
+	case "commit":
+		ui.Row(c).MinWidth(0).AlignItems(ui.Center).Gap(th.Space(2)).Children(func() {
+			components.Icon(c, lucide.GitCommitVertical).Size(14, 14).Shrink(0).TextColor(th.TextMuted)
+			components.Text(c, t.name).Shrink(0).TextColor(th.TextMuted).SingleLine()
+			components.Text(c, t.subject).MinWidth(0).SingleLine().Ellipsis("…")
+		})
+		return
+	case "remotes":
+		icon = remoteIcon(v.repo.github, refRemote(v.repo.github, t.name))
+	case "tags":
+		icon = lucide.Tag
+	}
+	syncChoice(c, icon, t.name)
+}

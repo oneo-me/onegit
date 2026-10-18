@@ -31,10 +31,7 @@ func (v *View) branchMenu(m *ui.Menu) {
 	branches := v.LocalBranches()
 	for _, branch := range branches {
 		if m.Item(branch).Checked(branch == current).Chosen() && branch != current {
-			v.Run(OpSwitch, v.text("switch_failed"), func(git Git, path string) error {
-				_, err := git.Run(path, "switch", branch)
-				return err
-			})
+			v.switchBranch(branch)
 		}
 	}
 	if len(branches) == 0 {
