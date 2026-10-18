@@ -24,7 +24,7 @@ Onegit is not released yet. Build it from source as described in [Development](#
 1. Open Settings with `⌘,` and choose the parent directory that holds your projects.
 2. Wait for the background scan to add repositories to the sidebar.
 3. Select a project, then pick a worktree tab.
-4. Choose Current changes, when there are any, or All commits in the project sidebar.
+4. Choose Current changes or All commits in the project sidebar.
 
 ## Development
 

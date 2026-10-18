@@ -151,7 +151,8 @@ type View struct {
 	groups    map[string]*bool
 	refFilter string
 	// seekChanges shows the worktree's changes once read when there are
-	// some, after the view opened or moved to another worktree.
+	// some, and otherwise the history, after the view opened or moved to
+	// another worktree, unless the user chose a section first.
 	seekChanges bool
 
 	repo repositoryState
@@ -333,33 +334,29 @@ func (v *View) targetChanged() {
 }
 
 // hasCurrentChanges reports whether the worktree has uncommitted changes, or
-// reading them failed, so the refs pane offers them.
+// reading them failed.
 func (v *View) hasCurrentChanges() bool {
 	p := v.current
 	return v.path != "" && p.loaded && (p.err != "" || len(p.changes.Files) > 0)
 }
 
-// showFoundChanges shows the worktree's changes once read when there are
-// some after the view opened or moved, reporting whether it did.
-func (v *View) showFoundChanges() bool {
+// seekSection shows the worktree's changes once first read after the view
+// opened or moved when it found some, and otherwise the history,
+// reporting whether the section changed. Later reads leave the section to
+// the user, so emptied changes stay shown.
+func (v *View) seekSection() bool {
 	if !v.seekChanges {
 		return false
 	}
 	v.seekChanges = false
-	if v.section == sectionChanges || v.current.err != "" || len(v.current.changes.Files) == 0 {
+	want := sectionCommits
+	if v.current.err == "" && len(v.current.changes.Files) > 0 {
+		want = sectionChanges
+	}
+	if v.section == want {
 		return false
 	}
-	v.section, v.ref = sectionChanges, ""
-	return true
-}
-
-// leaveEmptyChanges shows the history instead of the worktree's changes
-// when there are none, reporting whether it did.
-func (v *View) leaveEmptyChanges() bool {
-	if v.section != sectionChanges || v.hasCurrentChanges() {
-		return false
-	}
-	v.section, v.ref = sectionCommits, ""
+	v.section, v.ref = want, ""
 	return true
 }
 
@@ -573,12 +570,10 @@ func (v *View) refsPane(c *ui.Context) {
 	t := c.Theme()
 	components.ScrollView(c, components.ScrollViewOptions{}).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Shrink(0).Gap(1).Padding(t.Space(1.5), t.Space(2)).Children(func() {
-			if v.hasCurrentChanges() {
-				if sidebarItem(c, v.text("current_changes"), lucide.FileDiff(), v.section == sectionChanges, lineCounts(v.current.changes.Files)).Clicked() {
-					v.section = sectionChanges
-					v.loadChanges()
-					v.targetChanged()
-				}
+			if sidebarItem(c, v.text("current_changes"), lucide.FileDiff(), v.section == sectionChanges, lineCounts(v.current.changes.Files)).Clicked() {
+				v.section, v.seekChanges = sectionChanges, false
+				v.loadChanges()
+				v.targetChanged()
 			}
 			var count func(*ui.Context, float32)
 			if n := v.repo.count; n > 0 {
@@ -587,7 +582,7 @@ func (v *View) refsPane(c *ui.Context) {
 				}
 			}
 			if sidebarItem(c, v.text("all_commits"), lucide.GitGraph(), v.section == sectionCommits && v.ref == "", count).Clicked() {
-				v.section, v.ref = sectionCommits, ""
+				v.section, v.ref, v.seekChanges = sectionCommits, "", false
 				v.targetChanged()
 			}
 			trees, query := v.repo.refTrees, strings.TrimSpace(v.refFilter)

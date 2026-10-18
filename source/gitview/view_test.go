@@ -132,8 +132,8 @@ func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 		t.Fatalf("view: %v", view.Texts())
 	}
 
-	// A host action runs one at a time and rereads the view; the worktree
-	// then has nothing to show, so the history returns.
+	// A host action runs one at a time and rereads the view; the emptied
+	// changes stay shown.
 	if !v.CanSync() {
 		t.Fatal("cannot sync")
 	}
@@ -149,8 +149,28 @@ func TestViewOffersChangesAndRunsHostActions(t *testing.T) {
 		t.Fatalf("written: %v", written)
 	}
 	pump(func() bool { return v.current.loaded && !v.current.loading })
-	if v.section != sectionCommits || v.hasCurrentChanges() {
+	if v.section != sectionChanges || v.hasCurrentChanges() {
 		t.Fatalf("after stash: section %v, files %v", v.section, v.current.changes.Files)
+	}
+	view.Frame()
+	if !view.HasText("当前更改") || !view.HasText("没有更改") {
+		t.Fatalf("after stash: %v", view.Texts())
+	}
+
+	// A clean worktree opens on the history and still offers its changes.
+	v.SetPath(t.TempDir())
+	v.SetPath(repo)
+	pump(func() bool { return v.current.loaded && !v.current.loading })
+	view.Frame()
+	if v.section != sectionCommits || !view.HasText("当前更改") {
+		t.Fatalf("clean: section %v, %v", v.section, view.Texts())
+	}
+	if err := view.Click("当前更改"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return v.current.loaded && !v.current.loading })
+	if v.section != sectionChanges {
+		t.Fatalf("chosen: section %v", v.section)
 	}
 
 	// Collapsing a ref group is remembered.

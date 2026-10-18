@@ -113,7 +113,7 @@ func (v *View) loadFiles(p *filePane, key string, read func(Git) (Changes, error
 			}
 			arrangeFiles(p)
 			v.loadFile(p)
-			if p == v.current && (v.showFoundChanges() || v.leaveEmptyChanges()) {
+			if p == v.current && v.seekSection() {
 				v.targetChanged()
 			}
 			if again := p.again; again != nil {
