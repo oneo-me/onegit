@@ -117,28 +117,43 @@ func (s *settings) rememberWorktreeSelection() {
 	s.saveSidebarState()
 }
 
-// worktreeTabs builds the tab strip above the repository toolbar. A repository
-// with a single main worktree shows no tabs.
+// worktreeTabs builds the segmented worktree tabs in the title bar. They
+// name the project in place of a title, so a repository with only its main
+// worktree, or whose worktrees are still loading, shows one tab.
 func (s *settings) worktreeTabs(c *ui.Context) {
-	if len(s.overview.Worktrees) <= 1 {
+	project := s.selectedProject
+	if project == nil || !project.Repository {
 		return
 	}
-	labels := make([]string, len(s.overview.Worktrees))
-	for i, item := range s.overview.Worktrees {
-		labels[i] = worktreeLabel(item)
+	labels := []string{projectName(project.Path)}
+	if len(s.overview.Worktrees) > 0 {
+		labels = make([]string, len(s.overview.Worktrees))
+		for i, item := range s.overview.Worktrees {
+			labels[i] = worktreeLabel(item)
+		}
 	}
-	selected := s.overview.selectedIndex
-	parts := components.Tabs(c, &selected, components.TabsUnderline, labels...)
-	parts.List.Padding(8, 6, 6, 6)
-	if parts.List.Changed() {
-		s.selectWorktreeTab(selected)
-	}
+	selected := max(0, s.overview.selectedIndex)
+	// Many worktrees scroll rather than push the actions out of the title bar.
+	components.ScrollView(c, components.ScrollViewOptions{Axes: components.ScrollHorizontal}).
+		Shrink(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
+		parts := components.Tabs(c, &selected, components.TabsSegmented, labels...)
+		parts.List.AlignSelf(ui.Center).Shrink(0)
+		if parts.List.Changed() {
+			s.selectWorktreeTab(selected)
+		}
+	})
 }
 
+// worktreeLabel names a worktree after its directory; the main worktree's
+// directory is the project's name.
 func worktreeLabel(item worktree) string {
-	label := filepath.Base(item.Path)
+	return projectName(item.Path)
+}
+
+func projectName(path string) string {
+	label := filepath.Base(path)
 	if label == "" || label == "." || label == string(filepath.Separator) {
-		label = item.Path
+		label = path
 	}
 	return label
 }

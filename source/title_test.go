@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/egoist/mygo/ui"
@@ -29,6 +30,15 @@ func TestRepositoryTitleActions(t *testing.T) {
 		if r.Y < 0 || r.Y+r.H > 52 {
 			t.Fatalf("%s outside the title bar: %+v", label, r)
 		}
+	}
+
+	// Many worktrees scroll within the title bar and leave the actions in place.
+	for i := range 30 {
+		s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "worktree-"+strconv.Itoa(i))})
+	}
+	tt.Frame()
+	if r, ok := tt.Find("分支操作"); !ok || r.X+r.W > 800 {
+		t.Fatalf("worktree tabs pushed the actions out: %+v", r)
 	}
 
 	page := ui.NewTester(s.welcome, 800, 600)

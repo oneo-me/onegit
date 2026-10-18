@@ -1,16 +1,16 @@
 # Repository page
 
-The repository page shows one selected project. Its actions sit in the window's title bar beside the project's name, as in Neorio, rather than in a strip of their own. Below the title bar come worktree tabs and the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar and the tabs; the view owns everything below them.
+The repository page shows one selected project. The window's title bar holds its worktree tabs and actions, as in Neorio, rather than a title or a strip of their own. Below it comes the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar; the view owns everything below it.
 
 ## Worktree tabs
 
-The tabs list every worktree Git reports for the repository, including worktrees outside the parent directory. The main worktree comes first, as Git lists it. The tab strip is hidden when there is only one worktree.
+The segmented tabs list every worktree Git reports for the repository, including worktrees outside the parent directory. The main worktree comes first, as Git lists it, named after its directory: the project's name. The tabs replace the title, so a single worktree, or one still loading, still shows one tab; many tabs scroll before the actions.
 
 Switching tabs only changes the path the view shows. Switching projects or worktrees, or closing the window, drops in-flight reads and discards their results.
 
 ## Title bar actions
 
-The title bar's icon buttons are only an entry point; every action runs through the view.
+The title bar's round toolbar buttons, raised like the chosen tab, are only an entry point; every action runs through the view.
 
 - Fetch, Pull and Push open the view's dialogs; Pull and Push show the commits a pull would bring or a push would send.
 - Stash and the branch menu run `git stash push --include-untracked` and `git switch` through the view's `Run`.

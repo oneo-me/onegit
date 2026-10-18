@@ -116,17 +116,22 @@ func TestProjectWorktreeContent(t *testing.T) {
 	s := &settings{systemLanguage: "zh-CN", selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
 		{Path: "/repo", Branch: "main", Main: true}, {Path: "/outside/feature", Branch: "feature"},
 	}}}
-	tt := ui.NewTester(s.welcome, 800, 600)
+	tt := ui.NewTester(s.repositoryTitle, 800, 52)
 	tt.Frame()
 	for _, label := range []string{"repo", "feature"} {
 		if !tt.HasText(label) {
 			t.Fatalf("missing %q", label)
 		}
 	}
+	page := ui.NewTester(s.welcome, 800, 600)
+	page.Frame()
+	if page.HasText("feature") {
+		t.Fatal("worktree tabs remain below the title bar")
+	}
 }
 
 func TestWorktreeSelection(t *testing.T) {
-	s := &settings{overview: projectOverview{Worktrees: []worktree{
+	s := &settings{selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
 		{Path: "/repo", Main: true}, {Path: "/outside/feature"},
 	}}}
 	s.repo.dispatch = func(func()) {}
@@ -189,8 +194,7 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 		finish(s)
 		view := ui.NewTester(s.worktreeTabs, 800, 600)
 		view.Frame()
-		// A repository with a single worktree shows no tab strip; the only entry
-		// is already selected.
+		// A repository's only worktree is already selected.
 		if _, ok := view.Find(label); ok {
 			if err := view.Click(label); err != nil {
 				t.Fatal(err)

@@ -107,7 +107,6 @@ func (s *settings) welcome(c *ui.Context) {
 
 func (s *settings) repositoryPage(c *ui.Context) {
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
-		s.worktreeTabs(c)
 		if s.overview.Loading {
 			s.repositoryMessage(c, s.text("正在读取 worktree…"))
 			return
@@ -130,8 +129,9 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 }
 
 // repositoryTitle fills the window's title bar, as Neorio does, instead of
-// adding a toolbar strip: the project's name, then the view's fetch, pull and
-// push with their commit counts, a stash and the branch menu. Every action
+// adding a toolbar strip: the worktree tabs, which name the project, then the
+// view's fetch, pull and push with their commit counts, a stash and the branch
+// menu. Every action
 // runs through the view, which reports failures as toasts and rereads the
 // worktree.
 func (s *settings) repositoryTitle(c *ui.Context) {
@@ -144,12 +144,13 @@ func (s *settings) repositoryTitle(c *ui.Context) {
 	tr := view.Tracking()
 	size := max(32, c.Theme().Rem(2))
 	ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(8).Margin(0, titleTrailing(c, size), 0, 0).Children(func() {
-		components.Text(c, filepath.Base(project.Path)).Bold().Grow(1).MinWidth(0).SingleLine().Ellipsis("…")
-		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(2).Children(func() {
-			s.titleButton(c, gitview.OpFetch, lucide.Download, s.text("获取"), size, 0, !view.CanSync()).OnClick(view.OpenFetch)
-			s.titleButton(c, gitview.OpPull, lucide.ArrowDownToLine, s.text("拉取"), size, tr.Behind, !view.CanPull()).OnClick(view.OpenPull)
-			s.titleButton(c, gitview.OpPush, lucide.ArrowUpFromLine, s.text("推送"), size, tr.Ahead, !view.CanSync()).OnClick(view.OpenPush)
-			s.titleButton(c, "stash", lucide.Archive, s.text("贮藏"), size, 0, !view.CanSync()).OnClick(func() {
+		s.worktreeTabs(c)
+		ui.Spacer(c)
+		ui.Row(c).Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
+			onClick(s.titleButton(c, gitview.OpFetch, lucide.Download, s.text("获取"), size, 0, !view.CanSync()), view.OpenFetch)
+			onClick(s.titleButton(c, gitview.OpPull, lucide.ArrowDownToLine, s.text("拉取"), size, tr.Behind, !view.CanPull()), view.OpenPull)
+			onClick(s.titleButton(c, gitview.OpPush, lucide.ArrowUpFromLine, s.text("推送"), size, tr.Ahead, !view.CanSync()), view.OpenPush)
+			onClick(s.titleButton(c, "stash", lucide.Archive, s.text("贮藏"), size, 0, !view.CanSync()), func() {
 				view.Run("stash", s.text("贮藏失败"), func(git gitview.Git, path string) error {
 					_, err := git.Run(path, "stash", "push", "--include-untracked")
 					return err
@@ -180,13 +181,14 @@ func (s *settings) branchMenu(m *ui.Menu) {
 	}
 }
 
-// titleButton is a square ghost button in the title bar, matching Neorio's.
+// titleButton is a round toolbar button in the title bar, raised like the
+// chosen worktree tab.
 // A running action shows a spinner, and count, when set, the commits it
 // moves.
-func (s *settings) titleButton(c *ui.Context, op string, icon func() *ui.SVG, label string, size float32, count int, disabled bool) titleAction {
+func (s *settings) titleButton(c *ui.Context, op string, icon func() *ui.SVG, label string, size float32, count int, disabled bool) ui.Element {
 	t := c.Theme()
 	view := s.gitView()
-	b := components.Button(c, "", components.ButtonGhost).Key("title-"+op).Label(label).Size(size, size).
+	b := components.Button(c, "", components.ButtonToolbar).Key("title-"+op).Label(label).Size(size, size).
 		Padding(0).Shrink(0).Justify(ui.Center).AlignItems(ui.Center)
 	if disabled {
 		b.Disabled(true)
@@ -209,14 +211,12 @@ func (s *settings) titleButton(c *ui.Context, op string, icon func() *ui.SVG, la
 		tip = label
 	}
 	components.Tooltip(c, b, tip)
-	return titleAction{b}
+	return b
 }
 
-// titleAction runs its action when its button is clicked.
-type titleAction struct{ ui.Element }
-
-func (a titleAction) OnClick(action func()) {
-	if !a.IsDisabled() && a.Clicked() {
+// onClick runs action when the enabled button b is clicked.
+func onClick(b ui.Element, action func()) {
+	if !b.IsDisabled() && b.Clicked() {
 		action()
 	}
 }
