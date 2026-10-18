@@ -165,6 +165,41 @@ func TestStashSavesChangesWithOrWithoutUntrackedFiles(t *testing.T) {
 	}
 }
 
+func TestApplyStashDropsItUnlessKeptOrConflicting(t *testing.T) {
+	t.Parallel()
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	repo := testRepo(t)
+	save := func(content, message string) string {
+		t.Helper()
+		os.WriteFile(filepath.Join(repo, "a.txt"), []byte(content), 0644)
+		if err := g.SaveStash(repo, message, true); err != nil {
+			t.Fatal(err)
+		}
+		stashes, _ := g.Stashes(repo)
+		return stashes[0].Hash
+	}
+	older, newer := save("older\n", "older"), save("newer\n", "newer")
+	read := func() string { data, _ := os.ReadFile(filepath.Join(repo, "a.txt")); return string(data) }
+	count := func() int { stashes, _ := g.Stashes(repo); return len(stashes) }
+
+	// Kept, the stash stays listed.
+	if err := g.ApplyStash(repo, newer, false); err != nil || read() != "newer\n" || count() != 2 {
+		t.Fatalf("kept: %q, %d stashes, %v", read(), count(), err)
+	}
+	// A conflict keeps it even when asked to delete it.
+	if err := g.ApplyStash(repo, older, true); err == nil || count() != 2 {
+		t.Fatalf("conflict: %d stashes, %v", count(), err)
+	}
+	git(t, repo, "checkout", "--", "a.txt")
+	// Applied cleanly, it is deleted by its hash, not its position.
+	if err := g.ApplyStash(repo, older, true); err != nil || read() != "older\n" {
+		t.Fatalf("applied: %q, %v", read(), err)
+	}
+	if stashes, _ := g.Stashes(repo); len(stashes) != 1 || stashes[0].Hash != newer {
+		t.Fatalf("left: %+v", stashes)
+	}
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

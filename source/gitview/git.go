@@ -1158,6 +1158,27 @@ func (g Git) SaveStash(path, message string, untracked bool) error {
 	return nil
 }
 
+// ApplyStash applies the stash hash to the worktree containing path, then
+// drops it with drop unless applying failed, such as on a conflict.
+func (g Git) ApplyStash(path, hash string, drop bool) error {
+	if _, err := g.Run(path, "stash", "apply", "--quiet", hash); err != nil || !drop {
+		return err
+	}
+	// Dropping takes the stash's reflog name, which shifts as others come
+	// and go.
+	stashes, err := g.Stashes(path)
+	if err != nil {
+		return err
+	}
+	for _, s := range stashes {
+		if s.Hash == hash {
+			_, err = g.Run(path, "stash", "drop", "--quiet", s.Name)
+			return err
+		}
+	}
+	return nil
+}
+
 // StashChanges lists the files a stash changes since the commit it was
 // saved on, with its untracked files as additions, sorted by path. It runs
 // in the repository containing path.

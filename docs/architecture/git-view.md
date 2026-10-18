@@ -5,13 +5,13 @@
 ## What it shows
 
 - **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included.
-- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below. Writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog.
+- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below. Writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; double-clicking a stash opens one applying it.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or selected lines stage or unstage. Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
 - **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. A commit box below the lists commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
 - **All commits.** A graph of every shown ref, the checked out commit and host entries. Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, Stash, and a menu switching to a shown local branch.
-- **Dialogs.** Fetch, pull, push and stash dialogs, ref deletion and the menus' writes. A stash takes an optional message and includes untracked files unless unchecked. Fetch updates every remote, or with its switch off one remote branch.
+- **Dialogs.** Fetch, pull, push and stash dialogs, ref deletion and the menus' writes. A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed. Fetch updates every remote, or with its switch off one remote branch.
 
 | Menu item | Git |
 | --- | --- |

@@ -199,12 +199,27 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 		}
 	}
 
-	// A stash that is gone leaves for the history.
-	git(t, repo, "stash", "pop", "-q")
-	v.Reload()
-	pump(func() bool { return !v.Loading() && len(v.repo.stashes) == 0 })
+	// Double-clicking the stash asks to apply it, deleting it by default;
+	// once gone, it leaves for the history.
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("On main: my work"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if !v.applyStash.open || !view.HasText("应用后删除贮藏") || !view.HasText("stash@{0}") {
+		t.Fatalf("apply dialog: %v", view.Texts())
+	}
+	if err := view.Click("应用"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return v.Syncing() == "" && !v.Loading() && len(v.repo.stashes) == 0 })
 	if v.section != sectionCommits {
-		t.Fatalf("popped: section %v", v.section)
+		t.Fatalf("applied: section %v", v.section)
+	}
+	if data, _ := os.ReadFile(filepath.Join(repo, "new.txt")); string(data) != "new\n" {
+		t.Fatalf("applied: %q", data)
 	}
 	git(t, repo, "stash", "push", "-q", "--include-untracked")
 

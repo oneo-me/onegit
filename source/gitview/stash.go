@@ -86,6 +86,67 @@ func (v *View) saveStash() {
 	})
 }
 
+// opApplyStash is the Git write applying a stash.
+const opApplyStash = "apply-stash"
+
+// applyStash is the dialog applying stash to the worktree.
+type applyStash struct {
+	open  bool
+	stash Stash
+}
+
+// openApplyStash asks before applying s, unless a write may not start.
+func (v *View) openApplyStash(s Stash) {
+	if v.CanSync() {
+		v.applyStash = applyStash{open: true, stash: s}
+		v.invalidate()
+	}
+}
+
+// applyStashDialog applies a stash to the worktree, then deletes it unless
+// the user keeps it.
+func (v *View) applyStashDialog(c *ui.Context) {
+	d := &v.applyStash
+	title := v.text("stash_apply_title")
+	components.Dialog(c, &d.open, components.DialogOptions{Label: title, Inset: v.dialogInset(c)}, func(panel ui.Element) {
+		t := c.Theme()
+		panel.Width(t.Space(110))
+		ui.Column(c).FillWidth().Gap(t.Space(1)).Children(func() {
+			components.Text(c, title).Bold().FontSize(t.Rem(1.1))
+			components.Text(c, v.text("stash_apply_description")).Wrap().FillWidth().TextColor(t.TextMuted)
+		})
+		syncField(c, v.text("stash_apply_stash"), false, func() {
+			ui.Row(c).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(2)).Children(func() {
+				components.Icon(c, lucide.Archive).Size(14, 14).Shrink(0).TextColor(t.TextMuted)
+				components.Text(c, d.stash.Name).Shrink(0).TextColor(t.TextMuted).SingleLine()
+				components.Text(c, d.stash.Message).MinWidth(0).SingleLine().Ellipsis("…")
+			})
+		})
+		drop := !v.state.StashKeepApplied
+		ui.Column(c).FillWidth().Gap(t.Space(1)).Padding(0, 0, 0, t.Space(syncLabelWidth+3)).Children(func() {
+			components.Checkbox(c, &drop, v.text("stash_apply_drop"))
+			components.Text(c, v.text("stash_apply_drop_hint")).FontSize(12).Wrap().FillWidth().TextColor(t.TextMuted)
+		})
+		if drop == v.state.StashKeepApplied {
+			v.state.StashKeepApplied = !drop
+			v.saveState()
+		}
+		ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(t.Space(2)).Children(func() {
+			if components.Button(c, v.text("cancel"), components.ButtonSecondary).Clicked() {
+				d.open = false
+			}
+			apply := components.Button(c, v.text("stash_apply"), components.ButtonPrimary).Disabled(!v.CanSync()).AutoFocus()
+			if apply.Clicked() {
+				d.open = false
+				hash, drop := d.stash.Hash, !v.state.StashKeepApplied
+				v.syncRepository(opApplyStash, v.text("stash_apply_failed"), func(git Git, path string) error {
+					return git.ApplyStash(path, hash, drop)
+				})
+			}
+		})
+	})
+}
+
 // filterStashes keeps the stashes whose message contains query, ignoring
 // case. An empty query keeps every stash.
 func filterStashes(stashes []Stash, query string) []Stash {
@@ -102,7 +163,8 @@ func filterStashes(stashes []Stash, query string) []Stash {
 	return kept
 }
 
-// stashRows lists stashes by message; choosing one shows its files.
+// stashRows lists stashes by message; choosing one shows its files and a
+// double click offers to apply it.
 func (v *View) stashRows(c *ui.Context, stashes []Stash) {
 	for _, s := range stashes {
 		ui.Column(c).Key("stash-" + s.Hash).FillWidth().Shrink(0).Children(func() {
@@ -110,6 +172,9 @@ func (v *View) stashRows(c *ui.Context, stashes []Stash) {
 			components.Tooltip(c, row, s.Name+"  "+s.Date.Local().Format("2006-01-02 15:04"))
 			if row.Clicked() {
 				v.showStash(s.Hash)
+			}
+			if row.DoubleClicked() {
+				v.openApplyStash(s)
 			}
 		})
 	}

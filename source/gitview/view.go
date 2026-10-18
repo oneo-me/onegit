@@ -98,6 +98,8 @@ type State struct {
 	PushTags    bool `yaml:"pushTags,omitempty" json:"pushTags,omitempty"`
 	// StashTrackedOnly leaves untracked files out of a new stash.
 	StashTrackedOnly bool `yaml:"stashTrackedOnly,omitempty" json:"stashTrackedOnly,omitempty"`
+	// StashKeepApplied keeps a stash after applying it.
+	StashKeepApplied bool `yaml:"stashKeepApplied,omitempty" json:"stashKeepApplied,omitempty"`
 }
 
 // Entry is a row the host inserts into the history right above the commit
@@ -180,6 +182,7 @@ type View struct {
 	syncing            map[string]string
 	dialog             syncDialog
 	stashDialog        stashDialog
+	applyStash         applyStash
 	toast              *ui.Toast
 	// deletion and discarding confirm deleting a ref from the refs pane and
 	// discarding a worktree's changes; action asks for what another write
@@ -569,6 +572,7 @@ func (v *View) Layout(c *ui.Context) {
 	}
 	v.syncDialogView(c)
 	v.stashDialogView(c)
+	v.applyStashDialog(c)
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
 	v.refActionDialog(c)
