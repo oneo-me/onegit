@@ -24,6 +24,9 @@ const (
 // ErrDetached is a push that names no local branch.
 var ErrDetached = errors.New("no branch is checked out")
 
+// ErrNothingToStash is a stash of a worktree without changes to save.
+var ErrNothingToStash = errors.New("no local changes to save")
+
 // ErrNoRemote is a push that names no remote to send the branch to.
 var ErrNoRemote = errors.New("no remote to push the branch to")
 
@@ -422,6 +425,9 @@ type FileChange struct {
 	Added, Deleted int
 	// Area tells a worktree's staged changes from its unstaged ones.
 	Area Area
+	// Commit, when set, holds the file's new version instead of
+	// Changes.To, as for a stash's untracked files.
+	Commit string
 }
 
 // Area is where a worktree's change lies.
@@ -642,6 +648,10 @@ func (g Git) FileVersions(changes Changes, f FileChange) (before, after []byte, 
 	}
 	if f.Area == AreaStaged {
 		after, err = g.IndexFile(changes.Top, f.Path)
+		return before, after, err
+	}
+	if f.Commit != "" {
+		after, err = g.FileAt(changes.Top, f.Commit, f.Path)
 		return before, after, err
 	}
 	if changes.To != "" {
@@ -1041,4 +1051,82 @@ func (g Git) DeleteRemoteTag(path, remote, tag string) error {
 		return nil
 	}
 	return err
+}
+
+// Stash is an entry of a repository's stash list.
+type Stash struct {
+	// Hash is the stash's commit and Name its reflog name, as stash@{0}.
+	Hash, Name, Message string
+	Date                time.Time
+}
+
+// Stashes lists the stash of the repository containing path, newest first.
+func (g Git) Stashes(path string) ([]Stash, error) {
+	out, err := g.Run(path, "stash", "list", "--format=%H%x00%gd%x00%gs%x00%cI")
+	if err != nil {
+		return nil, err
+	}
+	var stashes []Stash
+	for line := range strings.Lines(out) {
+		fields := strings.Split(strings.TrimRight(line, "\n"), "\x00")
+		if len(fields) < 4 {
+			continue
+		}
+		date, _ := time.Parse(time.RFC3339, fields[3])
+		stashes = append(stashes, Stash{Hash: fields[0], Name: fields[1], Message: fields[2], Date: date})
+	}
+	return stashes, nil
+}
+
+// SaveStash stashes the changes of the worktree containing path with
+// message, untracked files too with untracked, failing with
+// ErrNothingToStash when it saved nothing.
+func (g Git) SaveStash(path, message string, untracked bool) error {
+	before, _ := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/stash")
+	args := []string{"stash", "push", "--quiet"}
+	if untracked {
+		args = append(args, "--include-untracked")
+	}
+	if message != "" {
+		args = append(args, "--message", message)
+	}
+	if _, err := g.Run(path, args...); err != nil {
+		return err
+	}
+	if after, _ := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/stash"); after == before {
+		return ErrNothingToStash
+	}
+	return nil
+}
+
+// StashChanges lists the files a stash changes since the commit it was
+// saved on, with its untracked files as additions, sorted by path. It runs
+// in the repository containing path.
+func (g Git) StashChanges(path, hash string) (Changes, error) {
+	top, err := g.Top(path)
+	if err != nil {
+		return Changes{}, err
+	}
+	from, err := g.Run(top, "rev-parse", "--verify", hash+"^1")
+	if err != nil {
+		return Changes{}, err
+	}
+	changes := Changes{Top: top, From: from, To: hash}
+	if changes.Files, err = g.diffFiles(top, "diff", from, hash); err != nil {
+		return Changes{}, err
+	}
+	// A stash saving untracked files keeps them in a root commit, its
+	// third parent.
+	if untracked, err := g.Run(top, "rev-parse", "--verify", "--quiet", hash+"^3"); err == nil && untracked != "" {
+		files, err := g.diffFiles(top, "diff-tree", "-r", "--root", "--no-commit-id", untracked)
+		if err != nil {
+			return Changes{}, err
+		}
+		for _, f := range files {
+			f.Commit = untracked
+			changes.Files = append(changes.Files, f)
+		}
+	}
+	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	return changes, nil
 }

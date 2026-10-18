@@ -2,8 +2,8 @@
 // worktree's uncommitted changes, the history and the branches, remote
 // branches and tags, beside the chosen section, either the changed files or
 // the revision graph with the selected commit's details. It also runs the
-// fetch, pull, push and ref deletions its host's toolbar and menus ask for,
-// with their dialogs.
+// fetch, pull, push, stash and ref deletions its host's toolbar and menus ask
+// for, with their dialogs.
 //
 // The host owns the window, the project list and the toolbar; the view owns
 // everything inside its area. Git runs off the UI thread and results return
@@ -82,7 +82,7 @@ type State struct {
 	RefsWidth float32 `yaml:"refsWidth,omitempty" json:"refsWidth,omitempty"`
 	TreeWidth float32 `yaml:"treeWidth,omitempty" json:"treeWidth,omitempty"`
 	// Groups holds the disclosure of the refs pane's groups by key:
-	// "branches", "remotes" and "tags".
+	// "branches", "remotes", "tags" and "stashes".
 	Groups map[string]bool `yaml:"groups,omitempty" json:"groups,omitempty"`
 	// DiffWrap wraps diff and file lines.
 	DiffWrap bool `yaml:"diffWrap,omitempty" json:"diffWrap,omitempty"`
@@ -93,6 +93,8 @@ type State struct {
 	PullRebase  bool `yaml:"pullRebase,omitempty" json:"pullRebase,omitempty"`
 	PullStash   bool `yaml:"pullStash,omitempty" json:"pullStash,omitempty"`
 	PushTags    bool `yaml:"pushTags,omitempty" json:"pushTags,omitempty"`
+	// StashTrackedOnly leaves untracked files out of a new stash.
+	StashTrackedOnly bool `yaml:"stashTrackedOnly,omitempty" json:"stashTrackedOnly,omitempty"`
 }
 
 // Entry is a row the host inserts into the history right above the commit
@@ -129,6 +131,8 @@ const (
 	sectionChanges section = iota
 	// sectionCommits shows the repository's history.
 	sectionCommits
+	// sectionStash lists the files a stash saved.
+	sectionStash
 )
 
 // View is the repository view of one worktree at a time.
@@ -161,6 +165,10 @@ type View struct {
 	current  *filePane
 	messages map[string]string
 	history  historyState
+	// stash is the hash of the stash chosen in sectionStash, whose files
+	// stashFiles lists.
+	stash      string
+	stashFiles *filePane
 	// tracking compares the worktree's branch with its upstream; syncing
 	// names the Git write running in each worktree, and toast reports the
 	// last one that failed; dialog chooses a fetch's, pull's or push's branches.
@@ -168,6 +176,7 @@ type View struct {
 	trackingGeneration uint64
 	syncing            map[string]string
 	dialog             syncDialog
+	stashDialog        stashDialog
 	toast              *ui.Toast
 	// deletion confirms deleting a ref from the refs pane.
 	deletion refDeletion
@@ -195,6 +204,7 @@ type repositoryState struct {
 	// head is the commit the worktree has checked out.
 	head      string
 	refTrees  refTrees
+	stashes   []Stash
 	checkouts []Checkout
 	// github maps each remote to whether it is hosted on GitHub.
 	github map[string]bool
@@ -216,6 +226,7 @@ func New(opts Options) *View {
 		v.avatars = newAvatarCache(opts.AvatarDir)
 	}
 	v.current = v.newFilePane(false)
+	v.stashFiles = v.newFilePane(false)
 	v.initHistory()
 	return v
 }
@@ -259,6 +270,7 @@ func (v *View) SetPath(path string) {
 	v.seekChanges = true
 	v.clearHistory()
 	v.ref = ""
+	v.clearStash()
 	v.tracking = Tracking{}
 	v.Reload()
 }
@@ -397,12 +409,16 @@ func (v *View) loadRepository() {
 	go func() {
 		var refs, hidden Refs
 		var checkouts []Checkout
+		var stashes []Stash
 		var github map[string]bool
 		_, err := git.Top(path)
 		if err == nil {
 			if refs, err = git.Refs(path); err == nil {
 				refs, hidden = refs.split(keep)
 				checkouts, err = git.Checkouts(path)
+			}
+			if err == nil {
+				stashes, err = git.Stashes(path)
 			}
 		} else {
 			err = errorText(noHistory)
@@ -450,7 +466,8 @@ func (v *View) loadRepository() {
 				v.repo.signature = ""
 				return
 			}
-			v.repo.err, v.repo.refTrees, v.repo.checkouts, v.repo.github = "", trees, checkouts, github
+			v.repo.err, v.repo.refTrees, v.repo.checkouts, v.repo.github, v.repo.stashes = "", trees, checkouts, github, stashes
+			v.keepStash()
 			v.repo.entries = map[string]Entry{}
 			for _, e := range shown {
 				v.repo.entries[e.ID] = e
@@ -524,6 +541,8 @@ func (v *View) Layout(c *ui.Context) {
 			switch v.section {
 			case sectionCommits:
 				v.historyView(c)
+			case sectionStash:
+				v.filesView(c, v.stashFiles, v.text("no_changes"))
 			default:
 				v.filesView(c, v.current, v.text("no_changes"))
 			}
@@ -539,6 +558,7 @@ func (v *View) Layout(c *ui.Context) {
 		v.saveState()
 	}
 	v.syncDialogView(c)
+	v.stashDialogView(c)
 	v.refDeletionDialog(c)
 }
 
@@ -601,8 +621,13 @@ func (v *View) refsPane(c *ui.Context) {
 				// A filter hides the groups it empties.
 				if query == "" || len(g.nodes) > 0 {
 					found = true
-					v.refGroup(c, g.key, g.label, g.icon, g.open, query != "", g.nodes)
+					v.refGroup(c, g.key, g.label, g.icon, g.open, query != "", func() { v.refRows(c, g.key, query != "", g.nodes) })
 				}
+			}
+			// Stashes show only when there are some.
+			if stashes := filterStashes(v.repo.stashes, query); len(stashes) > 0 {
+				found = true
+				v.refGroup(c, "stashes", v.text("stashes"), lucide.Archive(), true, query != "", func() { v.stashRows(c, stashes) })
 			}
 			if !found {
 				components.Text(c, v.text("no_results")).FontSize(12).Wrap().FillWidth().TextColor(t.TextMuted).Padding(t.Space(1), t.Space(2))
@@ -697,11 +722,9 @@ func (v *View) disclosure(key string, open bool) *bool {
 	return state
 }
 
-// refGroup lists refs as a tree of their name's folders under a collapsible
-// heading, led by icon, whose disclosure is remembered; choosing a ref
-// selects its commit in the history. A filter shows the group and its
-// folders open.
-func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, filtering bool, nodes []*refNode) {
+// refGroup lists rows under a collapsible heading, led by icon, whose
+// disclosure is remembered. A filter shows the group open.
+func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, filtering bool, rows func()) {
 	t := c.Theme()
 	if saved, ok := v.state.Groups[key]; ok {
 		open = saved
@@ -715,7 +738,7 @@ func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, fi
 		parts := components.Collapsible(c, label, state, components.CollapsibleOptions{ArrowPosition: components.ArrowLeft, Leading: func() {
 			components.Icon(c, icon).Size(t.Space(3.5), t.Space(3.5)).Shrink(0).TextColor(t.Accent)
 		}}, func() {
-			components.Tree(c, func() { v.refRows(c, key, filtering, nodes) })
+			components.Tree(c, rows)
 		})
 		parts.Root.FillWidth()
 		// The heading's icon, after its arrow, lines up with the entries'
@@ -748,6 +771,8 @@ func (v *View) currentRef(group string, n *refNode) bool {
 	return false
 }
 
+// refRows lists refs as a tree of their name's folders; choosing a ref
+// selects its commit in the history. A filter shows the folders open.
 func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*refNode) {
 	for _, n := range nodes {
 		id := group + "/" + n.path

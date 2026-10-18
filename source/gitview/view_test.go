@@ -120,6 +120,7 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	git(t, repo, "branch", "feature")
 	git(t, repo, "branch", "host/task")
 	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("2\n"), 0644)
+	os.WriteFile(filepath.Join(repo, "new.txt"), []byte("new\n"), 0644)
 	var saved State
 	var written, writtenPaths []string
 	v, pump := testView(t, Options{
@@ -145,8 +146,9 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 		t.Fatalf("view: %v", view.Texts())
 	}
 
-	// The toolbar offers every action. Its stash runs one write at a time
-	// and rereads the view; the emptied changes stay shown.
+	// The toolbar offers every action. Its stash dialog saves a stash with
+	// untracked files, one write at a time, and rereads the view; the
+	// emptied changes stay shown.
 	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 400, 48)
 	for _, label := range []string{"获取", "拉取", "推送", "贮藏", "分支操作"} {
 		if _, ok := toolbar.Find(label); !ok {
@@ -156,6 +158,12 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	if err := toolbar.Click("贮藏"); err != nil {
 		t.Fatal(err)
 	}
+	view.Frame()
+	if !v.stashDialog.open || !view.HasText("包含未跟踪的文件") {
+		t.Fatalf("stash dialog: %v", view.Texts())
+	}
+	view.Type("my work")
+	view.Key(0, ui.KeyEnter)
 	if v.Syncing() != OpStash || v.CanSync() {
 		t.Fatalf("syncing %q", v.Syncing())
 	}
@@ -167,10 +175,38 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	if v.section != sectionChanges || v.hasCurrentChanges() {
 		t.Fatalf("after stash: section %v, files %v", v.section, v.current.changes.Files)
 	}
+	pump(func() bool { return !v.Loading() && len(v.repo.stashes) == 1 })
+	toolbar.Frame()
 	view.Frame()
-	if !view.HasText("当前更改") || !view.HasText("没有更改") {
+	if !view.HasText("当前更改") || !view.HasText("没有更改") || v.CanStash() {
 		t.Fatalf("after stash: %v", view.Texts())
 	}
+
+	// The refs pane lists the stash, which shows the files it saved.
+	if err := view.Click("On main: my work"); err != nil {
+		t.Fatalf("%v: %v", err, view.Texts())
+	}
+	pump(func() bool { return v.stashFiles.loaded && !v.stashFiles.loading && !v.stashFiles.fileLoading })
+	view.Frame()
+	if v.section != sectionStash || !view.HasText("a.txt") || !view.HasText("new.txt") {
+		t.Fatalf("stash: section %v, %v", v.section, view.Texts())
+	}
+	for _, f := range v.stashFiles.changes.Files {
+		before, after, err := v.git.FileVersions(v.stashFiles.changes, f)
+		if err != nil || f.Path == "a.txt" && (string(before) != "1\n" || string(after) != "2\n") ||
+			f.Path == "new.txt" && (before != nil || string(after) != "new\n") {
+			t.Fatalf("%s: %q, %q, %v", f.Path, before, after, err)
+		}
+	}
+
+	// A stash that is gone leaves for the history.
+	git(t, repo, "stash", "pop", "-q")
+	v.Reload()
+	pump(func() bool { return !v.Loading() && len(v.repo.stashes) == 0 })
+	if v.section != sectionCommits {
+		t.Fatalf("popped: section %v", v.section)
+	}
+	git(t, repo, "stash", "push", "-q", "--include-untracked")
 
 	// The branch menu lists the shown local branches and switches to one.
 	pump(func() bool { return !v.Loading() && v.tracking.Branch == "main" })

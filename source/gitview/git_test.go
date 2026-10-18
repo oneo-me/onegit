@@ -132,6 +132,39 @@ func canonical(path string) string {
 	return resolved
 }
 
+func TestStashSavesChangesWithOrWithoutUntrackedFiles(t *testing.T) {
+	t.Parallel()
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	repo := testRepo(t)
+	if err := g.SaveStash(repo, "", true); err != ErrNothingToStash {
+		t.Fatalf("clean: %v", err)
+	}
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("2\n"), 0644)
+	os.WriteFile(filepath.Join(repo, "new.txt"), []byte("new\n"), 0644)
+
+	// Without untracked files, the new file stays in the worktree.
+	if err := g.SaveStash(repo, "tracked", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "new.txt")); err != nil {
+		t.Fatalf("untracked file: %v", err)
+	}
+	if err := g.SaveStash(repo, "", true); err != nil {
+		t.Fatal(err)
+	}
+	stashes, err := g.Stashes(repo)
+	if err != nil || len(stashes) != 2 || stashes[0].Name != "stash@{0}" || !strings.HasPrefix(stashes[0].Message, "WIP on main:") ||
+		stashes[1].Message != "On main: tracked" || stashes[1].Date.IsZero() {
+		t.Fatalf("stashes: %+v %v", stashes, err)
+	}
+	for i, want := range []string{"new.txt", "a.txt"} {
+		changes, err := g.StashChanges(repo, stashes[i].Hash)
+		if err != nil || len(changes.Files) != 1 || changes.Files[0].Path != want || changes.Files[0].Added != 1 {
+			t.Fatalf("stash %d: %+v %v", i, changes, err)
+		}
+	}
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

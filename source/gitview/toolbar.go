@@ -10,20 +10,15 @@ import (
 
 // Toolbar builds the view's Git actions for a host's title bar as round,
 // raised buttons of size: fetch, and the pull and push dialogs with the
-// commits a pull would bring and a push would send, a stash and the branch
-// menu. Every action runs through the view.
+// commits a pull would bring and a push would send, the stash dialog and
+// the branch menu. Every action runs through the view.
 func (v *View) Toolbar(c *ui.Context, size float32) {
 	tr := v.tracking
 	ui.Row(c).Key("gitview-toolbar").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
 		onClick(v.toolButton(c, OpFetch, lucide.Download, v.text("fetch"), size, 0, !v.CanSync()), v.OpenFetch)
 		onClick(v.toolButton(c, OpPull, lucide.ArrowDownToLine, v.text("pull"), size, tr.Behind, !v.CanPull()), v.OpenPull)
 		onClick(v.toolButton(c, OpPush, lucide.ArrowUpFromLine, v.text("push"), size, tr.Ahead, !v.CanSync()), v.OpenPush)
-		onClick(v.toolButton(c, OpStash, lucide.Archive, v.text("stash"), size, 0, !v.CanSync()), func() {
-			v.Run(OpStash, v.text("stash_failed"), func(git Git, path string) error {
-				_, err := git.Run(path, "stash", "push", "--include-untracked")
-				return err
-			})
-		})
+		onClick(v.toolButton(c, OpStash, lucide.Archive, v.text("stash"), size, 0, !v.CanStash()), v.OpenStash)
 		if b := v.toolButton(c, OpSwitch, lucide.GitBranch, v.text("branch_actions"), size, 0, !v.CanSync()); !b.IsDisabled() {
 			b.Menu(v.branchMenu)
 		}

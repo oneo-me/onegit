@@ -10,8 +10,8 @@ User-facing release notes for Onegit.
 - Pin projects to a flat, name-sorted group; both sidebar groups collapse independently.
 - Find projects and open Settings from the command palette (`⌘E`).
 - Switch between a project's worktrees with tabs in the title bar, returning to the last project and worktree.
-- Fetch, pull, push, stash and switch branches from the title bar, with fetch, pull and push dialogs and commit counts; fetch updates every remote or one remote branch.
-- Browse current changes, all commits and filterable branches, remote branches and tags in a project sidebar, jumping to their commits or deleting them from their menu.
+- Fetch, pull, push, stash and switch branches from the title bar, with fetch, pull, push and stash dialogs and commit counts; fetch updates every remote or one remote branch.
+- Browse current changes, all commits and filterable branches, remote branches, tags and stashes in a project sidebar, jumping to their commits, deleting them from their menu or seeing the files a stash saved.
 - Split current changes into staged and unstaged files, stage or unstage whole files, single changes or selected lines from the diff, and commit the staged ones with a message (`⌘Enter`).
 - See all commits in a colored graph across all refs, with collapsible merges, find, author avatars, and floating commit details with diffs, image previews and file contents.
 - Install Onegit on macOS, Windows and Linux from a disk image, an installer, a Debian package or an archive.
