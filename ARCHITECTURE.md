@@ -55,7 +55,7 @@ Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.
 
 `go test` covers settings and persistence, project detection, scan cancellation and cache merging, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. Tests use real temporary Git repositories.
 
-Review these manually: the native directory picker, packaging and the app icon on macOS.
+Review these manually: the native directory picker, and packaging and the app icon on each platform.
 
 ## Subjects
 

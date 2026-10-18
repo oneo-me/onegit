@@ -11,7 +11,7 @@ tasks:
   - label: Build
     group: build
     command: go
-    args: [tool, mygo, build]
+    args: [tool, mygo, build, -platform, "darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64"]
     options:
       cwd: source
       env:
