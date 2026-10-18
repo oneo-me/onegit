@@ -2,6 +2,8 @@ package gitview
 
 import (
 	"bytes"
+	"path"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -12,8 +14,16 @@ import (
 
 // Git writes of the worktree's index and history.
 const (
-	opStage  = "stage"
-	opCommit = "commit"
+	opStage   = "stage"
+	opDiscard = "discard"
+	opCommit  = "commit"
+)
+
+// Heights of a worktree's file lists: the default share the unstaged list
+// takes and each list's least height.
+const (
+	unstagedShare = 50
+	areaMinHeight = 96
 )
 
 // pickLines returns old with the changes of hunks applied where take accepts
@@ -187,47 +197,163 @@ func (v *View) stagingActions(c *ui.Context, p *filePane, size float32) {
 	}
 }
 
-// areaRow is the tree row grouping an area's files, with their count, whose
-// menu stages or unstages all of them.
-func (v *View) areaRow(c *ui.Context, p *filePane, area Area) {
+// areaList is the list of an area's files under a header naming it with
+// their count, whose menu stages or unstages all of them.
+func (v *View) areaList(c *ui.Context, p *filePane, area Area) {
 	t := c.Theme()
 	files := areaFiles(p, area)
-	label, action := v.text("unstaged_changes"), v.text("stage_all")
+	label := v.text("unstaged_changes")
 	if area == AreaStaged {
-		label, action = v.text("staged_changes"), v.text("unstage_all")
+		label = v.text("staged_changes")
 	}
-	ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
-		components.Text(c, label).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").FontSize(12).Bold().TextColor(t.TextMuted)
-		components.Text(c, strconv.Itoa(len(files))).Shrink(0).FontSize(11.5).TextColor(t.TextMuted)
-	}).ContextMenu(func(m *ui.Menu) {
-		if m.Item(action).Disabled(!v.CanSync()).Chosen() {
+	ui.Column(c).Fill().MinHeight(0).Children(func() {
+		ui.Row(c).FillWidth().Shrink(0).AlignItems(ui.Center).Gap(6).Padding(t.Space(2), 18, t.Space(1), 18).Children(func() {
+			components.Text(c, label).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").FontSize(12).Bold().TextColor(t.TextMuted)
+			components.Text(c, strconv.Itoa(len(files))).Shrink(0).FontSize(11.5).TextColor(t.TextMuted)
+		}).ContextMenu(func(m *ui.Menu) {
+			action := v.text("stage_all")
+			if area == AreaStaged {
+				action = v.text("unstage_all")
+			}
+			if m.Item(action).Disabled(!v.CanSync() || len(files) == 0).Chosen() {
+				v.stageFiles(area, files)
+			}
+			if area == AreaUnstaged && m.Item(v.text("discard_all")).Disabled(!v.CanSync() || len(files) == 0).Chosen() {
+				v.askDiscard(files)
+			}
+		})
+		v.fileList(c, p, area, "")
+	})
+}
+
+// chosenFiles lists the files of the rows of area's list that a menu or
+// shortcut acts on, a directory's with it: the chosen rows when key is one
+// of them or empty, and otherwise key's row.
+func (p *filePane) chosenFiles(area Area, key string) []FileChange {
+	l := &p.lists[area]
+	var keys []string
+	if key == "" || l.chosen.Has(key) {
+		for k := range l.chosen.All() {
+			keys = append(keys, k.(string))
+		}
+	} else {
+		keys = []string{key}
+	}
+	var files []FileChange
+	seen := map[string]bool{}
+	var add func(string)
+	add = func(key string) {
+		n := p.tree.nodes[key]
+		switch {
+		case n == nil:
+		case n.children != nil:
+			for _, child := range n.children {
+				add(child)
+			}
+		case !seen[key]:
+			seen[key] = true
+			files = append(files, n.file)
+		}
+	}
+	for _, key := range keys {
+		add(key)
+	}
+	slices.SortFunc(files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	return files
+}
+
+// filesMenu stages, unstages or discards from a row's menu the files of
+// the chosen rows, or of the row alone when it is not chosen.
+func (v *View) filesMenu(row ui.Element, p *filePane, area Area, key string) {
+	row.ContextMenu(func(m *ui.Menu) {
+		files := p.chosenFiles(area, key)
+		disabled := !v.CanSync() || len(files) == 0
+		if area == AreaStaged {
+			if m.Item(v.text("unstage_change")).Shortcut(v.shortcut()|ui.Shift, ui.KeyS).Disabled(disabled).Chosen() {
+				v.stageFiles(area, files)
+			}
+			return
+		}
+		if m.Item(v.text("stage_change")).Shortcut(v.shortcut(), ui.KeyS).Disabled(disabled).Chosen() {
 			v.stageFiles(area, files)
 		}
-	})
-}
-
-// stageMenu stages or unstages a file from its tree row's menu.
-func (v *View) stageMenu(row ui.Element, f FileChange) {
-	label := v.text("stage_file")
-	if f.Area == AreaStaged {
-		label = v.text("unstage_file")
-	}
-	row.ContextMenu(func(m *ui.Menu) {
-		if m.Item(label).Disabled(!v.CanSync()).Chosen() {
-			v.stageFiles(f.Area, []FileChange{f})
+		if m.Item(v.text("discard_changes")).Shortcut(v.shortcut()|ui.Shift, ui.KeyD).Disabled(disabled).Chosen() {
+			v.askDiscard(files)
 		}
 	})
 }
 
-// submitFile stages or unstages the file of the worktree's tree row i,
-// which a double click or Enter activates.
-func (v *View) submitFile(p *filePane, i int) {
-	if p != v.current || i < 0 || i >= p.treeState.Rows() {
+// stagingKeys gives area's list the shortcuts of its rows' menus, acting
+// on the chosen rows.
+func (v *View) stagingKeys(list ui.Element, p *filePane, area Area) {
+	on := func(mods ui.Modifiers, key ui.Key, act func([]FileChange)) {
+		list.OnShortcut(mods, key, func() {
+			if files := p.chosenFiles(area, ""); len(files) > 0 && v.CanSync() {
+				act(files)
+			}
+		})
+	}
+	stage := func(files []FileChange) { v.stageFiles(area, files) }
+	if area == AreaStaged {
+		on(v.shortcut()|ui.Shift, ui.KeyS, stage)
 		return
 	}
-	if n := p.tree.nodes[p.treeState.Item(i)]; n != nil && n.children == nil && n.file.Area != AreaAll {
-		v.stageFiles(n.file.Area, []FileChange{n.file})
+	on(v.shortcut(), ui.KeyS, stage)
+	on(v.shortcut()|ui.Shift, ui.KeyD, v.askDiscard)
+}
+
+// submitFile stages or unstages the file of the row i of area's list,
+// which a double click or Enter activates.
+func (v *View) submitFile(p *filePane, area Area, i int) {
+	l := &p.lists[area]
+	if p != v.current || area == AreaAll || i < 0 || i >= l.state.Rows() {
+		return
 	}
+	if n := p.tree.nodes[l.state.Item(i)]; n != nil && n.children == nil {
+		v.stageFiles(area, []FileChange{n.file})
+	}
+}
+
+// discarding confirms discarding the worktree's changes to files.
+type discarding struct {
+	open  bool
+	files []FileChange
+}
+
+func (v *View) askDiscard(files []FileChange) {
+	v.discarding = discarding{open: true, files: files}
+}
+
+// discardDialog asks before discarding changes, which cannot be undone.
+func (v *View) discardDialog(c *ui.Context) {
+	d := &v.discarding
+	args := map[string]any{"Count": len(d.files)}
+	if len(d.files) > 0 {
+		args["Name"] = path.Base(d.files[0].Path)
+	}
+	title := v.textf("discard_title", args)
+	components.Dialog(c, &d.open, components.DialogOptions{Label: title, Inset: v.dialogInset(c)}, func(panel ui.Element) {
+		t := c.Theme()
+		panel.Role(ui.RoleAlertDialog)
+		components.Text(c, title).Bold().Wrap().FillWidth()
+		components.Text(c, v.text("discard_message")).Wrap().FillWidth().TextColor(t.TextMuted)
+		ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(t.Space(2)).Children(func() {
+			if components.Button(c, v.text("cancel"), components.ButtonSecondary).AutoFocus().Clicked() {
+				d.open = false
+			}
+			if components.Button(c, v.text("discard"), components.ButtonPrimary).Disabled(!v.CanSync()).Clicked() {
+				d.open = false
+				files := d.files
+				v.syncRepository(opDiscard, v.text("discard_failed"), func(git Git, path string) error {
+					top, err := git.Top(path)
+					if err != nil {
+						return err
+					}
+					return git.Discard(top, files...)
+				})
+			}
+		})
+	})
 }
 
 // commitBox takes the message of a commit of the staged changes, which

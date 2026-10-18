@@ -138,8 +138,9 @@ func (t changeTree) ancestors(path string) []string {
 	return keys
 }
 
-// row returns key's index among the rows open shows, or -1 when hidden.
-func (t changeTree) row(key string, open func(string) bool) int {
+// row returns key's index among the rows open shows from roots, or -1 when
+// hidden.
+func (t changeTree) row(roots []string, key string, open func(string) bool) int {
 	index := 0
 	var walk func([]string) bool
 	walk = func(keys []string) bool {
@@ -154,7 +155,7 @@ func (t changeTree) row(key string, open func(string) bool) int {
 		}
 		return false
 	}
-	if walk(t.roots) {
+	if walk(roots) {
 		return index
 	}
 	return -1

@@ -35,7 +35,7 @@ func TestChangeTreeGroupsFilesByDirectory(t *testing.T) {
 	open := map[string]bool{"a/": true, "a/b/c/": true, "docs/": false}
 	has := func(key string) bool { return open[key] }
 	for key, row := range map[string]int{"a/": 0, "a/b/c/y.go": 3, "a/z.go": 4, "docs/": 5, "docs/guide.md": -1, "README.md": 6} {
-		if got := tree.row(key, has); got != row {
+		if got := tree.row(tree.roots, key, has); got != row {
 			t.Errorf("row(%q) = %d, want %d", key, got, row)
 		}
 	}

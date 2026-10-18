@@ -33,13 +33,14 @@ type filePane struct {
 	changes         Changes
 	// selected is the tree key of the chosen file (fileKey).
 	selected string
-	// tree arranges the files by directory; cursor is its focused row.
-	// shown lists the directories already seen, which keep the expansion
-	// the user chose, while new ones open unless the pane browses.
-	tree      changeTree
-	treeState components.TreeVirtualizedState[string]
-	cursor    int
-	shown     map[string]bool
+	// tree arranges the files by directory, which lists shows by area:
+	// AreaAll's lists a commit's or browsed files, and the others a
+	// worktree's unstaged and staged ones apart. shown lists the
+	// directories already seen, which keep the expansion the user chose,
+	// while new ones open unless the pane browses.
+	tree  changeTree
+	lists [3]fileList
+	shown map[string]bool
 	// diff compares the selected file once read, view shows a browsed one
 	// and preview shows an image instead; note replaces them for a file
 	// that cannot be shown. file is the file shown and before and after
@@ -55,19 +56,59 @@ type filePane struct {
 	fileGeneration uint64
 }
 
+// fileList is a tree of a pane's files. cursor is its focused row, -1
+// while the selected file is in another list, and chosen holds the rows of
+// an area's files that its menus and shortcuts act on.
+type fileList struct {
+	state  components.TreeVirtualizedState[string]
+	cursor int
+	chosen ui.Selection[any]
+}
+
 func (v *View) newFilePane(browse bool) *filePane {
 	p := &filePane{browse: browse}
-	p.treeState.List.Selected = &p.cursor
-	p.treeState.List.Label = func(i int) string { return p.tree.nodes[p.treeState.Item(i)].name }
-	p.treeState.List.OnSubmit = func(i int) { v.submitFile(p, i) }
-	p.treeState.List.OnChange = func() {
-		if p.cursor >= 0 && p.cursor < p.treeState.Rows() {
-			if key := p.treeState.Item(p.cursor); p.tree.children(key) == nil {
-				v.selectFile(p, key)
+	for i := range p.lists {
+		l, area := &p.lists[i], Area(i)
+		l.state.List.Selected = &l.cursor
+		if area != AreaAll {
+			l.state.List.Selection = &l.chosen
+		}
+		l.state.List.Label = func(i int) string { return p.tree.nodes[l.state.Item(i)].name }
+		l.state.List.OnSubmit = func(i int) { v.submitFile(p, area, i) }
+		l.state.List.OnChange = func() {
+			// The other area's list lets go of its rows.
+			for j := range p.lists {
+				if Area(j) != area {
+					p.lists[j].cursor = -1
+					p.lists[j].chosen.Clear()
+				}
+			}
+			if l.cursor >= 0 && l.cursor < l.state.Rows() {
+				if key := l.state.Item(l.cursor); p.tree.children(key) == nil {
+					v.selectFile(p, key)
+				}
 			}
 		}
 	}
 	return p
+}
+
+// roots are the top rows of area's list.
+func (p *filePane) roots(area Area) []string {
+	if area == AreaAll {
+		return p.tree.roots
+	}
+	return p.tree.children(areaKeys[area])
+}
+
+// keyArea is the area whose list shows the row of key.
+func keyArea(key string) Area {
+	for area, prefix := range areaKeys {
+		if strings.HasPrefix(key, prefix) {
+			return area
+		}
+	}
+	return AreaAll
 }
 
 // clearFiles empties the pane and discards its pending reads; reason, when
@@ -79,7 +120,7 @@ func (v *View) clearFiles(p *filePane, reason string) {
 	p.loading, p.loaded, p.err, p.changes = false, reason != "", reason, Changes{}
 	p.selected, p.diff, p.view, p.preview, p.path, p.fileLoading, p.note = "", nil, nil, nil, "", false, ""
 	p.file, p.before, p.after = FileChange{}, nil, nil
-	p.shown, p.cursor = nil, 0
+	p.shown = nil
 	arrangeFiles(p)
 }
 
@@ -130,21 +171,38 @@ func arrangeFiles(p *filePane) {
 	shown := map[string]bool{}
 	for _, key := range p.tree.directories() {
 		if !p.shown[key] && !p.browse {
-			p.treeState.Open.Add(key)
+			p.lists[keyArea(key)].state.Open.Add(key)
 		}
 		shown[key] = true
 	}
 	p.shown = shown
+	for i := range p.lists {
+		l := &p.lists[i]
+		for key := range l.chosen.All() {
+			if p.tree.nodes[key.(string)] == nil {
+				l.chosen.Remove(key)
+			}
+		}
+	}
 	selected := keptSelection(p.changes.Files, p.selected)
-	if selected == p.selected && p.tree.row(selected, p.treeState.Open.Has) >= 0 {
+	area := keyArea(selected)
+	l := &p.lists[area]
+	if selected == p.selected && p.tree.row(p.roots(area), selected, l.state.Open.Has) >= 0 {
 		// The tree keeps its cursor on the same row by key.
 		return
 	}
 	p.selected = selected
 	for _, key := range p.tree.ancestors(selected) {
-		p.treeState.Open.Add(key)
+		l.state.Open.Add(key)
 	}
-	p.cursor = p.tree.row(selected, p.treeState.Open.Has)
+	for i := range p.lists {
+		p.lists[i].cursor = -1
+		p.lists[i].chosen.Clear()
+	}
+	l.cursor = p.tree.row(p.roots(area), selected, l.state.Open.Has)
+	if area != AreaAll && l.cursor >= 0 {
+		l.chosen.Add(selected)
+	}
 }
 
 // keptSelection keeps the selected file's key while it is still listed, or
@@ -285,23 +343,35 @@ func (v *View) filesView(c *ui.Context, p *filePane, empty string) {
 	}
 }
 
-// fileTree lists the pane's files, with a commit's message under the
-// worktree's staged and unstaged ones.
+// fileTree lists the pane's files. A worktree's unstaged files show above
+// its staged ones, which a commit's message follows.
 func (v *View) fileTree(c *ui.Context, p *filePane, empty string) {
-	staging := p == v.current
 	ui.Column(c).Fill().MinHeight(0).Children(func() {
-		v.fileList(c, p, empty)
-		if staging {
-			v.commitBox(c, p)
+		if p != v.current || !p.loaded || p.err != "" {
+			v.fileList(c, p, AreaAll, empty)
+			return
 		}
+		split := components.SplitPercent(c, &v.state.UnstagedShare, func() {
+			v.areaList(c, p, AreaUnstaged)
+		}, func() {
+			v.areaList(c, p, AreaStaged)
+		}, components.SplitOptions{Orientation: components.Vertical, FirstMin: areaMinHeight, SecondMin: areaMinHeight, Default: unstagedShare})
+		split.FillWidth().Grow(1).MinHeight(0)
+		if split.Changed() {
+			v.saveState()
+		}
+		v.commitBox(c, p)
 	})
 }
 
-func (v *View) fileList(c *ui.Context, p *filePane, empty string) {
+// fileList is the tree of area's files. empty explains a list of a
+// commit's or browsed files without any.
+func (v *View) fileList(c *ui.Context, p *filePane, area Area, empty string) {
 	t := c.Theme()
 	ui.Column(c).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		message := ""
 		switch {
+		case area != AreaAll:
 		case !p.loaded:
 			message = v.text("loading_changes")
 		case p.err != "":
@@ -315,12 +385,8 @@ func (v *View) fileList(c *ui.Context, p *filePane, empty string) {
 		}
 		// The list pads its scrolling content, so the scroll view reaches the
 		// pane's edges.
-		components.TreeVirtualized(c, &p.treeState, p.tree.roots, p.tree.children, func(key string) {
+		list := components.TreeVirtualized(c, &p.lists[area].state, p.roots(area), p.tree.children, func(key string) {
 			n := p.tree.nodes[key]
-			if n.area != AreaAll {
-				v.areaRow(c, p, n.area)
-				return
-			}
 			if p.browse && n.children == nil {
 				ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
 					fileIcon(c, n.name, 14)
@@ -332,10 +398,13 @@ func (v *View) fileList(c *ui.Context, p *filePane, empty string) {
 			if n.file.Status == 'R' {
 				components.Tooltip(c, row, n.file.OldPath+" → "+n.file.Path)
 			}
-			if n.children == nil && n.file.Area != AreaAll {
-				v.stageMenu(row, n.file)
+			if area != AreaAll {
+				v.filesMenu(row, p, area, key)
 			}
 		}).Fill().Padding(t.Space(1), 8, 8, 8)
+		if area != AreaAll {
+			v.stagingKeys(list, p, area)
+		}
 	})
 }
 

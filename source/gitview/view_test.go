@@ -178,7 +178,7 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	pump(func() bool { return !v.Loading() && len(v.repo.stashes) == 1 })
 	toolbar.Frame()
 	view.Frame()
-	if !view.HasText("当前更改") || !view.HasText("没有更改") || v.CanStash() {
+	if !view.HasText("当前更改") || !view.HasText("已暂存的更改") || view.HasText("没有更改") || v.CanStash() {
 		t.Fatalf("after stash: %v", view.Texts())
 	}
 

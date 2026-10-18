@@ -105,7 +105,7 @@ func TestViewStagesChangesAndCommits(t *testing.T) {
 	shown := func() bool { return p.loaded && !p.loading && !p.fileLoading && v.Syncing() == "" }
 	pump(func() bool { return shown() && p.diff != nil })
 	view := ui.NewTester(viewFrame(v), 1000, 700)
-	if v.section != sectionChanges || !view.HasText("Changes") || view.HasText("Staged Changes") || p.selected != areaKeys[AreaUnstaged]+"a.txt" {
+	if v.section != sectionChanges || !view.HasText("Changes") || !view.HasText("Staged Changes") || p.selected != areaKeys[AreaUnstaged]+"a.txt" {
 		t.Fatalf("selected %q: %v", p.selected, view.Texts())
 	}
 
@@ -114,10 +114,6 @@ func TestViewStagesChangesAndCommits(t *testing.T) {
 	pump(func() bool { return shown() && p.diff != nil && len(p.changes.Files) == 3 })
 	if index, _ := v.git.IndexFile(repo, "a.txt"); string(index) != "one\n2\n3\n4\n5\n6\n7\n8\n9\n10\n" {
 		t.Fatalf("index: %q", index)
-	}
-	view.Frame()
-	if !view.HasText("Staged Changes") {
-		t.Fatalf("view: %v", view.Texts())
 	}
 
 	// Double-clicking the unstaged row stages the rest of the file, whose
@@ -144,5 +140,91 @@ func TestViewStagesChangesAndCommits(t *testing.T) {
 	}
 	if f := p.changes.Files[0]; f.Path != "new.txt" || f.Area != AreaUnstaged {
 		t.Fatalf("left: %+v", p.changes.Files)
+	}
+}
+
+func TestViewStagesAndDiscardsChosenFiles(t *testing.T) {
+	repo := testRepo(t)
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("changed\n"), 0644)
+	os.WriteFile(filepath.Join(repo, "new.txt"), []byte("n\n"), 0644)
+	os.WriteFile(filepath.Join(repo, "other.txt"), []byte("o\n"), 0644)
+	v, pump := testView(t, Options{})
+	v.SetPath(repo)
+	p := v.current
+	shown := func(files int) func() bool {
+		return func() bool { return p.loaded && !p.loading && v.Syncing() == "" && len(p.changes.Files) == files }
+	}
+	pump(shown(3))
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	areas := func() string {
+		var s []string
+		for _, f := range p.changes.Files {
+			s = append(s, fmt.Sprintf("%d %s", f.Area, f.Path))
+		}
+		return strings.Join(s, ", ")
+	}
+
+	// The shortcut stages the chosen file; its menu offers the same.
+	if err := view.Click("other.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.RightClick("other.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(view.Menu(), ","); got != "Stage,Discard Changes…" {
+		t.Fatalf("menu: %s", got)
+	}
+	view.CloseMenu()
+	view.Key(v.shortcut(), ui.KeyS)
+	pump(shown(3))
+	if got := areas(); got != "1 other.txt, 2 a.txt, 2 new.txt" {
+		t.Fatalf("staged: %s", got)
+	}
+
+	// The staged list's menu unstages.
+	view.Frame()
+	if err := view.RightClick("other.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Unstage"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	pump(shown(3))
+	if got := areas(); got != "2 a.txt, 2 new.txt, 2 other.txt" {
+		t.Fatalf("unstaged: %s", got)
+	}
+
+	// Discarding the chosen files restores the tracked one and deletes the
+	// untracked one after a confirmation.
+	view.Frame()
+	if err := view.Click("a.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ClickWith(ui.Cmd, "new.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.RightClick("a.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Discard Changes…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !view.HasText("Discard changes to 2 files?") {
+		t.Fatalf("dialog: %v", view.Texts())
+	}
+	if err := view.Click("Discard"); err != nil {
+		t.Fatal(err)
+	}
+	pump(shown(1))
+	if got := areas(); got != "2 other.txt" {
+		t.Fatalf("left: %s", got)
+	}
+	if a, _ := os.ReadFile(filepath.Join(repo, "a.txt")); string(a) != "1\n" {
+		t.Fatalf("a.txt: %q", a)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "new.txt")); !os.IsNotExist(err) {
+		t.Fatalf("new.txt: %v", err)
 	}
 }

@@ -86,6 +86,9 @@ type State struct {
 	Groups map[string]bool `yaml:"groups,omitempty" json:"groups,omitempty"`
 	// DiffWrap wraps diff and file lines.
 	DiffWrap bool `yaml:"diffWrap,omitempty" json:"diffWrap,omitempty"`
+	// UnstagedShare is the share, from 0 to 100, of a worktree's file
+	// lists' height the unstaged files take; zero keeps the default.
+	UnstagedShare float32 `yaml:"unstagedShare,omitempty" json:"unstagedShare,omitempty"`
 	// FetchBranch, PullRebase, PullStash and PushTags are the fetch, pull
 	// and push dialogs' remembered options; FetchBranch fetches the chosen
 	// branch instead of every remote.
@@ -178,8 +181,10 @@ type View struct {
 	dialog             syncDialog
 	stashDialog        stashDialog
 	toast              *ui.Toast
-	// deletion confirms deleting a ref from the refs pane.
-	deletion refDeletion
+	// deletion and discarding confirm deleting a ref from the refs pane and
+	// discarding a worktree's changes.
+	deletion   refDeletion
+	discarding discarding
 	// watches follow the repository's Git directory and shown worktrees.
 	watches map[string]*gitWatch
 	closed  bool
@@ -221,6 +226,9 @@ func New(opts Options) *View {
 	v.state.RefsWidth = min(v.state.RefsWidth, refsMaxWidth)
 	if v.state.TreeWidth <= 0 {
 		v.state.TreeWidth = treeWidth
+	}
+	if v.state.UnstagedShare <= 0 {
+		v.state.UnstagedShare = unstagedShare
 	}
 	if opts.AvatarDir != "" {
 		v.avatars = newAvatarCache(opts.AvatarDir)
@@ -544,7 +552,7 @@ func (v *View) Layout(c *ui.Context) {
 			case sectionStash:
 				v.filesView(c, v.stashFiles, v.text("no_changes"))
 			default:
-				v.filesView(c, v.current, v.text("no_changes"))
+				v.filesView(c, v.current, "")
 			}
 			v.overlay(c)
 		})
@@ -560,6 +568,7 @@ func (v *View) Layout(c *ui.Context) {
 	v.syncDialogView(c)
 	v.stashDialogView(c)
 	v.refDeletionDialog(c)
+	v.discardDialog(c)
 }
 
 // overlay floats the host's overlay at the top of the section, measuring

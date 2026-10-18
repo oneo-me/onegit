@@ -6,7 +6,8 @@
 
 - **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included. A ref's context menu deletes it after a confirmation, optionally on its remote too.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
-- **Staging.** Current changes group into unstaged files above staged ones, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or lines selected by their numbers stage or unstage; group and file menus do so too. A commit box below the tree commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
+- **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or selected lines stage or unstage. Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
+- **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. A commit box below the lists commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
 - **All commits.** A graph of every shown ref, the checked out commit and host entries. Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, Stash, and a menu switching to a shown local branch.
 - **Dialogs.** Fetch, pull, push and stash dialogs, and ref deletion. A stash takes an optional message and includes untracked files unless unchecked. Fetch updates every remote, or with its switch off one remote branch.
@@ -36,7 +37,7 @@ Options:
 ## Boundaries
 
 - Frame builders do no I/O. Git runs in goroutines, and results carry a generation so stale ones are dropped.
-- The view writes only from user actions: fetch, pull, push, stash, branch switch, ref deletion, staging, commits and the host's `Run`. It never checks out on its own.
+- The view writes only from user actions: fetch, pull, push, stash, branch switch, ref deletion, staging, discarding, commits and the host's `Run`. It never checks out on its own.
 - Network commands run with `GIT_TERMINAL_PROMPT=0`, so missing credentials fail instead of hanging.
 
 ## Neorio mapping

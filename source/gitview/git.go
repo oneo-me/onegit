@@ -713,6 +713,38 @@ func (g Git) Unstage(top string, files ...FileChange) error {
 	return err
 }
 
+// Discard drops the worktree's changes to files at top that are not
+// staged: a tracked file returns to its index version and an untracked one
+// is deleted.
+func (g Git) Discard(top string, files ...FileChange) error {
+	paths := pathsOf(files)
+	out, err := g.Run(top, append([]string{"--literal-pathspecs", "ls-files", "--others", "--exclude-standard", "-z", "--"}, paths...)...)
+	if err != nil {
+		return err
+	}
+	untracked := map[string]bool{}
+	for name := range strings.SplitSeq(out, "\x00") {
+		untracked[name] = name != ""
+	}
+	var tracked, deleted []string
+	for _, p := range paths {
+		if untracked[p] {
+			deleted = append(deleted, p)
+		} else {
+			tracked = append(tracked, p)
+		}
+	}
+	if len(tracked) > 0 {
+		if _, err := g.Run(top, append([]string{"--literal-pathspecs", "restore", "--worktree", "--"}, tracked...)...); err != nil {
+			return err
+		}
+	}
+	if len(deleted) > 0 {
+		_, err = g.Run(top, append([]string{"--literal-pathspecs", "clean", "--force", "--quiet", "--"}, deleted...)...)
+	}
+	return err
+}
+
 // StageText stages text as the version of the file at path, relative to the
 // worktree's top, keeping the mode the index or checked out commit gives it,
 // else the worktree file's.
