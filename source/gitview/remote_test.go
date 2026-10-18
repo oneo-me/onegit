@@ -182,6 +182,34 @@ func TestDeleteRefs(t *testing.T) {
 	if out, _ := g.Run(mine, "branch", "-r", "--list", "origin/stale"); out != "" {
 		t.Fatalf("kept stale remote branch: %q", out)
 	}
+	// A branch checked out in another worktree goes with it, unless Git
+	// would keep the branch or the worktree has changes.
+	for _, b := range []string{"wip", "local"} {
+		git(t, mine, "worktree", "add", "-q", filepath.Join(dir, b), b)
+	}
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "wip"), "wip"); err != ErrNotMerged {
+		t.Fatalf("unmerged: %v", err)
+	}
+	os.WriteFile(filepath.Join(dir, "local", "draft.txt"), []byte("draft\n"), 0644)
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local"); err == nil {
+		t.Fatal("removed a worktree with changes")
+	}
+	if _, ok := upstreams()["local"]; !ok {
+		t.Fatal("deleted local")
+	}
+	if checkouts, _ := g.Checkouts(mine); len(checkouts) != 3 {
+		t.Fatalf("kept %+v", checkouts)
+	}
+	os.Remove(filepath.Join(dir, "local", "draft.txt"))
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := upstreams()["local"]; ok {
+		t.Fatal("kept local")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "local")); !os.IsNotExist(err) {
+		t.Fatalf("kept the worktree: %v", err)
+	}
 	// A tag is deleted from the remote, which may not have it, and locally.
 	for range 2 {
 		if err := g.DeleteRemoteTag(mine, "origin", "v1"); err != nil {

@@ -10,8 +10,9 @@ import (
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
-// OpWorktree is the Git write adding a worktree, after which a host listing
-// the repository's worktrees reads them again.
+// OpWorktree is the Git write adding a worktree, or removing one with its
+// branch, after which a host listing the repository's worktrees reads them
+// again.
 const OpWorktree = "worktree"
 
 // Git writes of the refs' menus, besides OpSwitch, OpWorktree and deletion.

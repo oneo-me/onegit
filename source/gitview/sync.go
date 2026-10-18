@@ -4,6 +4,7 @@ import (
 	"context"
 	_ "embed"
 	"maps"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -563,12 +564,14 @@ func syncChoice(c *ui.Context, icon func() *ui.SVG, label string) {
 // pane's group: a local branch, remote branch or tag. remote is the copy
 // on a remote that alsoRemote deletes too, the remote branch a local
 // branch tracks or a tag on the default remote, or the remote branch
-// itself; it has no remote when there is none.
+// itself; it has no remote when there is none. worktree is the directory
+// of another worktree that has a local branch checked out, which
+// alsoWorktree removes first and the deletion needs.
 type refDeletion struct {
-	open       bool
-	group, ref string
-	remote     RemoteBranch
-	alsoRemote bool
+	open                     bool
+	group, ref, worktree     string
+	remote                   RemoteBranch
+	alsoRemote, alsoWorktree bool
 }
 
 // refDeleteItem adds deleting n of group to its context menu, disabled for
@@ -581,14 +584,18 @@ func (v *View) refDeleteItem(m *ui.Menu, group string, n *refNode) {
 }
 
 // newRefDeletion prepares the dialog deleting n of group, reporting false
-// for a branch checked out in a worktree, which Git keeps, or a remote
-// branch of no known remote.
+// for a branch checked out in the shown or main worktree, which stay, or a
+// remote branch of no known remote.
 func (v *View) newRefDeletion(group string, n *refNode) (refDeletion, bool) {
 	d := refDeletion{open: true, group: group, ref: n.path}
 	switch group {
 	case "branches":
-		if slices.ContainsFunc(v.repo.checkouts, func(c Checkout) bool { return c.Branch == n.path }) {
-			return d, false
+		if i := slices.IndexFunc(v.repo.checkouts, func(c Checkout) bool { return c.Branch == n.path }); i >= 0 {
+			dir := v.repo.checkouts[i].Path
+			if i == 0 || n.path == v.tracking.Branch || filepath.Clean(dir) == filepath.Clean(v.path) {
+				return d, false
+			}
+			d.worktree = dir
 		}
 		if _, ok := v.repo.github[n.upstream.Remote]; ok {
 			d.remote = n.upstream
@@ -608,10 +615,11 @@ func (v *View) newRefDeletion(group string, n *refNode) (refDeletion, bool) {
 }
 
 // refDeletionDialog asks before deleting a ref, offering to delete a local
-// branch's upstream or a tag on the default remote too.
+// branch's upstream or a tag on the default remote too. A branch checked
+// out in another worktree is deleted only with that worktree.
 func (v *View) refDeletionDialog(c *ui.Context) {
 	d := &v.deletion
-	args := map[string]any{"Name": d.ref, "Remote": d.remote.Remote, "Target": d.remote.Remote + "/" + d.remote.Branch}
+	args := map[string]any{"Name": d.ref, "Remote": d.remote.Remote, "Target": d.remote.Remote + "/" + d.remote.Branch, "Worktree": filepath.Base(d.worktree)}
 	title := v.textf("delete_"+d.group+"_title", args)
 	components.Dialog(c, &d.open, components.DialogOptions{Label: title, Inset: v.dialogInset(c)}, func(panel ui.Element) {
 		t := c.Theme()
@@ -621,11 +629,14 @@ func (v *View) refDeletionDialog(c *ui.Context) {
 		if d.group != "remotes" && d.remote.Remote != "" {
 			components.Switch(c, &d.alsoRemote, v.textf("delete_"+d.group+"_remote", args))
 		}
+		if d.worktree != "" {
+			components.Switch(c, &d.alsoWorktree, v.textf("delete_worktree", args))
+		}
 		ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(t.Space(2)).Children(func() {
 			if components.Button(c, v.text("cancel"), components.ButtonSecondary).AutoFocus().Clicked() {
 				d.open = false
 			}
-			if components.Button(c, v.text("delete"), components.ButtonPrimary).Disabled(!v.CanSync()).Clicked() {
+			if components.Button(c, v.text("delete"), components.ButtonPrimary).Disabled(!v.CanSync() || d.worktree != "" && !d.alsoWorktree).Clicked() {
 				d.open = false
 				v.deleteRef()
 			}
@@ -633,19 +644,30 @@ func (v *View) refDeletionDialog(c *ui.Context) {
 	})
 }
 
-// deleteRef deletes the dialog's ref. A local branch goes first, so the
-// remote keeps its copy when Git refuses to delete it; a tag goes from the
-// remote first, as the refs pane no longer offers it once deleted locally.
+// deleteRef deletes the dialog's ref. A local branch goes first, after
+// its worktree, so the remote keeps its copy when Git refuses to delete it;
+// a tag goes from the remote first, as the refs pane no longer offers it
+// once deleted locally. Removing a worktree reports OpWorktree.
 func (v *View) deleteRef() {
 	d := v.deletion
 	alsoRemote := d.alsoRemote && d.remote.Remote != ""
 	if v.ref == d.group+"/"+d.ref {
 		v.ref = ""
 	}
-	v.syncRepository(opDelete, v.text("delete_failed"), func(git Git, path string) error {
+	op := opDelete
+	if d.worktree != "" {
+		op = OpWorktree
+	}
+	v.syncRepository(op, v.text("delete_failed"), func(git Git, path string) error {
 		switch d.group {
 		case "branches":
-			if err := git.DeleteBranch(path, d.ref); err != nil || !alsoRemote {
+			var err error
+			if d.worktree != "" {
+				err = git.DeleteWorktreeBranch(path, d.worktree, d.ref)
+			} else {
+				err = git.DeleteBranch(path, d.ref)
+			}
+			if err != nil || !alsoRemote {
 				return err
 			}
 			return git.DeleteRemoteBranch(path, d.remote.Remote, d.remote.Branch)

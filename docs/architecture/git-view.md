@@ -20,13 +20,13 @@
 | Pull into | Remote branches only: the pull dialog, preset to that branch |
 | Merge into, Rebase on | `merge --no-edit` or `rebase` of the checked out branch, optionally `--no-ff` or `--autostash`; conflicts stay for the user |
 | New Branch, New Tag | A branch, checked out by default, or a tag, annotated when given a message |
-| Delete | Refs only, after a confirmation, optionally on the remote too |
+| Delete | Refs only, after a confirmation, optionally on the remote too. A branch checked out in another worktree, not the shown or main one, needs that worktree's `worktree remove` too, after checking that `branch -d` would succeed |
 | Copy | The ref's name or the commit's full hash |
 
 ## Host API
 
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
-- `Toolbar` builds the Git actions in a host's title bar. `OpWorktree` names the write adding a worktree, for `OnWrite`. Their parts serve hosts adding their own: `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` for host-defined Git writes. `CanSync`, `CanPull` and `CanStash` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
+- `Toolbar` builds the Git actions in a host's title bar. `OpWorktree` names a write adding or removing a worktree, for `OnWrite`. Their parts serve hosts adding their own: `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` for host-defined Git writes. `CanSync`, `CanPull` and `CanStash` say whether an action may start. `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
 - `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
 
 Options:

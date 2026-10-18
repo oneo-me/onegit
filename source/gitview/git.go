@@ -30,6 +30,10 @@ var ErrNothingToStash = errors.New("no local changes to save")
 // ErrNoRemote is a push that names no remote to send the branch to.
 var ErrNoRemote = errors.New("no remote to push the branch to")
 
+// ErrNotMerged is a branch deletion that would lose commits neither the
+// branch's upstream nor the checked out branch has.
+var ErrNotMerged = errors.New("neither the branch's upstream nor the checked out branch has all of its commits")
+
 // Git runs the git executable with Env, or the process environment when Env
 // is nil. When Env sets PATH, git is looked up there. With Host, git runs and
 // files are read there instead, and Env only adds to the host's environment.
@@ -1057,6 +1061,29 @@ func (g Git) PushBranch(path string, o PushOptions) error {
 func (g Git) DeleteBranch(path, branch string) error {
 	_, err := g.Run(path, "branch", "--delete", branch)
 	return err
+}
+
+// DeleteWorktreeBranch removes the worktree at dir, which has branch checked
+// out, then deletes branch as DeleteBranch does. It fails with ErrNotMerged
+// before removing anything when DeleteBranch would refuse, and like git
+// worktree remove it keeps a worktree with changes or untracked files.
+func (g Git) DeleteWorktreeBranch(path, dir, branch string) error {
+	// git branch -d compares with the upstream, else with HEAD.
+	base := "HEAD"
+	if _, err := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"@{upstream}"); err == nil {
+		base = "refs/heads/" + branch + "@{upstream}"
+	}
+	merged, err := g.Run(path, "for-each-ref", "--merged="+base, "--format=%(refname)", "refs/heads/"+branch)
+	if err != nil {
+		return err
+	}
+	if merged == "" {
+		return ErrNotMerged
+	}
+	if _, err := g.Run(path, "worktree", "remove", dir); err != nil {
+		return err
+	}
+	return g.DeleteBranch(path, branch)
 }
 
 // DeleteRemoteBranch deletes branch from remote and drops its remote

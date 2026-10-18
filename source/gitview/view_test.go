@@ -477,3 +477,59 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 		t.Fatalf("pull dialog %+v", v.dialog)
 	}
 }
+
+func TestViewDeletesBranchWithItsWorktree(t *testing.T) {
+	repo := testRepo(t)
+	git(t, repo, "branch", "side")
+	wt := filepath.Join(t.TempDir(), "side-wt")
+	git(t, repo, "worktree", "add", "-q", wt, "side")
+	var wrote []string
+	v, pump := testView(t, Options{OnWrite: func(op, _ string) { wrote = append(wrote, op) }})
+	v.SetPath(repo)
+	ready := func() bool { return !v.Loading() && v.Syncing() == "" && len(v.repo.checkouts) > 0 }
+	pump(ready)
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+
+	// The shown worktree's branch stays; another worktree's goes only with
+	// that worktree.
+	if err := view.RightClick("main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Delete…"); err == nil {
+		t.Fatal("offered deleting the shown worktree's branch")
+	}
+	view.Key(0, ui.KeyEscape)
+	view.Advance(time.Second)
+	if err := view.RightClick("side"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Delete…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !view.HasText("Also delete worktree side-wt") {
+		t.Fatalf("dialog: %v", view.Texts())
+	}
+	if err := view.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if v.Syncing() != "" || !v.deletion.open {
+		t.Fatal("deleted without the worktree")
+	}
+	if err := view.Click("Also delete worktree side-wt"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if err := view.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && len(v.repo.checkouts) == 1 })
+	if out, _ := v.git.Run(repo, "branch", "--list", "side"); out != "" {
+		t.Fatalf("kept side: %q", out)
+	}
+	if !slices.Equal(wrote, []string{OpWorktree}) {
+		t.Fatalf("wrote %v", wrote)
+	}
+}
