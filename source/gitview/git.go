@@ -28,8 +28,12 @@ var ErrDetached = errors.New("no branch is checked out")
 var ErrNoRemote = errors.New("no remote to push the branch to")
 
 // Git runs the git executable with Env, or the process environment when Env
-// is nil. When Env sets PATH, git is looked up there.
-type Git struct{ Env []string }
+// is nil. When Env sets PATH, git is looked up there. With Host, git runs and
+// files are read there instead, and Env only adds to the host's environment.
+type Git struct {
+	Env  []string
+	Host Host
+}
 
 // Run runs git in dir and returns its trimmed standard output, or its
 // standard error as the error.
@@ -51,6 +55,16 @@ func (g Git) output(timeout time.Duration, dir string, args ...string) ([]byte, 
 func (g Git) outputWith(timeout time.Duration, dir string, input []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+	if g.Host != nil {
+		stdout, stderr, err := g.Host.Run(ctx, dir, g.Env, input, args...)
+		if err != nil {
+			if msg := strings.TrimSpace(string(stderr)); msg != "" {
+				return nil, errors.New(msg)
+			}
+			return nil, err
+		}
+		return stdout, nil
+	}
 	cmd := exec.CommandContext(ctx, "git", args...)
 	hideConsole(cmd)
 	cmd.Dir = dir
@@ -91,7 +105,7 @@ func lookGit(env []string) string {
 
 func (g Git) withEnv(values ...string) Git {
 	env := g.Env
-	if env == nil {
+	if env == nil && g.Host == nil {
 		env = os.Environ()
 	}
 	g.Env = append(append([]string(nil), env...), values...)
@@ -462,7 +476,7 @@ func (g Git) WorktreeChanges(path, base string) (Changes, error) {
 	for name := range strings.SplitSeq(untracked, "\x00") {
 		if name != "" {
 			changes.Files = append(changes.Files, FileChange{Path: name, OldPath: name, Status: 'A',
-				Added: textLines(filepath.Join(top, filepath.FromSlash(name)))})
+				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
 		}
 	}
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
@@ -510,7 +524,7 @@ func (g Git) WorktreeStatus(path string) (Changes, error) {
 	for name := range strings.SplitSeq(untracked, "\x00") {
 		if name != "" {
 			worktree = append(worktree, FileChange{Path: name, OldPath: name, Status: 'A',
-				Added: textLines(filepath.Join(top, filepath.FromSlash(name)))})
+				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
 		}
 	}
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
@@ -587,11 +601,11 @@ func (g Git) countLines(top string, files []FileChange, diff []string) error {
 
 // textLines counts the lines of a regular file as Git's numstat would, or
 // returns 0 for unreadable files and those Git treats as binary.
-func textLines(path string) int {
-	if info, err := os.Lstat(path); err != nil || !info.Mode().IsRegular() {
+func (g Git) textLines(path string) int {
+	if info, err := g.lstat(path); err != nil || !info.Mode().IsRegular() {
 		return 0
 	}
-	data, err := os.ReadFile(path)
+	data, err := g.readFile(path)
 	if err != nil || isBinary(data) {
 		return 0
 	}
@@ -635,15 +649,15 @@ func (g Git) FileVersions(changes Changes, f FileChange) (before, after []byte, 
 		return before, after, err
 	}
 	name := filepath.Join(changes.Top, filepath.FromSlash(f.Path))
-	info, err := os.Lstat(name)
+	info, err := g.lstat(name)
 	if err != nil {
 		return nil, nil, err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		target, err := os.Readlink(name)
+		target, err := g.readlink(name)
 		return before, []byte(filepath.ToSlash(target)), err
 	}
-	after, err = os.ReadFile(name)
+	after, err = g.readFile(name)
 	return before, after, err
 }
 
@@ -721,7 +735,7 @@ func (g Git) fileMode(top, path string) (string, error) {
 			return mode, nil
 		}
 	}
-	if info, err := os.Stat(filepath.Join(top, filepath.FromSlash(path))); err == nil && info.Mode()&0o111 != 0 {
+	if info, err := g.stat(filepath.Join(top, filepath.FromSlash(path))); err == nil && info.Mode()&0o111 != 0 {
 		return "100755", nil
 	}
 	return "100644", nil
@@ -798,7 +812,7 @@ func (g Git) WorktreeFiles(path string) (Changes, error) {
 		if name == "" {
 			continue
 		}
-		if info, err := os.Lstat(filepath.Join(top, filepath.FromSlash(name))); err == nil && !info.IsDir() {
+		if info, err := g.lstat(filepath.Join(top, filepath.FromSlash(name))); err == nil && !info.IsDir() {
 			files.Files = append(files.Files, FileChange{Path: name, OldPath: name, Status: 'A'})
 		}
 	}

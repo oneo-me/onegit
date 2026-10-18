@@ -7,9 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
@@ -699,36 +697,20 @@ func (v *View) stopWatches() {
 // objects matter only once a ref points at them.
 func (v *View) watch(ctx context.Context, watch *gitWatch, dir string) {
 	defer v.dispatch(func() { watch.ended = true })
-	var ignore func(string, bool) bool
 	if watch.repository {
 		gitDir, err := v.git.GitDir(dir)
 		if err != nil {
 			return
 		}
 		dir = gitDir
-		ignore = func(path string, _ bool) bool {
-			switch path {
-			case "objects", "lfs", "logs", "hooks", "info":
-				return true
-			}
-			return false
-		}
-	} else {
-		ignore = func(path string, _ bool) bool {
-			name := path[strings.LastIndex(path, "/")+1:]
-			return name == ".git" || name == "node_modules"
-		}
 	}
-	watcher, err := mygo.WatchFiles(ctx, dir, mygo.FileWatchOptions{
-		Recursive: true, HintsOnly: true, Ignore: ignore,
-		Debounce: 300 * time.Millisecond, MaxDelay: 2 * time.Second,
-	})
+	watcher, err := v.git.watch(ctx, dir, watch.repository)
 	if err != nil {
 		return
 	}
 	defer watcher.Close()
 	for {
-		if _, err := watcher.Next(ctx); err != nil {
+		if err := watcher.Next(ctx); err != nil {
 			return
 		}
 		v.dispatch(func() {
