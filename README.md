@@ -10,10 +10,12 @@ Onegit is a worktree-centered macOS app that gathers many Git repositories in on
 - Pin projects to a flat, name-sorted group above the directory tree.
 - Find projects and settings with the command palette (`⌘E`).
 - Switch between all worktrees of a project with tabs.
-- Review staged and unstaged changes, stage whole files, single changes or selected lines, and commit them with a message.
+- Review staged and unstaged changes, stage whole files, single changes or selected lines, stash chosen files or copy their paths, and commit them with a message.
 - Browse the full commit graph with collapsible merges, find in history, and commit details with diffs and file contents.
 - Browse local branches, remote branches and tags, and jump to their commits.
 - Double-click a ref or commit to check it out, or a branch checked out elsewhere to open its worktree, or use its menu to check it out here or as a new worktree, pull, merge or rebase onto it, branch, tag, delete it or copy its name. A branch's menu also fast-forwards, pushes, renames it or changes what it tracks.
+- Rebase from a dialog that reports conflicts and can update dependent branches or stash local changes.
+- Reset, cherry-pick, revert or save a commit as a patch, and apply, rename or delete a stash, from their menus.
 - Every Git write, such as fetch, pull, push, stash or a menu action, runs only when you click.
 
 ## Run

@@ -16,7 +16,7 @@ The view's `Toolbar` follows the tabs: round buttons, raised like the chosen tab
 
 - Watching is off: the view reads when a worktree is shown and after an action.
 - No ref filter and no inserted history rows.
-- The view's layout, ref group disclosure, line wrapping and fetch, pull, push and stash options are saved in `state.yaml` under `gitView`.
+- The view's layout, ref group disclosure, line wrapping and fetch, pull, push, stash, rebase and cherry-pick options are saved in `state.yaml` under `gitView`.
 - Commit authors' avatars are cached in `~/.onegit/avatars/`, downloaded from GitHub or Gravatar.
 
 ## Selection defaults

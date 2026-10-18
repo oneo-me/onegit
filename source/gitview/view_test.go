@@ -375,8 +375,8 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 			t.Fatalf("%q missing from %v", item, menu)
 		}
 	}
-	if slices.Contains(menu, "Merge into 'main'…") {
-		t.Fatalf("merges itself: %v", menu)
+	if !slices.Contains(menu, "Merge into 'main'…") {
+		t.Fatalf("no merge: %v", menu)
 	}
 	if err := view.ChooseMenuItem("New Branch…"); err != nil {
 		t.Fatal(err)
@@ -419,12 +419,20 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 		t.Fatalf("selected %q, dialog %v", v.history.selected, v.action.open)
 	}
 
-	// Double-clicking a tag in the refs pane asks as well.
+	// Double-clicking a tag in the refs pane asks as well; its menu can
+	// push the tag to a remote.
 	view.Advance(time.Second)
 	if err := view.Click("Tags"); err != nil {
 		t.Fatal(err)
 	}
 	view.Advance(time.Second)
+	if err := view.RightClick("v1"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := view.Menu(); !slices.Contains(menu, "Checkout Commit…") || !slices.Contains(menu, "Push to 'origin'…") {
+		t.Fatalf("tag menu: %v", menu)
+	}
+	view.CloseMenu()
 	for range 2 {
 		if err := view.Click("v1"); err != nil {
 			t.Fatal(err)
@@ -497,12 +505,25 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Double-clicking a branch another worktree has checked out opens that
-	// worktree instead.
+	// A branch another worktree has checked out opens that worktree from
+	// its menu, and double-clicking it does the same instead.
 	linked := filepath.Join(dir, "linked")
 	git(t, mine, "worktree", "add", "-q", "-b", "linked", linked)
 	v.Reload()
 	pump(func() bool { return ready() && len(v.repo.checkouts) == 2 })
+	view.Advance(time.Second)
+	if err := view.RightClick("linked"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := view.Menu(); !slices.Contains(menu, "Open 'linked' Worktree") {
+		t.Fatalf("linked menu: %v", menu)
+	}
+	if err := view.ChooseMenuItem("Open 'linked' Worktree"); err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Base(opened) != "linked" {
+		t.Fatalf("opened %q", opened)
+	}
 	view.Advance(time.Second)
 	for range 2 {
 		if err := view.Click("linked"); err != nil {
@@ -621,7 +642,7 @@ func TestViewBranchMenu(t *testing.T) {
 
 	// A branch another worktree has checked out leaves out what cannot
 	// apply to it, and fast-forwards only once its upstream moves on.
-	want := []string{"Fast-Forward to 'origin/main'", "Push to 'origin'…", "-", "Merge into '123'…", "Rebase on 'main'…", "-",
+	want := []string{"Fast-Forward to 'origin/main'", "Push to 'origin'…", "-", "Merge into '123'…", "Rebase '123' on 'main'…", "-",
 		"New Branch…", "New Tag…", "-", "Tracking", "Rename…", "-", "Copy Branch Name"}
 	if got := menu("main"); !slices.Equal(got, want) {
 		t.Fatalf("menu %q", got)

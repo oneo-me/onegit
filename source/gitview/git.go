@@ -1161,6 +1161,28 @@ func (g Git) Stashes(path string) ([]Stash, error) {
 // message, untracked files too with untracked, failing with
 // ErrNothingToStash when it saved nothing.
 func (g Git) SaveStash(path, message string, untracked bool) error {
+	return g.saveStash(path, message, untracked, nil)
+}
+
+// SaveStashFiles stashes the changes of files in the worktree containing
+// path, untracked files among them included, failing with ErrNothingToStash
+// when it saved nothing.
+func (g Git) SaveStashFiles(path, message string, files []FileChange) error {
+	var paths []string
+	seen := map[string]bool{}
+	for _, name := range pathsOf(files) {
+		if name != "" && !seen[name] {
+			seen[name] = true
+			paths = append(paths, name)
+		}
+	}
+	if len(paths) == 0 {
+		return ErrNothingToStash
+	}
+	return g.saveStash(path, message, true, paths)
+}
+
+func (g Git) saveStash(path, message string, untracked bool, paths []string) error {
 	before, _ := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/stash")
 	args := []string{"stash", "push", "--quiet"}
 	if untracked {
@@ -1169,6 +1191,9 @@ func (g Git) SaveStash(path, message string, untracked bool) error {
 	if message != "" {
 		args = append(args, "--message", message)
 	}
+	if len(paths) > 0 {
+		args = append(append(args, "--"), paths...)
+	}
 	if _, err := g.Run(path, args...); err != nil {
 		return err
 	}
@@ -1176,6 +1201,60 @@ func (g Git) SaveStash(path, message string, untracked bool) error {
 		return ErrNothingToStash
 	}
 	return nil
+}
+
+// RenameStash stores hash under message and drops its old entry, keeping
+// its tree and parents. It returns the new stash's hash.
+func (g Git) RenameStash(path, hash, message string) (string, error) {
+	details, err := g.Run(path, "show", "--no-patch", "--pretty=format:%T%x00%P", hash)
+	if err != nil {
+		return "", err
+	}
+	tree, parents, _ := strings.Cut(details, "\x00")
+	args := []string{"commit-tree", tree}
+	for _, parent := range strings.Fields(parents) {
+		args = append(args, "-p", parent)
+	}
+	out, err := g.outputWith(readTimeout, path, []byte(message), append(args, "-F", "-")...)
+	if err != nil {
+		return "", err
+	}
+	renamed := strings.TrimSpace(string(out))
+	if _, err := g.Run(path, "stash", "store", "--message", message, renamed); err != nil {
+		return "", err
+	}
+	return renamed, g.DropStash(path, hash)
+}
+
+// DropStash drops the stash hash from the repository containing path.
+func (g Git) DropStash(path, hash string) error {
+	stashes, err := g.Stashes(path)
+	if err != nil {
+		return err
+	}
+	for _, s := range stashes {
+		if s.Hash == hash {
+			_, err = g.Run(path, "stash", "drop", "--quiet", s.Name)
+			return err
+		}
+	}
+	return nil
+}
+
+// PushTag sends tag to remote.
+func (g Git) PushTag(path, remote, tag string) error {
+	return g.network(path, "push", "--quiet", remote, "refs/tags/"+tag)
+}
+
+// CommitPatch returns the patch of a commit, including its message.
+func (g Git) CommitPatch(path, hash string) ([]byte, error) {
+	return g.output(readTimeout, path, "format-patch", "--stdout", "--max-count=1", hash)
+}
+
+// StashPatch returns the patch of the changes a stash saved, untracked
+// files included.
+func (g Git) StashPatch(path, hash string) ([]byte, error) {
+	return g.output(readTimeout, path, "stash", "show", "-p", "--include-untracked", hash)
 }
 
 // ApplyStash applies the stash hash to the worktree containing path, then
@@ -1314,8 +1393,9 @@ func (g Git) AddWorktree(path, dir string, o CheckoutOptions) error {
 type IntegrateOptions struct {
 	// NoFastForward records a merge commit even when the branch could move
 	// ahead; a rebase ignores it. Stash sets uncommitted changes aside
-	// meanwhile.
-	NoFastForward, Stash bool
+	// meanwhile, and UpdateRefs moves the local branches pointing into the
+	// rebased commits with them.
+	NoFastForward, Stash, UpdateRefs bool
 }
 
 // Merge merges rev into the branch checked out at path with Git's default
@@ -1340,6 +1420,153 @@ func (g Git) Rebase(path, rev string, o IntegrateOptions) error {
 	args := []string{"rebase", "--quiet", "--no-autostash"}
 	if o.Stash {
 		args[2] = "--autostash"
+	}
+	if o.UpdateRefs {
+		args = append(args, "--update-refs")
+	}
+	_, err := g.runFor(networkTimeout, path, append(args, rev)...)
+	return err
+}
+
+// RebaseCheck is how a rebase is expected to go, as far as Git can tell
+// without moving a ref.
+type RebaseCheck int
+
+const (
+	// RebaseCheckUnknown means Git could not test the rebase, such as when
+	// it lacks the replay command.
+	RebaseCheckUnknown RebaseCheck = iota
+	// RebaseCheckClean means the rebase is expected to apply without
+	// conflicts.
+	RebaseCheckClean
+	// RebaseCheckConflict means the rebase is expected to stop at a
+	// conflict.
+	RebaseCheckConflict
+)
+
+// CheckRebase tests replaying the commits of source onto destination without
+// updating any ref. It reports unknown when Git cannot run the test.
+func (g Git) CheckRebase(path, source, destination string) (RebaseCheck, error) {
+	base, err := g.Run(path, "merge-base", source, destination)
+	if err != nil {
+		return RebaseCheckUnknown, err
+	}
+	sha, err := g.Run(path, "rev-parse", "--verify", source+"^{commit}")
+	if err != nil {
+		return RebaseCheckUnknown, err
+	}
+	if sha == base {
+		return RebaseCheckClean, nil
+	}
+	// --ref-action=print keeps the test from moving a ref, which newer
+	// Git versions do otherwise.
+	_, err = g.runFor(readTimeout, path, "replay", "--ref-action=print", "--onto", destination, base+".."+source)
+	switch {
+	case err == nil:
+		return RebaseCheckClean, nil
+	case strings.Contains(err.Error(), "is not a git command"), strings.Contains(err.Error(), "unknown subcommand"),
+		strings.Contains(err.Error(), "unknown option"), strings.Contains(err.Error(), "unrecognized argument"),
+		strings.Contains(err.Error(), "usage:"):
+		return RebaseCheckUnknown, nil
+	}
+	return RebaseCheckConflict, nil
+}
+
+// LocalBranchesInRange lists the local branches, other than the checked out
+// one, whose commits lie in the range a rebase of source onto destination
+// replays, which git rebase --update-refs moves with it.
+func (g Git) LocalBranchesInRange(path, source, destination string) ([]string, error) {
+	base, err := g.Run(path, "merge-base", source, destination)
+	if err != nil {
+		return nil, err
+	}
+	out, err := g.Run(path, "rev-list", base+".."+source)
+	if err != nil {
+		return nil, err
+	}
+	inRange := map[string]bool{}
+	for hash := range strings.FieldsSeq(out) {
+		inRange[hash] = true
+	}
+	refs, err := g.Refs(path)
+	if err != nil {
+		return nil, err
+	}
+	current, _ := g.Run(path, "symbolic-ref", "--quiet", "--short", "HEAD")
+	var names []string
+	for _, branch := range refs.Branches {
+		if branch.Name != current && inRange[branch.Hash] {
+			names = append(names, branch.Name)
+		}
+	}
+	slices.Sort(names)
+	return names, nil
+}
+
+// ResetMode is how git reset moves the checked out branch and what it does
+// with the index and the worktree.
+type ResetMode string
+
+const (
+	// ResetSoft keeps the index and worktree, leaving their differences
+	// staged.
+	ResetSoft ResetMode = "soft"
+	// ResetMixed keeps the worktree, unstaging the differences.
+	ResetMixed ResetMode = "mixed"
+	// ResetHard drops the changes from the index and worktree.
+	ResetHard ResetMode = "hard"
+)
+
+// Reset moves the branch checked out at path to rev as mode chooses, which
+// cannot be undone.
+func (g Git) Reset(path, rev string, mode ResetMode) error {
+	_, err := g.runFor(readTimeout, path, "reset", "--"+string(mode), rev)
+	return err
+}
+
+// CherryPickOptions choose what a cherry-pick records. Parent selects which
+// parent of a merge commit to replay, counting from one, and is zero for a
+// commit with a single parent. Commit records the change as a commit, and
+// AppendOrigin adds the picked commit to its message.
+type CherryPickOptions struct {
+	Commit, AppendOrigin bool
+	Parent               int
+}
+
+// CherryPick applies rev to the branch checked out at path. A conflict stops
+// it, leaving the conflicted files to resolve as git cherry-pick does.
+func (g Git) CherryPick(path, rev string, o CherryPickOptions) error {
+	args := []string{"cherry-pick", "--quiet"}
+	if !o.Commit {
+		args = append(args, "--no-commit")
+	}
+	if o.AppendOrigin && o.Commit {
+		args = append(args, "-x")
+	}
+	if o.Parent > 0 {
+		args = append(args, "-m", strconv.Itoa(o.Parent))
+	}
+	_, err := g.runFor(networkTimeout, path, append(args, rev)...)
+	return err
+}
+
+// RevertOptions choose what a revert records. Parent selects which parent
+// of a merge commit to revert relative to, counting from one, and Commit
+// records the revert as a commit.
+type RevertOptions struct {
+	Commit bool
+	Parent int
+}
+
+// Revert undoes rev in the branch checked out at path. A conflict stops it,
+// leaving the conflicted files to resolve as git revert does.
+func (g Git) Revert(path, rev string, o RevertOptions) error {
+	args := []string{"revert", "--quiet"}
+	if !o.Commit {
+		args = append(args, "--no-commit")
+	}
+	if o.Parent > 0 {
+		args = append(args, "-m", strconv.Itoa(o.Parent))
 	}
 	_, err := g.runFor(networkTimeout, path, append(args, rev)...)
 	return err

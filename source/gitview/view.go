@@ -75,6 +75,10 @@ type Options struct {
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)
+	// SaveFile asks where to save data such as a patch under name, writes
+	// it there and returns the chosen path, or "" when canceled. It runs
+	// off the UI thread. Nil uses MyGo's save dialog.
+	SaveFile func(title, name string, data []byte) (string, error)
 	// DialogInset keeps the view's dialogs below a host title bar.
 	DialogInset func(c *ui.Context) float32
 }
@@ -100,6 +104,12 @@ type State struct {
 	PullRebase  bool `yaml:"pullRebase,omitempty" json:"pullRebase,omitempty"`
 	PullStash   bool `yaml:"pullStash,omitempty" json:"pullStash,omitempty"`
 	PushTags    bool `yaml:"pushTags,omitempty" json:"pushTags,omitempty"`
+	// RebaseAutostash and RebaseUpdateRefs are the rebase dialog's
+	// remembered options, and CherryPickAppend appends the origin of a
+	// cherry-picked commit to its message.
+	RebaseAutostash  bool `yaml:"rebaseAutostash,omitempty" json:"rebaseAutostash,omitempty"`
+	RebaseUpdateRefs bool `yaml:"rebaseUpdateRefs,omitempty" json:"rebaseUpdateRefs,omitempty"`
+	CherryPickAppend bool `yaml:"cherryPickAppend,omitempty" json:"cherryPickAppend,omitempty"`
 	// StashTrackedOnly leaves untracked files out of a new stash.
 	StashTrackedOnly bool `yaml:"stashTrackedOnly,omitempty" json:"stashTrackedOnly,omitempty"`
 	// StashKeepApplied keeps a stash after applying it.
@@ -194,6 +204,15 @@ type View struct {
 	deletion   refDeletion
 	discarding discarding
 	action     refAction
+	// rebase, reset, cherryPick and revert are the history's dialogs, and
+	// pushTag the tag menu's; stashRename and stashDeletion change a stash.
+	rebase        rebaseDialog
+	reset         resetDialog
+	cherryPick    cherryPickDialog
+	revert        revertDialog
+	pushTag       pushTagDialog
+	stashRename   stashRenameDialog
+	stashDeletion stashDeletionDialog
 	// watches follow the repository's Git directory and shown worktrees.
 	watches map[string]*gitWatch
 	closed  bool
@@ -577,9 +596,16 @@ func (v *View) Layout(c *ui.Context) {
 	v.syncDialogView(c)
 	v.stashDialogView(c)
 	v.applyStashDialog(c)
+	v.stashRenameDialogView(c)
+	v.stashDeletionDialogView(c)
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
 	v.refActionDialog(c)
+	v.rebaseDialogView(c)
+	v.resetDialogView(c)
+	v.cherryPickDialogView(c)
+	v.revertDialogView(c)
+	v.pushTagDialogView(c)
 }
 
 // overlay floats the host's overlay at the top of the section, measuring

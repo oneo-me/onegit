@@ -399,7 +399,7 @@ func (v *View) fileList(c *ui.Context, p *filePane, area Area, empty string) {
 				components.Tooltip(c, row, n.file.OldPath+" → "+n.file.Path)
 			}
 			if area != AreaAll {
-				v.filesMenu(row, p, area, key)
+				v.filesMenu(c, row, p, area, key)
 			}
 		}).Fill().Padding(t.Space(1), 8, 8, 8)
 		if area != AreaAll {

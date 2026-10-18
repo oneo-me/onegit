@@ -58,11 +58,11 @@ func (t refTarget) rev() string {
 }
 
 // refAction is the dialog of a refs menu's write, op, on target: a checkout
-// or new worktree, a merge or rebase, or a new branch or tag. name is the new
-// branch or tag, path the new worktree's directory and message an annotated
-// tag's; suggested is the directory offered for path while not edited.
-// checkout also checks out a new branch, changes is what a checkout does
-// with uncommitted changes, and options tell a merge or rebase how.
+// or new worktree, a merge, or a new branch or tag. name is the new branch
+// or tag, path the new worktree's directory and message an annotated tag's;
+// suggested is the directory offered for path while not edited. checkout
+// also checks out a new branch, changes is what a checkout does with
+// uncommitted changes, and options tell a merge how.
 type refAction struct {
 	open                           bool
 	op                             string
@@ -132,26 +132,38 @@ func (g *menuGroups) submenu(label string, build func(m *ui.Menu)) *ui.MenuItem 
 	return g.m.Submenu(label, build)
 }
 
-// refMenu fills the menu of a ref or commit: checking it out, here or in a
-// new worktree, moving a local branch to its upstream or pushing it,
-// pulling a remote branch, merging it or rebasing onto it, branching or
-// tagging from it, a local branch's upstream and name, deleting a ref and
-// copying its name. Items that cannot apply to the target are left out;
-// writes are disabled while one runs or host work does.
+// refMenu fills the menu of a ref: checking it out, here or in a new
+// worktree, moving a local branch to its upstream or pushing it, pulling a
+// remote branch or the checked out branch's upstream, merging it or
+// rebasing onto it, pushing a tag, branching or tagging from it, a local
+// branch's upstream and name, deleting a ref and copying its name. Items
+// that cannot apply to the target are left out; writes are disabled while
+// one runs or host work does.
 func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 	can := v.CanSync()
 	args := map[string]any{"Name": t.name, "Current": v.checkedOutName()}
 	local := t.group == "branches"
 	g := &menuGroups{m: m}
 	checkout, label := v.checkoutTarget(t), v.text("ref_checkout")
+	if t.group == "tags" {
+		label = v.text("ref_checkout_tags")
+	}
 	if checkout.name != t.name {
 		label = v.textf("ref_checkout_branch", map[string]any{"Name": checkout.name})
 	}
-	if v.canCheckout(checkout) && g.item(label).Disabled(!can).Chosen() {
-		v.openRefAction(opCheckout, checkout)
-	}
-	if !(local && v.checkedOut(t.name)) && g.item(v.text("ref_worktree")).Disabled(!can).Chosen() {
-		v.openRefAction(OpWorktree, t)
+	// A branch another worktree has checked out opens that worktree
+	// instead of checking it out again.
+	if other := v.otherCheckout(checkout); other != "" && v.opts.OpenWorktree != nil {
+		if g.item(v.textf("ref_open_worktree", map[string]any{"Worktree": filepath.Base(other)})).Chosen() {
+			v.opts.OpenWorktree(other)
+		}
+	} else {
+		if v.canCheckout(checkout) && g.item(label).Disabled(!can).Chosen() {
+			v.openRefAction(opCheckout, checkout)
+		}
+		if !v.checkedOut(checkout.name) && g.item(v.text("ref_worktree")).Disabled(!can).Chosen() {
+			v.openRefAction(OpWorktree, t)
+		}
 	}
 	g.group()
 	if local && n != nil {
@@ -160,14 +172,25 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 	if t.group == "remotes" && v.tracking.Branch != "" && g.item(v.textf("ref_pull", args)).Disabled(!v.CanPull()).Chosen() {
 		v.openPull(t.name)
 	}
-	g.group()
-	// Integrating the checked out branch or commit with itself does nothing.
-	own := local && t.name == v.tracking.Branch || t.hash == v.repo.head
-	if !own && g.item(v.textf("ref_merge", args)).Disabled(!can).Chosen() {
-		v.openRefAction(opMerge, t)
+	if t.group == "tags" {
+		v.tagPushItems(g, t.name)
 	}
-	if !own && v.tracking.Branch != "" && g.item(v.textf("ref_rebase", args)).Disabled(!can).Chosen() {
-		v.openRefAction(opRebase, t)
+	g.group()
+	// Integrating the checked out branch with itself does nothing, and a
+	// ref at the checked out commit has nothing to replay.
+	own := local && t.name == v.tracking.Branch
+	// A local branch may still be merged or rebased at the same commit,
+	// as Fork offers; a tag or remote branch at HEAD has nothing to do.
+	same := t.hash == v.repo.head && !local
+	if !own {
+		if g.item(v.textf("ref_merge", args)).Disabled(!can || same).Chosen() && !same {
+			v.openRefAction(opMerge, t)
+		}
+		if v.tracking.Branch != "" {
+			if g.item(v.textf("ref_rebase", args)).Disabled(!can || same).Chosen() && !same {
+				v.openRebase(t)
+			}
+		}
 	}
 	g.group()
 	if g.item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
@@ -189,18 +212,95 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 		}
 	}
 	g.group()
-	copied := t.name
-	if t.group == "commit" {
-		copied = t.hash
-	}
 	if g.item(v.text("ref_copy_" + t.group)).Chosen() {
-		c.WriteClipboard(copied)
+		c.WriteClipboard(t.name)
+	}
+}
+
+// commitMenu fills a history row's menu: checking the commit out, merging
+// it into or rebasing the checked out branch to it, branching or tagging
+// from it, resetting the branch or HEAD to it, cherry-picking or reverting
+// it, saving its patch and copying its hash or summary. A detached HEAD has
+// no branch to merge or rebase, but resets.
+func (v *View) commitMenu(c *ui.Context, m *ui.Menu, commit Commit) {
+	t := commitTarget(commit)
+	can := v.CanSync()
+	checkedOut := v.tracking.Branch != ""
+	args := map[string]any{"Name": commit.Short, "Current": v.checkedOutName()}
+	g := &menuGroups{m: m}
+	if g.item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
+		v.openRefAction(opBranch, t)
+	}
+	if g.item(v.text("ref_new_tag")).Disabled(!can).Chosen() {
+		v.openRefAction(opTag, t)
+	}
+	g.group()
+	if checkedOut {
+		if g.item(v.textf("ref_merge_here", args)).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
+			v.openRefAction(opMerge, t)
+		}
+		if g.item(v.textf("ref_rebase_here", args)).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
+			v.openRebase(t)
+		}
+	}
+	g.group()
+	if g.item(v.textf("ref_reset_here", args)).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
+		v.openReset(t)
+	}
+	g.group()
+	if g.item(v.text("ref_checkout_commit")).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
+		v.openRefAction(opCheckout, t)
+	}
+	if g.item(v.text("ref_cherry_pick")).Disabled(!can).Chosen() {
+		v.openCherryPick(commit)
+	}
+	if g.item(v.text("ref_revert")).Disabled(!can).Chosen() {
+		v.openRevert(commit)
+	}
+	if g.item(v.text("ref_save_patch")).Disabled(!can).Chosen() {
+		v.saveCommitPatch(commit)
+	}
+	g.group()
+	if g.item(v.text("ref_copy_commit")).Chosen() {
+		c.WriteClipboard(commit.Hash)
+	}
+	if g.item(v.text("ref_copy_info")).Chosen() {
+		info := commit.Short + " - " + commit.Subject
+		if commit.Body != "" {
+			info += "\n\n" + commit.Body
+		}
+		c.WriteClipboard(info)
+	}
+}
+
+// tagPushItems add pushing a tag to the repository's remotes, a single one
+// directly and several in a submenu.
+func (v *View) tagPushItems(g *menuGroups, tag string) {
+	remotes := slices.Sorted(maps.Keys(v.repo.github))
+	can := v.CanSync()
+	switch len(remotes) {
+	case 0:
+		return
+	case 1:
+		name := remotes[0]
+		if g.item(v.textf("ref_push_tag", map[string]any{"Remote": name})).Disabled(!can).Chosen() {
+			v.openPushTag(tag, name)
+		}
+	default:
+		g.submenu(v.text("ref_push_tag_multiple"), func(m *ui.Menu) {
+			for _, name := range remotes {
+				if m.Item(v.textf("ref_push_tag", map[string]any{"Remote": name})).Disabled(!can).Chosen() {
+					v.openPushTag(tag, name)
+				}
+			}
+		})
 	}
 }
 
 // remoteItems add a local branch's fast-forward to its upstream, possible
 // when it lacks commits the upstream has and has none the upstream lacks,
-// and its push to its upstream's remote or the fallback remote.
+// its pull while it is checked out, and its push to its upstream's remote
+// or the fallback remote.
 func (v *View) remoteItems(g *menuGroups, n *refNode) {
 	can := v.CanSync()
 	if up := n.upstream; up.Remote != "" {
@@ -215,6 +315,11 @@ func (v *View) remoteItems(g *menuGroups, n *refNode) {
 			v.Run(opFastForward, v.text("ref_fast_forward_failed"), func(git Git, path string) error {
 				return git.FastForward(path, worktree, branch, rev)
 			})
+		}
+		if n.path == v.tracking.Branch {
+			if g.item(v.textf("ref_pull_upstream", map[string]any{"Upstream": name})).Disabled(!v.CanPull()).Chosen() {
+				v.openPullBranch(up)
+			}
 		}
 	}
 	remote := n.upstream.Remote
@@ -325,8 +430,12 @@ func (v *View) switchBranch(branch string) {
 
 // openRefAction opens the dialog of op on t, suggesting a new branch named
 // after a remote branch and a worktree beside the main one named after its
-// branch.
+// branch. A rebase uses its own dialog, which reads what it moves first.
 func (v *View) openRefAction(op string, t refTarget) {
+	if op == opRebase {
+		v.openRebase(t)
+		return
+	}
 	a := refAction{open: true, op: op, target: t, checkout: true}
 	if t.group == "remotes" && (op == opCheckout || op == OpWorktree) {
 		if remote := refRemote(v.repo.github, t.name); remote != "" {
@@ -448,8 +557,6 @@ func (v *View) refActionDialog(c *ui.Context) {
 		case opMerge:
 			formOption(c, refLabelWidth, &a.options.NoFastForward, v.text("ref_no_ff"))
 			formOption(c, refLabelWidth, &a.options.Stash, v.text("pull_stash"))
-		case opRebase:
-			formOption(c, refLabelWidth, &a.options.Stash, v.text("pull_stash"))
 		}
 		ready, problem := v.actionReady()
 		if problem != "" {
@@ -460,7 +567,7 @@ func (v *View) refActionDialog(c *ui.Context) {
 				a.open = false
 			}
 			confirm := components.Button(c, v.text("ref_"+a.op+"_confirm"), components.ButtonPrimary).Disabled(!ready || !v.CanSync())
-			if a.op == opMerge || a.op == opRebase || a.op == opCheckout && a.target.group != "remotes" {
+			if a.op == opMerge || a.op == opCheckout && a.target.group != "remotes" {
 				confirm.AutoFocus()
 			}
 			if confirm.Clicked() {
@@ -495,8 +602,6 @@ func (v *View) runRefAction() {
 		v.Run(OpWorktree, v.text("ref_worktree_failed"), func(git Git, path string) error { return git.AddWorktree(path, dir, checkout) })
 	case opMerge:
 		v.Run(opMerge, v.text("ref_merge_failed"), func(git Git, path string) error { return git.Merge(path, t.rev(), a.options) })
-	case opRebase:
-		v.Run(opRebase, v.text("ref_rebase_failed"), func(git Git, path string) error { return git.Rebase(path, t.rev(), a.options) })
 	case opBranch:
 		v.Run(opBranch, v.text("ref_branch_failed"), func(git Git, path string) error {
 			if a.checkout {

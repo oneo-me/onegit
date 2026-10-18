@@ -470,7 +470,7 @@ func (v *View) commitRow(c *ui.Context, commit Commit, row graphRow) {
 		merge = &mergeToggle{collapsed: collapsed, label: label, toggle: func() { v.history.toggle = commit.Hash }}
 	}
 	ui.Row(c).FillWidth().MinWidth(0).Height(commitRowHeight).AlignItems(ui.Center).Padding(0, t.Space(2)).ContextMenu(func(m *ui.Menu) {
-		v.refMenu(c, m, commitTarget(commit), nil)
+		v.commitMenu(c, m, commit)
 	}).Children(func() {
 		graphCell(c, row, commitRowHeight, merge)
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(0, 0, 0, t.Space(1)).Children(func() {

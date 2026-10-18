@@ -90,6 +90,13 @@ func (v *View) openPull(ref string) {
 	v.openSync(OpPull, from, "")
 }
 
+// openPullBranch opens the pull dialog bringing the remote branch up.
+func (v *View) openPullBranch(up RemoteBranch) {
+	if v.CanPull() {
+		v.openSync(OpPull, up, "")
+	}
+}
+
 // OpenPush opens the dialog choosing what a push sends.
 func (v *View) OpenPush() {
 	v.openPush("")
