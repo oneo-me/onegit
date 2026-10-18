@@ -102,7 +102,7 @@ func TestViewStagesChangesAndCommits(t *testing.T) {
 	v, pump := testView(t, Options{Git: Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")})
 	v.SetPath(repo)
 	p := v.current
-	shown := func() bool { return p.loaded && !p.loading && !p.fileLoading && v.syncing == "" }
+	shown := func() bool { return p.loaded && !p.loading && !p.fileLoading && v.Syncing() == "" }
 	pump(func() bool { return shown() && p.diff != nil })
 	view := ui.NewTester(viewFrame(v), 1000, 700)
 	if v.section != sectionChanges || !view.HasText("Changes") || view.HasText("Staged Changes") || p.selected != areaKeys[AreaUnstaged]+"a.txt" {

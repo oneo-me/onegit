@@ -37,7 +37,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 **Opening a project.** Selecting a repository lists all its worktrees, including those outside the parent directory. Onegit then reads changes, commits and refs for the selected worktree. See [Repository page](docs/architecture/repository-page.md).
 
-**User Git actions.** The Git view's toolbar in the title bar runs each action one at a time in the background. Failures show as toasts, and the view rereads the worktree when the action finishes.
+**User Git actions.** The Git view's toolbar in the title bar runs one action at a time per worktree in the background, so other repositories and worktrees stay free. Failures show as toasts, and the view rereads the worktree when the action finishes.
 
 ## Data and state
 

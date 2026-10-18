@@ -65,9 +65,9 @@ type Options struct {
 	// OnSelect reports that the shown section or selected history row
 	// changed; Selected reads the row.
 	OnSelect func()
-	// OnWrite reports that a Git write the view ran, named op, finished,
-	// whether or not it failed.
-	OnWrite func(op string)
+	// OnWrite reports that a Git write the view ran, named op, finished in
+	// the worktree at path, whether or not it failed.
+	OnWrite func(op, path string)
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)
@@ -162,11 +162,11 @@ type View struct {
 	messages map[string]string
 	history  historyState
 	// tracking compares the worktree's branch with its upstream; syncing
-	// names the Git write running, and toast reports the last one that
-	// failed; dialog chooses a fetch's, pull's or push's branches.
+	// names the Git write running in each worktree, and toast reports the
+	// last one that failed; dialog chooses a fetch's, pull's or push's branches.
 	tracking           Tracking
 	trackingGeneration uint64
-	syncing            string
+	syncing            map[string]string
 	dialog             syncDialog
 	toast              *ui.Toast
 	// deletion confirms deleting a ref from the refs pane.
@@ -204,7 +204,7 @@ type repositoryState struct {
 
 // New creates a view showing nothing until SetPath.
 func New(opts Options) *View {
-	v := &View{opts: opts, git: opts.Git, state: opts.State, section: sectionCommits, groups: map[string]*bool{}, messages: map[string]string{}}
+	v := &View{opts: opts, git: opts.Git, state: opts.State, section: sectionCommits, groups: map[string]*bool{}, messages: map[string]string{}, syncing: map[string]string{}}
 	if v.state.RefsWidth <= 0 {
 		v.state.RefsWidth = refsWidth
 	}

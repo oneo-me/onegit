@@ -121,7 +121,7 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	git(t, repo, "branch", "host/task")
 	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("2\n"), 0644)
 	var saved State
-	var written []string
+	var written, writtenPaths []string
 	v, pump := testView(t, Options{
 		Language: "zh-Hans",
 		Git:      Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t"),
@@ -129,7 +129,9 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 			return kind != RefBranch || !strings.HasPrefix(name, "host/")
 		},
 		OnState: func(s State) { saved = s },
-		OnWrite: func(op string) { written = append(written, op) },
+		OnWrite: func(op, path string) {
+			written, writtenPaths = append(written, op), append(writtenPaths, path)
+		},
 	})
 	v.SetPath(repo)
 	pump(func() bool { return v.repo.loaded && !v.repo.loading && v.current.loaded && !v.current.loading })
@@ -158,8 +160,8 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 		t.Fatalf("syncing %q", v.Syncing())
 	}
 	pump(func() bool { return v.Syncing() == "" })
-	if len(written) != 1 || written[0] != OpStash {
-		t.Fatalf("written: %v", written)
+	if len(written) != 1 || written[0] != OpStash || writtenPaths[0] != repo {
+		t.Fatalf("written: %v in %v", written, writtenPaths)
 	}
 	pump(func() bool { return v.current.loaded && !v.current.loading })
 	if v.section != sectionChanges || v.hasCurrentChanges() {
@@ -208,6 +210,25 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	view.Frame()
 	if open, ok := saved.Groups["tags"]; !ok || !open {
 		t.Fatalf("groups: %v", saved.Groups)
+	}
+
+	// A write running in one repository leaves another's writes free.
+	release := make(chan struct{})
+	v.Run("host", "failed", func(Git, string) error { <-release; return nil })
+	other := testRepo(t)
+	v.SetPath(other)
+	pump(func() bool { return v.repo.loaded && !v.repo.loading })
+	if v.Syncing() != "" || !v.CanSync() {
+		t.Fatalf("other repository: syncing %q", v.Syncing())
+	}
+	v.SetPath(repo)
+	if v.Syncing() != "host" {
+		t.Fatalf("back: syncing %q", v.Syncing())
+	}
+	close(release)
+	pump(func() bool { return v.Syncing() == "" })
+	if n := len(written); written[n-1] != "host" || writtenPaths[n-1] != repo {
+		t.Fatalf("written: %v in %v", written, writtenPaths)
 	}
 }
 

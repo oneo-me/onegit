@@ -57,7 +57,7 @@ func (v *View) toolButton(c *ui.Context, op string, icon func() *ui.SVG, label s
 		b.Disabled(true)
 	}
 	b.Children(func() {
-		if v.syncing == op {
+		if v.Syncing() == op {
 			components.Spinner(c, components.SpinnerRing).Size(16, 16)
 		} else {
 			components.Icon(c, icon).Size(16, 16).Shrink(0)

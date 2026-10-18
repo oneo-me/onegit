@@ -47,13 +47,14 @@ func (v *View) LocalBranches() []string {
 	return names
 }
 
-// Syncing names the Git write running, or is empty.
-func (v *View) Syncing() string { return v.syncing }
+// Syncing names the Git write running in the shown worktree, or is empty.
+func (v *View) Syncing() string { return v.syncing[v.path] }
 
 // CanSync reports whether the view may start a Git write now: it shows a
-// repository, none runs and the host is not busy.
+// repository, none runs in its worktree and the host is not busy. Writes in
+// other worktrees the view showed keep running.
 func (v *View) CanSync() bool {
-	return v.available() && v.syncing == "" && !v.busy()
+	return v.available() && v.Syncing() == "" && !v.busy()
 }
 
 // CanPull reports whether a pull may start, which needs a checked out
@@ -91,7 +92,7 @@ func (v *View) OpenPush() {
 }
 
 // Run runs a host's Git write, named op, in the worktree like the view's
-// own: one at a time, then rereading the view. A failure shows as a toast
+// own: one at a time in each worktree, then rereading the view. A failure shows as a toast
 // titled failed.
 func (v *View) Run(op, failed string, run func(git Git, path string) error) {
 	if v.CanSync() {
@@ -153,21 +154,21 @@ func (v *View) syncRepository(op, failed string, run func(git Git, path string) 
 // or the write failed.
 func (v *View) write(op, failed string, run func(git Git, path string) error, done func()) {
 	path := v.path
-	if v.syncing != "" || path == "" {
+	if v.syncing[path] != "" || path == "" {
 		return
 	}
-	v.syncing = op
+	v.syncing[path] = op
 	v.invalidate()
 	git := v.git
 	go func() {
 		err := run(git, path)
 		v.dispatch(func() {
-			v.syncing = ""
+			delete(v.syncing, path)
 			if v.closed {
 				return
 			}
 			if v.opts.OnWrite != nil {
-				v.opts.OnWrite(op)
+				v.opts.OnWrite(op, path)
 			}
 			if err != nil {
 				v.toast = &ui.Toast{Title: failed, Description: err.Error(), Type: components.ToastError}
@@ -313,7 +314,7 @@ func (v *View) syncDialogView(c *ui.Context) {
 		default:
 			ready = v.pushFields(c, r)
 		}
-		ready = ready && v.syncing == "" && !v.busy()
+		ready = ready && v.Syncing() == "" && !v.busy()
 		ui.Row(c).FillWidth().Wrap().Justify(ui.End).Gap(t.Space(2)).Children(func() {
 			if components.Button(c, v.text("cancel"), components.ButtonSecondary).Clicked() {
 				d.open = false
