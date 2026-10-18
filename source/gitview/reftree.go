@@ -22,6 +22,7 @@ func newRefTrees(refs Refs) refTrees {
 type refNode struct {
 	name, path, hash string
 	upstream         RemoteBranch
+	ahead, behind    int
 	children         []*refNode
 }
 
@@ -46,7 +47,7 @@ func newRefTree(refs []Ref) []*refNode {
 			}
 			parent = folder
 		}
-		parent.children = append(parent.children, &refNode{name: ref.Name[strings.LastIndex(ref.Name, "/")+1:], path: ref.Name, hash: ref.Hash, upstream: ref.Upstream})
+		parent.children = append(parent.children, &refNode{name: ref.Name[strings.LastIndex(ref.Name, "/")+1:], path: ref.Name, hash: ref.Hash, upstream: ref.Upstream, ahead: ref.Ahead, behind: ref.Behind})
 	}
 	for _, folder := range folders {
 		slices.SortStableFunc(folder.children, func(a, b *refNode) int {

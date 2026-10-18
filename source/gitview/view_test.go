@@ -359,16 +359,20 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 	view := ui.NewTester(viewFrame(v), 1000, 700)
 	view.SetPreferences(ui.Preferences{ReduceMotion: true})
 
-	// A local branch's menu offers checking it out, integrating it and
-	// branching from it; a new branch is checked out by default.
+	// A local branch's menu offers checking it out and branching from it,
+	// but not merging the checked out commit; a new branch is checked out
+	// by default.
 	if err := view.RightClick("feature"); err != nil {
 		t.Fatal(err)
 	}
 	menu := view.Menu()
-	for _, item := range []string{"Checkout…", "Checkout as Worktree…", "Merge into 'main'…", "Rebase 'main' on 'feature'…", "New Branch…", "New Tag…", "Delete…", "Copy Branch Name"} {
+	for _, item := range []string{"Checkout…", "Checkout as Worktree…", "New Branch…", "New Tag…", "Delete…", "Copy Branch Name"} {
 		if !slices.Contains(menu, item) {
 			t.Fatalf("%q missing from %v", item, menu)
 		}
+	}
+	if slices.Contains(menu, "Merge into 'main'…") {
+		t.Fatalf("merges itself: %v", menu)
 	}
 	if err := view.ChooseMenuItem("New Branch…"); err != nil {
 		t.Fatal(err)
@@ -547,4 +551,105 @@ func TestViewDeletesBranchWithItsWorktree(t *testing.T) {
 	if !slices.Equal(wrote, []string{OpWorktree}) {
 		t.Fatalf("wrote %v", wrote)
 	}
+}
+
+func TestViewBranchMenu(t *testing.T) {
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	mine := filepath.Join(dir, "mine")
+	git(t, dir, "clone", "-q", origin, mine)
+	git(t, mine, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, mine, "push", "-q", "origin", "main")
+	git(t, mine, "branch", "feature")
+	wt := filepath.Join(dir, "wt")
+	git(t, mine, "worktree", "add", "-q", "-b", "123", wt)
+	git(t, wt, "commit", "-q", "--allow-empty", "-m", "work")
+
+	v, pump := testView(t, Options{})
+	v.SetPath(wt)
+	ready := func() bool { return !v.Loading() && v.Syncing() == "" && v.tracking.Branch != "" }
+	pump(ready)
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	branch := func(name string) *refNode {
+		i := slices.IndexFunc(v.repo.refTrees.branches, func(n *refNode) bool { return n.path == name })
+		return v.repo.refTrees.branches[i]
+	}
+	menu := func(ref string) []string {
+		t.Helper()
+		view.Advance(time.Second)
+		if err := view.RightClick(ref); err != nil {
+			t.Fatal(err)
+		}
+		return view.Menu()
+	}
+
+	// A branch another worktree has checked out leaves out what cannot
+	// apply to it, and fast-forwards only once its upstream moves on.
+	want := []string{"Fast-Forward to 'origin/main'", "Push to 'origin'…", "-", "Merge into '123'…", "Rebase on 'main'…", "-",
+		"New Branch…", "New Tag…", "-", "Tracking", "Rename…", "-", "Copy Branch Name"}
+	if got := menu("main"); !slices.Equal(got, want) {
+		t.Fatalf("menu %q", got)
+	}
+	if err := view.ChooseMenuItem("Fast-Forward to 'origin/main'"); err == nil {
+		t.Fatal("fast-forwarded to the same commit")
+	}
+	theirs := filepath.Join(dir, "theirs")
+	git(t, dir, "clone", "-q", origin, theirs)
+	git(t, theirs, "commit", "-q", "--allow-empty", "-m", "theirs")
+	git(t, theirs, "push", "-q", "origin", "main")
+	git(t, mine, "fetch", "-q")
+	v.Reload()
+	pump(ready)
+	menu("main")
+	if err := view.ChooseMenuItem("Fast-Forward to 'origin/main'"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && branch("main").behind == 0 })
+	if head, _ := v.git.Run(mine, "log", "-1", "--format=%s"); head != "theirs" {
+		t.Fatalf("main worktree at %q", head)
+	}
+
+	// Its upstream changes from the tracking submenu.
+	menu("main")
+	if err := view.ChooseMenuItem("Tracking", "None"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && branch("main").upstream == RemoteBranch{} })
+	if got := menu("main"); slices.Contains(got, "Fast-Forward to 'origin/main'") {
+		t.Fatalf("untracked menu %q", got)
+	}
+
+	// A branch no worktree has checks out, pushes from its own dialog and
+	// renames.
+	got := menu("feature")
+	for _, item := range []string{"Checkout…", "Checkout as Worktree…", "Push to 'origin'…", "Delete…"} {
+		if !slices.Contains(got, item) {
+			t.Fatalf("%q missing from %q", item, got)
+		}
+	}
+	if err := view.ChooseMenuItem("Push to 'origin'…"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return v.dialog.remotes != nil })
+	if v.dialog.op != OpPush || v.dialog.branch != "feature" || v.dialog.to != (RemoteBranch{"origin", "feature"}) {
+		t.Fatalf("push dialog %+v", v.dialog)
+	}
+	v.dialog.open = false
+	menu("feature")
+	if err := view.ChooseMenuItem("Rename…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if !view.HasText("Rename feature") {
+		t.Fatalf("rename dialog: %v", view.Texts())
+	}
+	view.Frame()
+	view.Type("-2")
+	view.Frame()
+	if err := view.Click("Rename"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && hasRef(v.repo.refTrees.branches, "feature-2") })
 }

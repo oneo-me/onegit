@@ -1,6 +1,7 @@
 package gitview
 
 import (
+	"maps"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,11 +18,14 @@ const OpWorktree = "worktree"
 
 // Git writes of the refs' menus, besides OpSwitch, OpWorktree and deletion.
 const (
-	opCheckout = "checkout"
-	opMerge    = "merge"
-	opRebase   = "rebase"
-	opBranch   = "branch"
-	opTag      = "tag"
+	opCheckout    = "checkout"
+	opMerge       = "merge"
+	opRebase      = "rebase"
+	opBranch      = "branch"
+	opTag         = "tag"
+	opFastForward = "fast-forward"
+	opTrack       = "track"
+	opRename      = "rename"
 )
 
 // refTarget is what a menu of the refs pane or the history acts on: a ref of
@@ -100,58 +104,155 @@ func (v *View) checkedOutName() string {
 	return "HEAD"
 }
 
+// menuGroups adds a menu's items in groups, drawing a line between groups
+// that show items, so a group with every item left out leaves no line.
+type menuGroups struct {
+	m           *ui.Menu
+	shown, line bool
+}
+
+// group starts the next group.
+func (g *menuGroups) group() { g.line = g.shown }
+
+func (g *menuGroups) separate() {
+	if g.line {
+		g.m.Separator()
+		g.line = false
+	}
+	g.shown = true
+}
+
+func (g *menuGroups) item(label string) *ui.MenuItem {
+	g.separate()
+	return g.m.Item(label)
+}
+
+func (g *menuGroups) submenu(label string, build func(m *ui.Menu)) *ui.MenuItem {
+	g.separate()
+	return g.m.Submenu(label, build)
+}
+
 // refMenu fills the menu of a ref or commit: checking it out, here or in a
-// new worktree, pulling a remote branch, merging it or rebasing onto it,
-// branching or tagging from it, deleting a ref and copying its name. Writes
-// are disabled while one runs or host work does.
+// new worktree, moving a local branch to its upstream or pushing it,
+// pulling a remote branch, merging it or rebasing onto it, branching or
+// tagging from it, a local branch's upstream and name, deleting a ref and
+// copying its name. Items that cannot apply to the target are left out;
+// writes are disabled while one runs or host work does.
 func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 	can := v.CanSync()
 	args := map[string]any{"Name": t.name, "Current": v.checkedOutName()}
 	local := t.group == "branches"
+	g := &menuGroups{m: m}
 	checkout, label := v.checkoutTarget(t), v.text("ref_checkout")
 	if checkout.name != t.name {
 		label = v.textf("ref_checkout_branch", map[string]any{"Name": checkout.name})
 	}
-	if m.Item(label).Disabled(!can || !v.canCheckout(checkout)).Chosen() {
+	if v.canCheckout(checkout) && g.item(label).Disabled(!can).Chosen() {
 		v.openRefAction(opCheckout, checkout)
 	}
-	if m.Item(v.text("ref_worktree")).Disabled(!can || local && v.checkedOut(t.name)).Chosen() {
+	if !(local && v.checkedOut(t.name)) && g.item(v.text("ref_worktree")).Disabled(!can).Chosen() {
 		v.openRefAction(OpWorktree, t)
 	}
-	if t.group == "remotes" {
-		m.Separator()
-		if m.Item(v.textf("ref_pull", args)).Disabled(!v.CanPull()).Chosen() {
-			v.openPull(t.name)
-		}
+	g.group()
+	if local && n != nil {
+		v.remoteItems(g, n)
 	}
-	m.Separator()
+	if t.group == "remotes" && v.tracking.Branch != "" && g.item(v.textf("ref_pull", args)).Disabled(!v.CanPull()).Chosen() {
+		v.openPull(t.name)
+	}
+	g.group()
 	// Integrating the checked out branch or commit with itself does nothing.
 	own := local && t.name == v.tracking.Branch || t.hash == v.repo.head
-	if m.Item(v.textf("ref_merge", args)).Disabled(!can || own).Chosen() {
+	if !own && g.item(v.textf("ref_merge", args)).Disabled(!can).Chosen() {
 		v.openRefAction(opMerge, t)
 	}
-	if m.Item(v.textf("ref_rebase", args)).Disabled(!can || own || v.tracking.Branch == "").Chosen() {
+	if !own && v.tracking.Branch != "" && g.item(v.textf("ref_rebase", args)).Disabled(!can).Chosen() {
 		v.openRefAction(opRebase, t)
 	}
-	m.Separator()
-	if m.Item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
+	g.group()
+	if g.item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
 		v.openRefAction(opBranch, t)
 	}
-	if m.Item(v.text("ref_new_tag")).Disabled(!can).Chosen() {
+	if g.item(v.text("ref_new_tag")).Disabled(!can).Chosen() {
 		v.openRefAction(opTag, t)
 	}
+	g.group()
 	if n != nil {
-		m.Separator()
-		v.refDeleteItem(m, t.group, n)
+		if local {
+			v.trackingMenu(g, n)
+			if g.item(v.text("ref_rename")).Disabled(!can).Chosen() {
+				v.openRefAction(opRename, t)
+			}
+		}
+		if d, ok := v.newRefDeletion(t.group, n); ok && g.item(v.text("delete_ref")).Disabled(!can).Chosen() {
+			v.deletion = d
+		}
 	}
-	m.Separator()
-	copyLabel, copied := v.text("ref_copy_"+t.group), t.name
+	g.group()
+	copied := t.name
 	if t.group == "commit" {
 		copied = t.hash
 	}
-	if m.Item(copyLabel).Chosen() {
+	if g.item(v.text("ref_copy_" + t.group)).Chosen() {
 		c.WriteClipboard(copied)
 	}
+}
+
+// remoteItems add a local branch's fast-forward to its upstream, possible
+// when it lacks commits the upstream has and has none the upstream lacks,
+// and its push to its upstream's remote or the fallback remote.
+func (v *View) remoteItems(g *menuGroups, n *refNode) {
+	can := v.CanSync()
+	if up := n.upstream; up.Remote != "" {
+		name := up.Remote + "/" + up.Branch
+		ff := g.item(v.textf("ref_fast_forward", map[string]any{"Upstream": name}))
+		if ff.Disabled(!can || n.behind == 0 || n.ahead > 0).Chosen() {
+			worktree := ""
+			if i := slices.IndexFunc(v.repo.checkouts, func(c Checkout) bool { return c.Branch == n.path }); i >= 0 {
+				worktree = v.repo.checkouts[i].Path
+			}
+			branch, rev := n.path, "refs/remotes/"+name
+			v.Run(opFastForward, v.text("ref_fast_forward_failed"), func(git Git, path string) error {
+				return git.FastForward(path, worktree, branch, rev)
+			})
+		}
+	}
+	remote := n.upstream.Remote
+	if remote == "" {
+		names := slices.Sorted(maps.Keys(v.repo.github))
+		if remote = (Remotes{Names: names}).DefaultRemote(); remote == "" && len(names) > 0 {
+			remote = names[0]
+		}
+	}
+	if remote != "" && g.item(v.textf("ref_push", map[string]any{"Remote": remote})).Disabled(!can).Chosen() {
+		v.openPush(n.path)
+	}
+}
+
+// trackingMenu chooses the remote branch a local branch tracks, or none.
+func (v *View) trackingMenu(g *menuGroups, n *refNode) {
+	can := v.CanSync()
+	current := ""
+	if n.upstream.Remote != "" {
+		current = n.upstream.Remote + "/" + n.upstream.Branch
+	}
+	branch := n.path
+	track := func(upstream string) {
+		v.Run(opTrack, v.text("ref_tracking_failed"), func(git Git, path string) error {
+			return git.SetUpstream(path, branch, upstream)
+		})
+	}
+	g.submenu(v.text("ref_tracking"), func(m *ui.Menu) {
+		for _, r := range refLeaves(v.repo.refTrees.remotes) {
+			if m.Item(r.path).Checked(r.path == current).Disabled(!can).Chosen() && r.path != current {
+				track(r.path)
+			}
+		}
+		m.Separator()
+		if m.Item(v.text("ref_tracking_none")).Checked(current == "").Disabled(!can).Chosen() && current != "" {
+			track("")
+		}
+	})
 }
 
 // checkoutTarget is what checking out t switches to: the local branch
@@ -208,6 +309,9 @@ func (v *View) openRefAction(op string, t refTarget) {
 			_, a.name, _ = strings.Cut(t.name, "/")
 		}
 	}
+	if op == opRename {
+		a.name = t.name
+	}
 	if op == OpWorktree {
 		a.suggested = v.suggestedPath(t, a.name)
 		a.path = a.suggested
@@ -241,7 +345,8 @@ func (v *View) actionReady() (ready bool, problem string) {
 	a := v.action
 	name := strings.TrimSpace(a.name)
 	switch {
-	case (a.op == opBranch || a.op == opTag) && name == "", a.op == OpWorktree && strings.TrimSpace(a.path) == "":
+	case (a.op == opBranch || a.op == opTag || a.op == opRename) && name == "", a.op == OpWorktree && strings.TrimSpace(a.path) == "",
+		a.op == opRename && name == a.target.name:
 		return false, ""
 	case a.op == opTag && hasRef(v.repo.refTrees.tags, name):
 		return false, v.textf("ref_tag_exists", map[string]any{"Name": name})
@@ -306,6 +411,8 @@ func (v *View) refActionDialog(c *ui.Context) {
 				a.path = a.suggested
 			}
 			field(v.text("ref_path"), &a.path, "", a.target.group == "branches")
+		case opRename:
+			field(v.text("ref_branch_name"), &a.name, "", true)
 		case opBranch:
 			field(v.text("ref_branch_name"), &a.name, "", true)
 			formOption(c, refLabelWidth, &a.checkout, v.text("ref_checkout_created"))
@@ -371,6 +478,8 @@ func (v *View) runRefAction() {
 			}
 			return git.CreateBranch(path, name, t.rev())
 		})
+	case opRename:
+		v.Run(opRename, v.text("ref_rename_failed"), func(git Git, path string) error { return git.RenameBranch(path, t.name, name) })
 	case opTag:
 		v.Run(opTag, v.text("ref_tag_failed"), func(git Git, path string) error { return git.CreateTag(path, name, t.rev(), a.message) })
 	}

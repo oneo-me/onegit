@@ -66,14 +66,14 @@ func (v *View) Fetch() {
 // OpenFetch opens the dialog choosing what a fetch updates.
 func (v *View) OpenFetch() {
 	if v.CanSync() {
-		v.openSync(OpFetch, RemoteBranch{})
+		v.openSync(OpFetch, RemoteBranch{}, "")
 	}
 }
 
 // OpenPull opens the dialog choosing what a pull brings.
 func (v *View) OpenPull() {
 	if v.CanPull() {
-		v.openSync(OpPull, RemoteBranch{})
+		v.openSync(OpPull, RemoteBranch{}, "")
 	}
 }
 
@@ -87,13 +87,19 @@ func (v *View) openPull(ref string) {
 	if remote := refRemote(v.repo.github, ref); remote != "" {
 		from = RemoteBranch{Remote: remote, Branch: ref[len(remote)+1:]}
 	}
-	v.openSync(OpPull, from)
+	v.openSync(OpPull, from, "")
 }
 
 // OpenPush opens the dialog choosing what a push sends.
 func (v *View) OpenPush() {
+	v.openPush("")
+}
+
+// openPush opens the push dialog sending a local branch, or the checked out
+// one when branch is empty.
+func (v *View) openPush(branch string) {
 	if v.CanSync() {
-		v.openSync(OpPush, RemoteBranch{})
+		v.openSync(OpPush, RemoteBranch{}, branch)
 	}
 }
 
@@ -206,9 +212,9 @@ type syncDialog struct {
 }
 
 // openSync opens the fetch, pull or push dialog and reads the remotes and
-// branches it offers; a pull brings from, when set and still offered,
-// instead of its default.
-func (v *View) openSync(op string, from RemoteBranch) {
+// branches it offers; a pull brings from, and a push sends branch, when set
+// and still offered, instead of their defaults.
+func (v *View) openSync(op string, from RemoteBranch, branch string) {
 	path := v.path
 	v.dialog = syncDialog{op: op, open: true, generation: v.dialog.generation + 1}
 	generation, git := v.dialog.generation, v.git
@@ -238,7 +244,9 @@ func (v *View) openSync(op string, from RemoteBranch) {
 			}
 			if op == OpPush {
 				d.branch = remotes.Current
-				if d.branch == "" && len(remotes.Local) > 0 {
+				if slices.Contains(remotes.Local, branch) {
+					d.branch = branch
+				} else if d.branch == "" && len(remotes.Local) > 0 {
 					d.branch = remotes.Local[0]
 				}
 				d.to = pushTarget(remotes, d.branch)
@@ -572,15 +580,6 @@ type refDeletion struct {
 	group, ref, worktree     string
 	remote                   RemoteBranch
 	alsoRemote, alsoWorktree bool
-}
-
-// refDeleteItem adds deleting n of group to its context menu, disabled for
-// a ref the view cannot delete or while a Git write or host work runs.
-func (v *View) refDeleteItem(m *ui.Menu, group string, n *refNode) {
-	d, ok := v.newRefDeletion(group, n)
-	if m.Item(v.text("delete_ref")).Disabled(!ok || !v.CanSync()).Chosen() {
-		v.deletion = d
-	}
 }
 
 // newRefDeletion prepares the dialog deleting n of group, reporting false

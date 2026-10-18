@@ -23,7 +23,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 - The worktree is the unit of context. Branch and working tree state belong to a worktree, never to the repository as a whole.
 - Selecting a worktree changes what Onegit reads. It never runs `git checkout` or `git switch`.
-- Git write commands run only from an explicit user action: fetch, pull, push, stash, checkout, worktree creation, merge, rebase, new branches and tags, ref deletion, staging, discarding changes and commits.
+- Git write commands run only from an explicit user action: fetch, pull, push, stash, checkout, worktree creation, merge, rebase, fast-forwards, new branches and tags, branch renames and upstreams, ref deletion, staging, discarding changes and commits.
 - Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
 - Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
 - The sidebar tree mirrors the disk. It does not infer links between a repository and worktrees outside the parent directory.

@@ -34,6 +34,10 @@ var ErrNoRemote = errors.New("no remote to push the branch to")
 // branch's upstream nor the checked out branch has.
 var ErrNotMerged = errors.New("neither the branch's upstream nor the checked out branch has all of its commits")
 
+// ErrNotFastForward is a fast-forward of a branch with commits its target
+// lacks.
+var ErrNotFastForward = errors.New("the branch has diverged and cannot fast-forward")
+
 // Git runs the git executable with Env, or the process environment when Env
 // is nil. When Env sets PATH, git is looked up there. With Host, git runs and
 // files are read there instead, and Env only adds to the host's environment.
@@ -267,10 +271,12 @@ const (
 
 // Ref is a branch, remote branch or tag and the commit it points at. A
 // local branch also names the branch of a remote it tracks while that
-// exists.
+// exists, with the commits it has that the upstream lacks, Ahead, and those
+// the upstream has that it lacks, Behind.
 type Ref struct {
-	Name, Hash string
-	Upstream   RemoteBranch
+	Name, Hash    string
+	Upstream      RemoteBranch
+	Ahead, Behind int
 }
 
 // Refs are a repository's local branches, remote branches and tags, each
@@ -326,6 +332,7 @@ func (g Git) Refs(path string) (Refs, error) {
 			ref.Name = strings.TrimPrefix(fields[0], "refs/heads/")
 			if branch, ok := strings.CutPrefix(fields[4], "refs/heads/"); ok && fields[3] != "" && fields[3] != "." && fields[5] != "[gone]" {
 				ref.Upstream = RemoteBranch{fields[3], branch}
+				ref.Ahead, ref.Behind = trackCounts(fields[5])
 			}
 			refs.Branches = append(refs.Branches, ref)
 		case strings.HasPrefix(fields[0], "refs/remotes/"):
@@ -338,6 +345,19 @@ func (g Git) Refs(path string) (Refs, error) {
 		}
 	}
 	return refs, nil
+}
+
+// trackCounts reads the ahead and behind counts of a branch's
+// %(upstream:track), such as "[ahead 1, behind 2]".
+func trackCounts(track string) (ahead, behind int) {
+	for part := range strings.SplitSeq(strings.Trim(track, "[]"), ", ") {
+		if n, ok := strings.CutPrefix(part, "ahead "); ok {
+			ahead, _ = strconv.Atoi(n)
+		} else if n, ok := strings.CutPrefix(part, "behind "); ok {
+			behind, _ = strconv.Atoi(n)
+		}
+	}
+	return ahead, behind
 }
 
 // GitHubRemotes maps every remote of the repository containing path to
@@ -1328,6 +1348,47 @@ func (g Git) Rebase(path, rev string, o IntegrateOptions) error {
 // CreateBranch creates a local branch at start, without checking it out.
 func (g Git) CreateBranch(path, branch, start string) error {
 	_, err := g.Run(path, "branch", "--no-track", branch, start)
+	return err
+}
+
+// FastForward moves a local branch to rev when that only adds commits. A
+// branch checked out in a worktree moves by a fast-forward merge there,
+// which also updates its files; any other moves alone.
+func (g Git) FastForward(path, worktree, branch, rev string) error {
+	if worktree != "" {
+		_, err := g.Run(worktree, "merge", "--quiet", "--ff-only", "--no-autostash", rev)
+		return err
+	}
+	from, err := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch)
+	if err != nil {
+		return err
+	}
+	to, err := g.Run(path, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
+	if err != nil {
+		return err
+	}
+	if _, err := g.Run(path, "merge-base", "--is-ancestor", from, to); err != nil {
+		return ErrNotFastForward
+	}
+	_, err = g.Run(path, "update-ref", "-m", "fast-forward", "refs/heads/"+branch, to, from)
+	return err
+}
+
+// SetUpstream makes a local branch track a remote branch, such as
+// origin/main, or nothing when upstream is empty.
+func (g Git) SetUpstream(path, branch, upstream string) error {
+	args := []string{"branch", "--unset-upstream", branch}
+	if upstream != "" {
+		args = []string{"branch", "--set-upstream-to=" + upstream, branch}
+	}
+	_, err := g.Run(path, args...)
+	return err
+}
+
+// RenameBranch renames a local branch, keeping it checked out in the
+// worktrees that have it and refusing a name already taken.
+func (g Git) RenameBranch(path, branch, name string) error {
+	_, err := g.Run(path, "branch", "--move", branch, name)
 	return err
 }
 

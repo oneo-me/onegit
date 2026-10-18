@@ -360,3 +360,54 @@ func TestCheckoutWorktreesMergeRebaseAndCreate(t *testing.T) {
 		t.Fatalf("changes kept: %q", status)
 	}
 }
+
+func TestFastForwardTrackAndRename(t *testing.T) {
+	t.Parallel()
+	g := Git{}
+	repo := testRepo(t)
+	git(t, repo, "branch", "behind")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "next")
+	hash := func(rev string) string {
+		t.Helper()
+		out, _ := g.Run(repo, "rev-parse", rev)
+		return out
+	}
+
+	// A branch no worktree has moves alone, and only forward.
+	if err := g.FastForward(repo, "", "behind", "refs/heads/main"); err != nil {
+		t.Fatal(err)
+	}
+	if hash("behind") != hash("main") {
+		t.Fatal("behind did not move")
+	}
+	git(t, repo, "branch", "-f", "behind", "v1")
+	git(t, repo, "switch", "-q", "behind")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "diverged")
+	git(t, repo, "switch", "-q", "main")
+	if err := g.FastForward(repo, "", "behind", "refs/heads/main"); err != ErrNotFastForward {
+		t.Fatalf("diverged: %v", err)
+	}
+
+	// Tracking a branch is set and unset, and renaming keeps it.
+	git(t, repo, "remote", "add", "origin", repo)
+	git(t, repo, "update-ref", "refs/remotes/origin/main", "main")
+	if err := g.SetUpstream(repo, "behind", "origin/main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.RenameBranch(repo, "behind", "main"); err == nil {
+		t.Fatal("renamed over a branch")
+	}
+	if err := g.RenameBranch(repo, "behind", "ahead"); err != nil {
+		t.Fatal(err)
+	}
+	refs, err := g.Refs(repo)
+	if err != nil || len(refs.Branches) != 2 || refs.Branches[0].Name != "ahead" || refs.Branches[0].Ahead != 1 || refs.Branches[0].Behind != 1 {
+		t.Fatalf("refs %+v %v", refs, err)
+	}
+	if err := g.SetUpstream(repo, "ahead", ""); err != nil {
+		t.Fatal(err)
+	}
+	if refs, _ := g.Refs(repo); refs.Branches[0].Upstream != (RemoteBranch{}) {
+		t.Fatalf("still tracks %+v", refs.Branches[0])
+	}
+}

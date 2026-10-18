@@ -5,7 +5,7 @@
 ## What it shows
 
 - **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included.
-- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below. Writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; double-clicking a stash opens one applying it.
+- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below and grouped like Fork's. Items that cannot apply to the target, such as checking out a branch another worktree has, are left out; writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; double-clicking a stash opens one applying it.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or selected lines stage or unstage. Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
 - **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. A commit box below the lists commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
@@ -17,9 +17,12 @@
 | --- | --- |
 | Checkout | A dialog for a local branch, the one tracking a remote branch, a new branch tracking a remote branch, or a detached tag or commit; local changes stay, are stashed and reapplied, or are discarded, leaving untracked files |
 | Checkout as Worktree | `worktree add` beside the main worktree, with the same choices |
+| Fast-Forward to | Local branches with an upstream they only lack commits of: `merge --ff-only` in the worktree that has the branch, else `update-ref` |
+| Push to | Local branches: the push dialog, preset to that branch |
 | Pull into | Remote branches only: the pull dialog, preset to that branch |
 | Merge into, Rebase on | `merge --no-edit` or `rebase` of the checked out branch, optionally `--no-ff` or `--autostash`; conflicts stay for the user |
 | New Branch, New Tag | A branch, checked out by default, or a tag, annotated when given a message |
+| Tracking, Rename | Local branches: `branch --set-upstream-to` or `--unset-upstream`, and `branch --move` from a dialog |
 | Delete | Refs only, after a confirmation, optionally on the remote too. A branch checked out in another worktree, not the shown or main one, needs that worktree's `worktree remove` too, after checking that `branch -d` would succeed |
 | Copy | The ref's name or the commit's full hash |
 
