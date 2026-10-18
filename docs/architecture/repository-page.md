@@ -6,7 +6,7 @@ The repository page shows one selected project. The window's title bar holds its
 
 The segmented tabs list every worktree Git reports for the repository, including worktrees outside the parent directory. The main worktree comes first, as Git lists it, named after its directory: the project's name. The tabs replace the title, so a single worktree, or one still loading, still shows one tab; many tabs scroll before the actions.
 
-Switching tabs only changes the path the view shows. A worktree added from a ref's menu gets its tab once Git lists it, one deleted with its branch loses it, and the shown tab stays. Switching projects or worktrees, or closing the window, drops in-flight reads and discards their results.
+Switching tabs only changes the path the view shows. A worktree added from a ref's menu gets its tab once Git lists it, one deleted with its branch loses it, and the shown tab stays. Double-clicking a branch another worktree has checked out selects that worktree's tab. Switching projects or worktrees, or closing the window, drops in-flight reads and discards their results.
 
 ## Title bar actions
 

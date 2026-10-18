@@ -68,6 +68,10 @@ type Options struct {
 	// OnWrite reports that a Git write the view ran, named op, finished in
 	// the worktree at path, whether or not it failed.
 	OnWrite func(op, path string)
+	// OpenWorktree shows the worktree at path, as Git lists it, when the
+	// user double-clicks the branch another worktree has checked out. Nil
+	// leaves such branches alone.
+	OpenWorktree func(path string)
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)

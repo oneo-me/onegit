@@ -12,7 +12,7 @@ User-facing release notes for Onegit.
 - Switch between a project's worktrees with tabs in the title bar, returning to the last project and worktree.
 - Fetch, pull, push, stash and switch branches from the title bar, with fetch, pull, push and stash dialogs and commit counts; fetch updates every remote or one remote branch.
 - Browse current changes, all commits and filterable branches, remote branches, tags and stashes in a project sidebar, jumping to their commits, deleting refs from their menu or seeing the files a stash saved.
-- Check out a branch, remote branch, tag or commit by double-clicking it, keeping, stashing or discarding local changes.
+- Check out a branch, remote branch, tag or commit by double-clicking it, keeping, stashing or discarding local changes; a local branch switches at once when there are none, and one checked out in another worktree opens that worktree.
 - Apply a stash by double-clicking it, deleting it afterwards unless you keep it or it conflicts.
 - From a ref's or commit's menu, check it out here or as a new worktree, pull, merge or rebase onto it, branch or tag from it, delete it, along with the worktree that has a branch checked out, or copy its name; a branch's menu also fast-forwards, pushes, renames it or changes what it tracks, and leaves out what cannot apply.
 - Split current changes into unstaged files above staged ones, stage, unstage or discard chosen files from their menu or shortcuts, stage single changes or selected lines from the diff, and commit the staged ones with a message (`⌘Enter`).

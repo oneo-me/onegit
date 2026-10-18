@@ -352,7 +352,11 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 	git(t, mine, "push", "-q", "origin", "main", "main:other")
 	git(t, mine, "branch", "feature")
 
-	v, pump := testView(t, Options{Git: Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")})
+	var opened string
+	v, pump := testView(t, Options{
+		Git:          Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t"),
+		OpenWorktree: func(path string) { opened = path },
+	})
 	v.SetPath(mine)
 	ready := func() bool { return !v.Loading() && v.Syncing() == "" && v.tracking.Branch != "" }
 	pump(ready)
@@ -415,7 +419,7 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 		t.Fatalf("selected %q, dialog %v", v.history.selected, v.action.open)
 	}
 
-	// Double-clicking a tag or a branch in the refs pane asks as well.
+	// Double-clicking a tag in the refs pane asks as well.
 	view.Advance(time.Second)
 	if err := view.Click("Tags"); err != nil {
 		t.Fatal(err)
@@ -439,14 +443,11 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	view.Frame()
-	if !v.action.open || !view.HasText("Checkout Branch") {
-		t.Fatalf("branch dialog: %v", view.Texts())
-	}
-	if err := view.Click("Checkout"); err != nil {
-		t.Fatal(err)
-	}
+	// A branch switches without asking while there are no changes.
 	pump(func() bool { return ready() && v.tracking.Branch == "feature" })
+	if v.action.open {
+		t.Fatalf("branch dialog opened on a clean worktree: %v", view.Texts())
+	}
 
 	// Double-clicking a commit asks to check it out detached, here setting
 	// uncommitted changes aside and back.
@@ -479,6 +480,39 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 	git(t, mine, "switch", "-q", "main")
 	v.Reload()
 	pump(func() bool { return ready() && v.tracking.Branch == "main" })
+
+	// With changes, double-clicking a branch asks what to do with them.
+	pump(func() bool { return v.hasCurrentChanges() })
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("feature"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if !v.action.open || !view.HasText("Checkout Branch") {
+		t.Fatalf("branch dialog: %v", view.Texts())
+	}
+	if err := view.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Double-clicking a branch another worktree has checked out opens that
+	// worktree instead.
+	linked := filepath.Join(dir, "linked")
+	git(t, mine, "worktree", "add", "-q", "-b", "linked", linked)
+	v.Reload()
+	pump(func() bool { return ready() && len(v.repo.checkouts) == 2 })
+	view.Advance(time.Second)
+	for range 2 {
+		if err := view.Click("linked"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view.Frame()
+	if v.action.open || filepath.Base(opened) != "linked" || v.tracking.Branch != "main" {
+		t.Fatalf("opened %q, dialog %v, on %q", opened, v.action.open, v.tracking.Branch)
+	}
 
 	// A remote branch's pull starts from it.
 	if err := view.Click("Remote branches"); err != nil {

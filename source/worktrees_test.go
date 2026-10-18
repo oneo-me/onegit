@@ -187,6 +187,18 @@ func TestWorktreeSelection(t *testing.T) {
 	}
 }
 
+// The Git view opens a worktree by the path Git lists.
+func TestOpenWorktree(t *testing.T) {
+	s := &settings{selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
+		{Path: "/repo", Main: true}, {Path: "/outside/feature"},
+	}}}
+	s.repo.dispatch = func(func()) {}
+	s.openWorktree("/outside/feature/")
+	if s.overview.SelectedPath != "/outside/feature" || s.gitView().Path() != "/outside/feature" {
+		t.Fatalf("opened %q", s.overview.SelectedPath)
+	}
+}
+
 func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {

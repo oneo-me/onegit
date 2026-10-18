@@ -127,6 +127,17 @@ func (s *settings) selectWorktreeTab(index int) {
 	s.repositoryChanged()
 }
 
+// openWorktree selects the tab of the worktree at path, as Git lists it.
+func (s *settings) openWorktree(path string) {
+	path = filepath.Clean(filepath.FromSlash(path))
+	for i, item := range s.overview.Worktrees {
+		if item.Path == path {
+			s.selectWorktreeTab(i)
+			return
+		}
+	}
+}
+
 func (s *settings) rememberWorktreeSelection() {
 	if s.selectedProject == nil || !s.selectedProject.Repository {
 		return

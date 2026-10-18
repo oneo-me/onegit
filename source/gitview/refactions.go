@@ -282,12 +282,38 @@ func (v *View) canCheckout(t refTarget) bool {
 	return v.tracking.Branch != "" || t.hash != v.repo.head
 }
 
-// openCheckout asks before checking out t, as a double click does; it does
-// nothing when that would change nothing or a write may not start.
+// openCheckout checks out t, as a double click does: a local branch
+// another worktree has checked out opens that worktree, one switches at once
+// when the worktree was read without changes, and anything else asks first.
+// It does nothing when that would change nothing or a write may not start.
 func (v *View) openCheckout(t refTarget) {
-	if t = v.checkoutTarget(t); v.CanSync() && v.canCheckout(t) {
-		v.openRefAction(opCheckout, t)
+	t = v.checkoutTarget(t)
+	if path := v.otherCheckout(t); path != "" && v.opts.OpenWorktree != nil {
+		v.opts.OpenWorktree(path)
+		return
 	}
+	if !v.CanSync() || !v.canCheckout(t) {
+		return
+	}
+	if t.group == "branches" && v.current.loaded && !v.hasCurrentChanges() {
+		v.switchBranch(t.name)
+		return
+	}
+	v.openRefAction(opCheckout, t)
+}
+
+// otherCheckout is the path of the worktree other than the shown one that
+// has the local branch t checked out, or empty.
+func (v *View) otherCheckout(t refTarget) string {
+	if t.group != "branches" {
+		return ""
+	}
+	for _, c := range v.repo.checkouts {
+		if c.Branch == t.name && filepath.Clean(filepath.FromSlash(c.Path)) != filepath.Clean(v.path) {
+			return c.Path
+		}
+	}
+	return ""
 }
 
 // switchBranch checks out a local branch in the worktree.

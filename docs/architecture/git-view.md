@@ -5,7 +5,7 @@
 ## What it shows
 
 - **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count. Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter at the bottom. Choosing a ref selects its commit, and a stash lists the files it saved, untracked ones included.
-- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below and grouped like Fork's. Items that cannot apply to the target, such as checking out a branch another worktree has, are left out; writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; double-clicking a stash opens one applying it.
+- **Ref and commit menus.** Refs in the pane and history rows share one context menu, mapped below and grouped like Fork's. Items that cannot apply to the target, such as checking out a branch another worktree has, are left out; writes that need input confirm in a dialog. Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog, except that a local branch switches at once when the worktree has no changes, and one another worktree has checked out goes to `OpenWorktree`; double-clicking a stash opens one applying it.
 - **Changes.** A file tree beside the selected file's diff. Images are compared side by side.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`. Double-clicking a file, a diff change's button or selected lines stage or unstage. Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
 - **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. A commit box below the lists commits the staged files. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
@@ -42,6 +42,7 @@ Options:
 | `Entries` | Rows the host inserts above a revision. Each row has its own leading mark, columns and file readers |
 | `Busy` | Disables Git writes while host work runs |
 | `OnWrite` | Reports each finished Git write, such as to refresh a host's project list |
+| `OpenWorktree` | Shows the worktree of a double-clicked branch another worktree has checked out; nil ignores it |
 | `Watch` | Rereads on file changes via MyGo `WatchFiles`, or the host's watch; off reads only when asked |
 | `State`, `OnState` | Remembered layout and options for the host to persist |
 | `Language`, `Text` | Built-in English and Chinese strings. `Text` overrides them by key |
