@@ -32,6 +32,18 @@ func TestRepositoryTitleActions(t *testing.T) {
 		}
 	}
 
+	// Only a project with several worktrees shows their tabs.
+	s.overview.Worktrees = []worktree{{Path: repo}}
+	tt.Frame()
+	if !tt.HasText("demo") {
+		t.Fatalf("one worktree: %v", tt.Texts())
+	}
+	s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "feature")})
+	tt.Frame()
+	if !tt.HasText("demo") || !tt.HasText("feature") {
+		t.Fatalf("worktree tabs: %v", tt.Texts())
+	}
+
 	// Many worktrees scroll within the title bar and leave the actions in place.
 	for i := range 30 {
 		s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "worktree-"+strconv.Itoa(i))})

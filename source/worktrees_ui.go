@@ -149,20 +149,12 @@ func (s *settings) rememberWorktreeSelection() {
 	s.saveSidebarState()
 }
 
-// worktreeTabs builds the segmented worktree tabs in the title bar. They
-// name the project in place of a title, so a repository with only its main
-// worktree, or whose worktrees are still loading, shows one tab.
+// worktreeTabs builds the segmented worktree tabs in the title bar, shown
+// when the project has more than one worktree.
 func (s *settings) worktreeTabs(c *ui.Context) {
-	project := s.selectedProject
-	if project == nil || !project.Repository {
-		return
-	}
-	labels := []string{projectName(project.Path)}
-	if len(s.overview.Worktrees) > 0 {
-		labels = make([]string, len(s.overview.Worktrees))
-		for i, item := range s.overview.Worktrees {
-			labels[i] = worktreeLabel(item)
-		}
+	labels := make([]string, len(s.overview.Worktrees))
+	for i, item := range s.overview.Worktrees {
+		labels[i] = worktreeLabel(item)
 	}
 	selected := max(0, s.overview.selectedIndex)
 	// Many worktrees scroll rather than push the actions out of the title bar.

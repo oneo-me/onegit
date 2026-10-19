@@ -149,7 +149,7 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	// The toolbar offers every action. Its stash dialog saves a stash with
 	// untracked files, one write at a time, and rereads the view; the
 	// emptied changes stay shown.
-	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 400, 48)
+	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 600, 48)
 	for _, label := range []string{"获取", "拉取", "推送", "贮藏"} {
 		if _, ok := toolbar.Find(label); !ok {
 			t.Fatalf("%s missing from the toolbar", label)
@@ -326,6 +326,11 @@ func TestViewFetchDialog(t *testing.T) {
 	pump(func() bool { return v.Syncing() == "" && v.tracking.Behind == 1 })
 	if out, _ := v.git.Run(mine, "branch", "-r", "--list", "origin/other"); out != "" {
 		t.Fatalf("fetched other branches: %q", out)
+	}
+	// The pull button names the fetched commit after its label.
+	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 600, 48)
+	if texts := toolbar.Texts(); !slices.Equal(texts, []string{"Fetch", "Fetch", "Pull", "Pull", "1", "Push", "Push", "Stash", "Stash"}) {
+		t.Fatalf("toolbar: %v", texts)
 	}
 }
 

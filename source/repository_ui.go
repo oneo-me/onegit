@@ -113,6 +113,8 @@ func (s *settings) welcome(c *ui.Context) {
 
 func (s *settings) repositoryPage(c *ui.Context) {
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
+		// A hairline closes the title bar above the page.
+		ui.Box(c).FillWidth().Height(1).Shrink(0).Background(c.Theme().Border)
 		if s.overview.Loading {
 			s.repositoryMessage(c, s.text("正在读取 worktree…"))
 			return
@@ -135,8 +137,8 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 }
 
 // repositoryTitle fills the window's title bar, as Neorio does, instead of
-// adding a toolbar strip: the worktree tabs, which name the project, then the
-// view's toolbar.
+// adding a toolbar strip: the project's name, or tabs naming its worktrees
+// when it has more than one, then the view's toolbar.
 func (s *settings) repositoryTitle(c *ui.Context) {
 	project := s.selectedProject
 	if project == nil || !project.Repository {
@@ -145,7 +147,11 @@ func (s *settings) repositoryTitle(c *ui.Context) {
 	}
 	size := max(32, c.Theme().Rem(2))
 	ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(8).Margin(0, titleTrailing(c, size), 0, 0).Children(func() {
-		s.worktreeTabs(c)
+		if len(s.overview.Worktrees) > 1 {
+			s.worktreeTabs(c)
+		} else {
+			components.Text(c, projectName(project.Path)).Bold().SingleLine().Shrink(1).MinWidth(0)
+		}
 		ui.Spacer(c)
 		s.gitView().Toolbar(c, size)
 	})

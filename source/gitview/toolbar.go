@@ -8,10 +8,10 @@ import (
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
-// Toolbar builds the view's Git actions for a host's title bar as round,
-// raised buttons of size: fetch, and the pull and push dialogs with the
-// commits a pull would bring and a push would send, and the stash dialog.
-// Every action runs through the view.
+// Toolbar builds the view's Git actions for a host's title bar as raised
+// capsules of height size, each an icon beside its name: fetch, and the pull
+// and push dialogs followed by the commits a pull would bring and a push would
+// send, and the stash dialog. Every action runs through the view.
 func (v *View) Toolbar(c *ui.Context, size float32) {
 	tr := v.tracking
 	ui.Row(c).Key("gitview-toolbar").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
@@ -22,12 +22,13 @@ func (v *View) Toolbar(c *ui.Context, size float32) {
 	})
 }
 
-// toolButton is a toolbar button for op. A running action shows a spinner,
-// and count, when set, the commits it moves.
+// toolButton is a toolbar button for op showing its icon and label. A running
+// action shows a spinner in place of the icon, and count, when set, follows
+// the label as the commits it moves.
 func (v *View) toolButton(c *ui.Context, op string, icon func() *ui.SVG, label string, size float32, count int, disabled bool) ui.Element {
 	t := c.Theme()
-	b := components.Button(c, "", components.ButtonToolbar).Key("toolbar-"+op).Label(label).Size(size, size).
-		Padding(0).Shrink(0).Justify(ui.Center).AlignItems(ui.Center)
+	b := components.Button(c, "", components.ButtonToolbar).Key("toolbar-"+op).Label(label).Height(size).
+		Padding(0, t.Space(3)).Shrink(0).Gap(t.Space(1.5)).AlignItems(ui.Center)
 	if disabled {
 		b.Disabled(true)
 	}
@@ -37,18 +38,14 @@ func (v *View) toolButton(c *ui.Context, op string, icon func() *ui.SVG, label s
 		} else {
 			components.Icon(c, icon).Size(16, 16).Shrink(0)
 		}
+		components.Text(c, label).SingleLine()
 		if count > 0 {
-			ui.Box(c).Absolute().Top(1).Right(1).Height(14).MinWidth(14).Padding(0, 4).Radius(7).Center().
-				Background(t.Accent).Children(func() {
-				components.Text(c, strconv.Itoa(count)).FontSize(10).Bold().TextColor(t.AccentText).SingleLine()
-			})
+			components.Text(c, strconv.Itoa(count)).TextColor(t.TextMuted).SingleLine()
 		}
 	})
-	tip := v.ActionTooltip(op)
-	if tip == "" {
-		tip = label
+	if tip := v.ActionTooltip(op); tip != "" {
+		components.Tooltip(c, b, tip)
 	}
-	components.Tooltip(c, b, tip)
 	return b
 }
 

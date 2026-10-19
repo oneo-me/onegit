@@ -24,7 +24,7 @@
 - **All commits.** A graph of every shown ref, the checked out commit and host entries.
 - Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars.
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
-- **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, and Stash.
+- **Toolbar.** Labeled buttons for a host's title bar: Fetch, Pull and Push followed by the commits they move, and Stash.
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
 - The rebase dialog names both branches, lists the local branches `--update-refs` moves, tests for conflicts with `git replay --ref-action=print`, and offers autostash.

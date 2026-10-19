@@ -9,7 +9,7 @@ User-facing release notes for Onegit.
 - Scan the parent directory in the background into a project tree that marks missing paths and remembers expansion.
 - Pin projects to a flat, name-sorted group; both sidebar groups collapse independently.
 - Find projects and open Settings from the command palette (`⌘E`).
-- Switch between a project's worktrees with tabs in the title bar, returning to the last project and worktree.
+- Switch between a project's worktrees with tabs in the title bar when it has several, returning to the last project and worktree.
 - Fetch, pull, push and stash from the title bar, with dialogs and commit counts; fetch every remote or one branch.
 - Push a repository without remotes to a new GitHub repository, private unless you choose public, using the GitHub CLI.
 - Browse changes, commits, filterable branches, remote branches, tags and stashes, open their commits, delete refs and see stashed files.
