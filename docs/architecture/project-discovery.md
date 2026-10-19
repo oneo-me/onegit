@@ -35,8 +35,17 @@ The sidebar shows two collapsible groups, Pinned and Other Projects, both expand
 
 Nodes start collapsed. The tree uses Onevra `Tree` inside a `Sidebar` in a `ScrollView`, and the group headers use `Collapsible`.
 
+## Context menus
+
+Right-clicking a folder offers Open Folder. A repository row also offers pinning and Remove Project.
+
+- Removal hides the project from both groups, the command palette and selection fallback without touching its files.
+- The flag lives in the cached tree, so scans and restarts keep the project hidden.
+- The toast after a removal undoes it; the palette's Restore Removed Projects command brings back every project removed from the current parent directory.
+- Opening a folder runs `Shell.OpenPath`; a failure shows as a toast.
+
 ## Command palette
 
-The palette searches every cached project for the current parent directory, including collapsed and missing ones. It matches names and paths and opens the same node the sidebar would.
+The palette searches every cached project for the current parent directory, including collapsed and missing ones but not removed ones. It matches names and paths and opens the same node the sidebar would. While a project is hidden, it also lists Restore Removed Projects.
 
 It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; Onevra `CommandDialog` owns filtering, keyboard navigation and focus. The palette does not open over the settings dialog or the native directory picker.

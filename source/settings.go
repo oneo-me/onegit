@@ -68,6 +68,8 @@ type settings struct {
 	values            preferences
 	path              string
 	problem           string
+	openPath          func(string) error
+	toast             *ui.Toast
 	window            *mygo.Window
 	shell             *sidebar.Shell
 	systemLanguage    string

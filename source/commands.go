@@ -50,9 +50,12 @@ func (s *settings) commandItems() []command.Item {
 		{ID: "settings/language", Title: s.text("语言"), Group: s.text("设置"), Icon: lucide.Settings(), Keywords: []string{"语言", "language", "English", "中文"}},
 		{ID: "settings/directory", Title: s.text("项目父目录"), Group: s.text("设置"), Icon: lucide.Folder(), Keywords: []string{"项目父目录", "路径", "文件夹", "project", "parent", "directory", "folder"}},
 	}
+	if s.hasRemovedProjects() {
+		items = append(items, command.Item{ID: "projects/restore", Title: s.text("恢复已移除的项目"), Group: s.text("项目"), Icon: lucide.Folder(), Keywords: []string{"恢复", "移除", "项目", "restore", "removed", "project"}})
+	}
 	var projects []command.Item
 	walkProjects(s.projectTree, func(node *projectNode) {
-		if !node.Repository {
+		if !node.Repository || node.Removed {
 			return
 		}
 		title := filepath.Base(node.Path)
@@ -84,6 +87,11 @@ func (s *settings) activateCommand(id string) {
 			s.view.Query = s.text("项目父目录")
 		}
 		s.show()
+		return
+	}
+	if id == "projects/restore" {
+		s.commands.open = false
+		s.restoreRemovedProjects()
 		return
 	}
 	walkProjects(s.projectTree, func(node *projectNode) {

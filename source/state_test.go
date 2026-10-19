@@ -121,6 +121,15 @@ func TestSidebarRestartAndMerge(t *testing.T) {
 	}
 }
 
+func TestMergeKeepsRemovedProjects(t *testing.T) {
+	old := &projectNode{Path: "/projects", Children: []*projectNode{{Path: "/projects/repo", Repository: true, Removed: true}}}
+	fresh := &projectNode{Path: "/projects", Children: []*projectNode{{Path: "/projects/repo", Repository: true}}}
+	merged := mergeProjects(old, fresh, map[string]bool{})
+	if len(merged.Children) != 1 || !merged.Children[0].Removed {
+		t.Fatalf("scan restored a removed project: %+v", merged.Children)
+	}
+}
+
 func TestStateFilesAndMigration(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

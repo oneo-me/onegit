@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onevra/source/components"
 )
 
 func testGit(t *testing.T, args ...string) {
@@ -143,6 +144,128 @@ func TestProjectTreeInteraction(t *testing.T) {
 	content.Frame()
 	if content.HasText(s.selectedProject.Path) {
 		t.Fatal("project path should not appear in the compact worktree list")
+	}
+}
+
+func TestProjectContextMenu(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	alpha := filepath.Join(root, "alpha")
+	beta := filepath.Join(root, "beta")
+	group := filepath.Join(root, "group")
+	for _, repo := range []string{alpha, beta, filepath.Join(group, "nested")} {
+		testGit(t, "init", repo)
+	}
+	s := &settings{statePath: filepath.Join(t.TempDir(), "state.yaml"), values: preferences{ProjectParentDir: root}, systemLanguage: "en-US"}
+	callbacks := make(chan func(), 64)
+	s.startProjectScan(func(fn func()) { callbacks <- fn })
+	awaitNavigation(t, s, callbacks)
+	if s.selectedProject == nil || s.selectedProject.Path != alpha {
+		t.Fatalf("initial selection: %+v", s.selectedProject)
+	}
+	opened := make(chan string, 2)
+	s.openPath = func(path string) error {
+		opened <- path
+		return nil
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).Fill().Children(func() {
+			s.worktreeSidebar(c)
+			components.Toasts(c, components.ToastOptions{})
+		})
+	}, 500, 720)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+
+	if err := tt.RightClick("group"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := tt.Menu(); len(menu) != 1 || menu[0] != "Open Folder" {
+		t.Fatalf("folder menu: %q", menu)
+	}
+	if err := tt.ChooseMenuItem("Open Folder"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case path := <-opened:
+		if path != group {
+			t.Fatalf("opened %q", path)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("folder was not opened")
+	}
+
+	if err := tt.RightClick("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	menu := tt.Menu()
+	if len(menu) != 5 || menu[0] != "Open Folder" || menu[1] != "-" || menu[2] != "Pin Project" || menu[3] != "-" || menu[4] != "Remove Project" {
+		t.Fatalf("project menu: %q", menu)
+	}
+	if err := tt.ChooseMenuItem("Remove Project"); err != nil {
+		t.Fatal(err)
+	}
+	awaitNavigation(t, s, callbacks)
+
+	removed := findProject(s.projectTree, alpha)
+	if removed == nil || !removed.Removed {
+		t.Fatalf("project was not removed: %+v", removed)
+	}
+	if _, visible := sidebarProjects(s.projectTree); visible[removed] {
+		t.Fatal("removed project is still visible")
+	}
+	if s.selectedProject == nil || s.selectedProject.Path != beta {
+		t.Fatalf("selection after removal: %+v", s.selectedProject)
+	}
+	if s.state.SelectedProjects[root] != beta {
+		t.Fatalf("saved selection after removal: %q", s.state.SelectedProjects[root])
+	}
+	saved, err := loadSidebarState(s.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node := findProject(saved.Roots[root], alpha); node == nil || !node.Removed {
+		t.Fatalf("removal was not saved: %+v", node)
+	}
+	for _, item := range s.commandItems() {
+		if item.ID == "project/"+alpha {
+			t.Fatal("command palette lists the removed project")
+		}
+	}
+
+	// The toast undoes the removal.
+	tt.Frame()
+	if !tt.HasText("Project removed") {
+		t.Fatalf("removal toast is missing: %q", tt.Texts())
+	}
+	if err := tt.Click("Undo"); err != nil {
+		t.Fatal(err)
+	}
+	tt.Frame()
+	if removed.Removed || !tt.HasText("alpha") {
+		t.Fatal("undo did not restore the project")
+	}
+
+	// The palette restores every project removed from the parent directory.
+	if err := tt.RightClick("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Remove Project"); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, item := range s.commandItems() {
+		found = found || item.ID == "projects/restore"
+	}
+	if !found {
+		t.Fatal("restore command is missing")
+	}
+	s.activateCommand("projects/restore")
+	tt.Frame()
+	if removed.Removed || !tt.HasText("alpha") {
+		t.Fatal("restore command did not restore the project")
 	}
 }
 

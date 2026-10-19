@@ -58,7 +58,7 @@ func (s *settings) restoreShell(shell *sidebar.Shell) {
 
 func (s *settings) restoreProjectSelection(onMain func(func())) {
 	if s.selectedProject != nil {
-		if !s.selectedProject.Missing {
+		if !s.selectedProject.Missing && !s.selectedProject.Removed {
 			return
 		}
 		s.cancelWorktrees()
@@ -74,7 +74,7 @@ func (s *settings) restoreProjectSelection(onMain func(func())) {
 		}
 	}
 	walkProjects(s.projectTree, func(node *projectNode) {
-		if !node.Repository || node.Missing {
+		if !node.Repository || node.Missing || node.Removed {
 			return
 		}
 		if first == nil {

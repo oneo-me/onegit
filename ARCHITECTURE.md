@@ -12,7 +12,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 | `source/settings*.go` | Settings dialog, preferences file, theme and language |
 | `source/localization.go` | UI strings keyed by their Chinese text, with English translations |
 | `source/commands.go` | Command palette data and actions |
-| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning and persisted sidebar state |
+| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning, removal and persisted sidebar state |
 | `source/worktrees*.go` | Worktree listing and the worktree tab strip |
 | `source/repository_ui.go` | Repository page and its title bar |
 | `source/gitview/` | Reusable Git view shared with Neorio: toolbar, refs pane, changes, commit graph, details, dialogs and Git CLI layer |
@@ -27,7 +27,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 - A remote the user set to fetch automatically is the only write that runs without a click, when a worktree opens; nothing polls.
 - Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
 - Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
-- The sidebar tree mirrors the disk. It does not infer links between a repository and worktrees outside the parent directory.
+- The sidebar tree mirrors the disk, except projects the user removed. It does not infer links between a repository and worktrees outside the parent directory.
 - Missing projects are marked, never deleted. Only a confirmed missing path counts; permission or Git errors do not.
 - Projects switch through the sidebar only. Tabs are reserved for worktrees inside one project.
 - Empty states stay blank, with no welcome or placeholder text. Errors are always shown.
@@ -55,7 +55,7 @@ Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.
 
 ## Verification
 
-`go test` covers settings and persistence, project detection, scan cancellation and cache merging, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. Tests use real temporary Git repositories.
+`go test` covers settings and persistence, project detection, scan cancellation and cache merging, sidebar menus and removal, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. Tests use real temporary Git repositories.
 
 Review these manually: the native directory picker, and packaging and the app icon on each platform.
 

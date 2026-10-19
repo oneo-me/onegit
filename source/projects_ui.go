@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -72,6 +73,10 @@ func (s *settings) startProjectScan(onMain func(func())) {
 }
 
 func (s *settings) worktreeSidebar(c *ui.Context) {
+	if s.toast != nil {
+		c.AddToast(*s.toast)
+		s.toast = nil
+	}
 	defer func() {
 		changed := false
 		walkProjects(s.projectTree, func(n *projectNode) { changed = changed || n.Open != n.savedOpen })
@@ -158,19 +163,101 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*pro
 		if row.Clicked() {
 			s.selectProject(node, mygo.RunOnMain)
 		}
-		if node.Repository {
-			row.ContextMenu(func(m *ui.Menu) {
-				action := "置顶项目"
-				if node.Pinned {
-					action = "取消置顶"
-				}
-				if m.Item(s.text(action)).Chosen() {
-					node.Pinned = !node.Pinned
-					s.saveSidebarState()
-				}
-			})
+		row.ContextMenu(func(m *ui.Menu) {
+			if m.Item(s.text("打开文件夹")).Chosen() {
+				s.openFolder(node.Path)
+			}
+			if !node.Repository {
+				return
+			}
+			m.Separator()
+			action := "置顶项目"
+			if node.Pinned {
+				action = "取消置顶"
+			}
+			if m.Item(s.text(action)).Chosen() {
+				node.Pinned = !node.Pinned
+				s.saveSidebarState()
+			}
+			m.Separator()
+			if m.Item(s.text("移除项目")).Chosen() {
+				s.removeProject(node, s.repositoryDispatch())
+			}
+		})
+	})
+}
+
+// openFolder shows a path in the file manager: Finder, Explorer or the
+// desktop's file manager. Tests inject the platform call.
+func (s *settings) openFolder(path string) {
+	open := s.openPath
+	if open == nil {
+		open = mygo.Shell.OpenPath
+	}
+	if err := open(path); err != nil {
+		s.toast = &ui.Toast{ID: "open-folder", Title: s.text("无法打开目录"), Description: err.Error(), Type: components.ToastError}
+	}
+	s.invalidate()
+}
+
+// removeProject hides a project from the sidebar without touching its files.
+// The hidden flag lives in the cached tree, so scans and restarts keep it.
+func (s *settings) removeProject(node *projectNode, onMain func(func())) {
+	if node == nil || !node.Repository || node.Removed {
+		return
+	}
+	node.Removed = true
+	selected := s.selectedProject == node
+	if selected {
+		s.cancelWorktrees()
+		s.selectedProject = nil
+		if s.state.SelectedProjects != nil {
+			delete(s.state.SelectedProjects, s.projectRoot)
+		}
+	}
+	s.saveSidebarState()
+	s.toast = &ui.Toast{
+		ID: "project-removed:" + node.Path, Title: s.text("已移除项目"), Description: projectName(node.Path),
+		Action: s.text("撤销"), Timeout: 8 * time.Second,
+		OnAction: func() {
+			node.Removed = false
+			s.saveSidebarState()
+			if s.selectedProject == nil {
+				s.restoreProjectSelection(s.repositoryDispatch())
+			}
+			s.invalidate()
+		},
+	}
+	if selected {
+		s.restoreProjectSelection(onMain)
+	}
+	s.invalidate()
+}
+
+// restoreRemovedProjects brings back every project removed from the current
+// parent directory.
+func (s *settings) restoreRemovedProjects() {
+	restored := false
+	walkProjects(s.projectTree, func(node *projectNode) {
+		if node.Removed {
+			node.Removed = false
+			restored = true
 		}
 	})
+	if !restored {
+		return
+	}
+	s.saveSidebarState()
+	if s.selectedProject == nil {
+		s.restoreProjectSelection(s.repositoryDispatch())
+	}
+	s.invalidate()
+}
+
+func (s *settings) hasRemovedProjects() bool {
+	found := false
+	walkProjects(s.projectTree, func(node *projectNode) { found = found || node.Removed })
+	return found
 }
 
 // Derive display groups without moving cached nodes or changing expansion state.
@@ -182,6 +269,9 @@ func sidebarProjects(root *projectNode) (pinned []*projectNode, visible map[*pro
 			return false
 		}
 		if node.Repository {
+			if node.Removed {
+				return false
+			}
 			if node.Pinned {
 				pinned = append(pinned, node)
 			} else {

@@ -8,6 +8,7 @@ Onegit is a worktree-centered macOS app that gathers many Git repositories in on
 
 - Scan a parent directory for Git repositories and browse them in a sidebar tree.
 - Pin projects to a flat, name-sorted group above the directory tree.
+- Open a project's folder or remove it from the sidebar in its menu, with undo and restore.
 - Find projects and settings with the command palette (`⌘E`).
 - Switch between all worktrees of a project with tabs.
 - Review staged and unstaged changes, stage whole files, single changes or selected lines, stash chosen files or copy their paths, and commit them with a message.
