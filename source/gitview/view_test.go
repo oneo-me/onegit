@@ -150,10 +150,13 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	// untracked files, one write at a time, and rereads the view; the
 	// emptied changes stay shown.
 	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 400, 48)
-	for _, label := range []string{"获取", "拉取", "推送", "贮藏", "分支操作"} {
+	for _, label := range []string{"获取", "拉取", "推送", "贮藏"} {
 		if _, ok := toolbar.Find(label); !ok {
 			t.Fatalf("%s missing from the toolbar", label)
 		}
+	}
+	if _, ok := toolbar.Find("分支操作"); ok {
+		t.Fatal("the toolbar still offers a branch menu")
 	}
 	if err := toolbar.Click("贮藏"); err != nil {
 		t.Fatal(err)
@@ -222,20 +225,6 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 		t.Fatalf("applied: %q", data)
 	}
 	git(t, repo, "stash", "push", "-q", "--include-untracked")
-
-	// The branch menu lists the shown local branches and switches to one.
-	pump(func() bool { return !v.Loading() && v.tracking.Branch == "main" })
-	toolbar.Frame()
-	if err := toolbar.Click("分支操作"); err != nil {
-		t.Fatal(err)
-	}
-	if got := toolbar.Menu(); !slices.Equal(got, []string{"feature", "main"}) {
-		t.Fatalf("branch menu: %v", got)
-	}
-	if err := toolbar.ChooseMenuItem("feature"); err != nil {
-		t.Fatal(err)
-	}
-	pump(func() bool { return v.Syncing() == "" && !v.Loading() && v.tracking.Branch == "feature" })
 
 	// A clean worktree opens on the history and still offers its changes.
 	v.SetPath(t.TempDir())

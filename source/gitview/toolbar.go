@@ -10,8 +10,8 @@ import (
 
 // Toolbar builds the view's Git actions for a host's title bar as round,
 // raised buttons of size: fetch, and the pull and push dialogs with the
-// commits a pull would bring and a push would send, the stash dialog and
-// the branch menu. Every action runs through the view.
+// commits a pull would bring and a push would send, and the stash dialog.
+// Every action runs through the view.
 func (v *View) Toolbar(c *ui.Context, size float32) {
 	tr := v.tracking
 	ui.Row(c).Key("gitview-toolbar").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
@@ -19,24 +19,7 @@ func (v *View) Toolbar(c *ui.Context, size float32) {
 		onClick(v.toolButton(c, OpPull, lucide.ArrowDownToLine, v.text("pull"), size, tr.Behind, !v.CanPull()), v.OpenPull)
 		onClick(v.toolButton(c, OpPush, lucide.ArrowUpFromLine, v.text("push"), size, tr.Ahead, !v.CanSync()), v.OpenPush)
 		onClick(v.toolButton(c, OpStash, lucide.Archive, v.text("stash"), size, 0, !v.CanStash()), v.OpenStash)
-		if b := v.toolButton(c, OpSwitch, lucide.GitBranch, v.text("branch_actions"), size, 0, !v.CanSync()); !b.IsDisabled() {
-			b.Menu(v.branchMenu)
-		}
 	})
-}
-
-// branchMenu switches the worktree to another shown local branch.
-func (v *View) branchMenu(m *ui.Menu) {
-	current := v.tracking.Branch
-	branches := v.LocalBranches()
-	for _, branch := range branches {
-		if m.Item(branch).Checked(branch == current).Chosen() && branch != current {
-			v.switchBranch(branch)
-		}
-	}
-	if len(branches) == 0 {
-		m.Item(v.text("no_branches")).Disabled(true)
-	}
 }
 
 // toolButton is a toolbar button for op. A running action shows a spinner,

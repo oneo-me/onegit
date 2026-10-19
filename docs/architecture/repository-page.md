@@ -10,7 +10,7 @@ Switching tabs only changes the path the view shows. A worktree added from a ref
 
 ## Title bar actions
 
-The view's `Toolbar` follows the tabs: round buttons, raised like the chosen tab, for Fetch, Pull, Push, Stash and the branch menu, which Neorio's Git window shares. The view runs one action at a time per worktree, shows failures as toasts and rereads the worktree after each action.
+The view's `Toolbar` follows the tabs: round buttons, raised like the chosen tab, for Fetch, Pull, Push and Stash, which Neorio's Git window shares. The view runs one action at a time per worktree, shows failures as toasts and rereads the worktree after each action.
 
 ## Onegit's choices for the view
 

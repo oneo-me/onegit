@@ -22,7 +22,7 @@ func TestRepositoryTitleActions(t *testing.T) {
 	if !tt.HasText("demo") {
 		t.Fatal("project name missing from the title bar")
 	}
-	for _, label := range []string{"获取", "拉取", "推送", "贮藏", "分支操作"} {
+	for _, label := range []string{"获取", "拉取", "推送", "贮藏"} {
 		r, ok := tt.Find(label)
 		if !ok {
 			t.Fatalf("%s missing from the title bar", label)
@@ -37,7 +37,7 @@ func TestRepositoryTitleActions(t *testing.T) {
 		s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "worktree-"+strconv.Itoa(i))})
 	}
 	tt.Frame()
-	if r, ok := tt.Find("分支操作"); !ok || r.X+r.W > 800 {
+	if r, ok := tt.Find("贮藏"); !ok || r.X+r.W > 800 {
 		t.Fatalf("worktree tabs pushed the actions out: %+v", r)
 	}
 

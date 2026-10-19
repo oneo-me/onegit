@@ -24,7 +24,7 @@
 - **All commits.** A graph of every shown ref, the checked out commit and host entries.
 - Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars.
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
-- **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, Stash, and a menu switching to a shown local branch.
+- **Toolbar.** Round buttons for a host's title bar: Fetch, Pull and Push with the commits they move, and Stash.
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
 - The rebase dialog names both branches, lists the local branches `--update-refs` moves, tests for conflicts with `git replay --ref-action=print`, and offers autostash.
@@ -58,7 +58,7 @@
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
 - `Toolbar` builds the Git actions in a host's title bar. `OpWorktree` names a write adding or removing a worktree, for `OnWrite`.
 - `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` serve hosts adding their own. `CanSync`, `CanPull` and `CanStash` say whether an action may start.
-- `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `LocalBranches` lists the shown local branches. `Fetch` fetches every remote without the dialog.
+- `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `Fetch` fetches every remote without the dialog.
 - `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
 
 Options:

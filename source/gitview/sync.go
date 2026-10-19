@@ -14,8 +14,8 @@ import (
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
 
-// Git writes the view runs. Its toolbar starts all but deletion; Syncing
-// reports the running one.
+// Git writes the view runs. Its toolbar starts all but switching and
+// deletion; Syncing reports the running one.
 const (
 	OpFetch  = "fetch"
 	OpPull   = "pull"
@@ -28,17 +28,6 @@ const (
 // Tracking is how the worktree's branch compares with its upstream, for a
 // toolbar's counts.
 func (v *View) Tracking() Tracking { return v.tracking }
-
-// LocalBranches lists the shown local branches by name, for a toolbar's
-// branch menu; Tracking names the checked out one.
-func (v *View) LocalBranches() []string {
-	var names []string
-	for _, n := range refLeaves(v.repo.refTrees.branches) {
-		names = append(names, n.path)
-	}
-	slices.Sort(names)
-	return names
-}
 
 // Syncing names the Git write running in the shown worktree, or is empty.
 func (v *View) Syncing() string { return v.syncing[v.path] }
