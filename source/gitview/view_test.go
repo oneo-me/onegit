@@ -546,6 +546,90 @@ func TestViewRefAndCommitMenus(t *testing.T) {
 	}
 }
 
+func TestViewCommitMenuListsItsRefs(t *testing.T) {
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	repo := filepath.Join(dir, "repo")
+	git(t, dir, "clone", "-q", origin, repo)
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, repo, "tag", "v1")
+	git(t, repo, "branch", "feature")
+	git(t, repo, "push", "-q", "origin", "main", "main:other")
+	git(t, repo, "branch", "-q", "--track", "other", "origin/other")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "second")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "third")
+
+	v, pump := testView(t, Options{
+		Git: Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t"),
+	})
+	v.SetPath(repo)
+	ready := func() bool { return !v.Loading() && v.Syncing() == "" && v.tracking.Branch == "main" }
+	pump(ready)
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+
+	// A commit that refs point at leads its menu with the menu of each ref,
+	// as Fork does: its branches, a local branch before its remote, then
+	// its tags.
+	if err := view.RightClick("init"); err != nil {
+		t.Fatal(err)
+	}
+	menu := view.Menu()
+	want := []string{"feature", "origin/main", "other", "origin/other", "-", "v1", "-", "New Branch…", "New Tag…"}
+	if len(menu) < len(want) || !slices.Equal(menu[:len(want)], want) {
+		t.Fatalf("menu %v, want it to start with %v", menu, want)
+	}
+
+	// A tag's submenu pushes the tag, and a new branch from a branch's
+	// submenu starts at that branch.
+	if err := view.ChooseMenuItem("v1", "Push to 'origin'…"); err != nil {
+		t.Fatalf("%v: %v", err, menu)
+	}
+	view.Frame()
+	if !v.pushTag.open || v.pushTag.tag != "v1" || v.pushTag.remote != "origin" {
+		t.Fatalf("push tag %+v", v.pushTag)
+	}
+	if err := view.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+	view.Advance(time.Second)
+	if err := view.RightClick("init"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("feature", "New Branch…"); err != nil {
+		t.Fatalf("%v: %v", err, view.Menu())
+	}
+	view.Frame()
+	if !v.action.open || v.action.target.name != "feature" || !view.HasText("New branch at feature") {
+		t.Fatalf("branch dialog %+v: %v", v.action.target, view.Texts())
+	}
+	if err := view.Click("Cancel"); err != nil {
+		t.Fatal(err)
+	}
+
+	// A remote branch's submenu acts on that ref, not on the commit.
+	view.Advance(time.Second)
+	if err := view.RightClick("init"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("origin/other", "Copy Branch Name"); err != nil {
+		t.Fatalf("%v: %v", err, view.Menu())
+	}
+	if view.Clipboard() != "origin/other" {
+		t.Fatalf("copied %q", view.Clipboard())
+	}
+
+	// A commit no ref points at keeps its plain menu.
+	view.Advance(time.Second)
+	if err := view.RightClick("second"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := view.Menu(); menu[0] != "New Branch…" || slices.Contains(menu, "v1") || slices.Contains(menu, "feature") {
+		t.Fatalf("menu of a commit without refs: %v", menu)
+	}
+}
+
 func TestViewDeletesBranchWithItsWorktree(t *testing.T) {
 	repo := testRepo(t)
 	git(t, repo, "branch", "side")

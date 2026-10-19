@@ -1,6 +1,7 @@
 package gitview
 
 import (
+	"cmp"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -217,17 +218,105 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 	}
 }
 
-// commitMenu fills a history row's menu: checking the commit out, merging
-// it into or rebasing the checked out branch to it, branching or tagging
-// from it, resetting the branch or HEAD to it, cherry-picking or reverting
-// it, saving its patch and copying its hash or summary. A detached HEAD has
-// no branch to merge or rebase, but resets.
+// commitRef is a branch, remote branch or tag pointing at a commit, with
+// the node it has in the refs pane.
+type commitRef struct {
+	group string
+	node  *refNode
+}
+
+// refsAt lists the refs pointing at a commit, the way Fork lists them at
+// the top of a commit's menu: its branches, a local branch before the
+// remote branch it tracks, then its tags.
+func (v *View) refsAt(hash string) []commitRef {
+	var branches, tags []commitRef
+	for _, group := range []struct {
+		key   string
+		nodes []*refNode
+	}{
+		{"branches", v.repo.refTrees.branches},
+		{"remotes", v.repo.refTrees.remotes},
+		{"tags", v.repo.refTrees.tags},
+	} {
+		for _, n := range refLeaves(group.nodes) {
+			if n.hash != hash {
+				continue
+			}
+			r := commitRef{group: group.key, node: n}
+			if group.key == "tags" {
+				tags = append(tags, r)
+			} else {
+				branches = append(branches, r)
+			}
+		}
+	}
+	slices.SortStableFunc(branches, v.compareBranchesAt)
+	slices.SortFunc(tags, func(a, b commitRef) int { return cmp.Compare(a.node.path, b.node.path) })
+	return append(branches, tags...)
+}
+
+// compareBranchesAt orders branches at a commit by name, comparing a local
+// branch through the remote branch it tracks so the two stay together, and
+// the local branch first.
+func (v *View) compareBranchesAt(a, b commitRef) int {
+	if c := cmp.Compare(v.branchSortName(a), v.branchSortName(b)); c != 0 {
+		return c
+	}
+	if a.group != b.group {
+		if a.group == "branches" {
+			return -1
+		}
+		return 1
+	}
+	return cmp.Compare(a.node.path, b.node.path)
+}
+
+// branchSortName names a branch at a commit for sorting: the branch part of
+// a remote branch, the branch it tracks for a local branch that tracks one,
+// else its name.
+func (v *View) branchSortName(r commitRef) string {
+	if r.group == "remotes" {
+		if remote := refRemote(v.repo.github, r.node.path); remote != "" {
+			return r.node.path[len(remote)+1:]
+		}
+		return r.node.path
+	}
+	if up := r.node.upstream; up.Remote != "" {
+		return up.Branch
+	}
+	return r.node.path
+}
+
+// commitRefsItems adds a submenu for each ref pointing at commit, filled
+// with the menu the refs pane gives that ref: its branches, then its tags.
+func (v *View) commitRefsItems(c *ui.Context, g *menuGroups, commit Commit) {
+	tags := false
+	for _, r := range v.refsAt(commit.Hash) {
+		if r.group == "tags" && !tags {
+			tags = true
+			g.group()
+		}
+		t, n := nodeTarget(r.group, r.node), r.node
+		g.submenu(n.path, func(m *ui.Menu) { v.refMenu(c, m, t, n) })
+	}
+}
+
+// commitMenu fills a history row's menu: the menus of the branches, remote
+// branches and tags pointing at it, checking the commit out, merging it into
+// or rebasing the checked out branch to it, branching or tagging from it,
+// resetting the branch or HEAD to it, cherry-picking or reverting it, saving
+// its patch and copying its hash or summary. A detached HEAD has no branch
+// to merge or rebase, but resets.
 func (v *View) commitMenu(c *ui.Context, m *ui.Menu, commit Commit) {
 	t := commitTarget(commit)
 	can := v.CanSync()
 	checkedOut := v.tracking.Branch != ""
 	args := map[string]any{"Name": commit.Short, "Current": v.checkedOutName()}
 	g := &menuGroups{m: m}
+	// A commit a ref points at leads with that ref's menu, as Fork does, so
+	// its branch, remote branch or tag acts from the history row too.
+	v.commitRefsItems(c, g, commit)
+	g.group()
 	if g.item(v.text("ref_new_branch")).Disabled(!can).Chosen() {
 		v.openRefAction(opBranch, t)
 	}

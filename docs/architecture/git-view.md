@@ -10,6 +10,7 @@
 - **Ref, commit, remote and stash menus.** Refs, history rows, remotes and stashes have context menus grouped like Fork's.
 - A ref checks out, adds a worktree, fast-forwards, pulls, pushes, merges, rebases, branches, tags, tracks, renames, deletes or copies.
 - A commit branches, tags, merges or rebases into the checked-out branch, resets, checks out, cherry-picks, reverts, saves its patch or copies its hash or message.
+- A branch, remote branch or tag pointing at a commit leads the commit's menu with that ref's menu, which acts as in the refs pane.
 - A remote's menu fetches, edits or deletes it, toggles automatic fetching, opens it on GitHub, adds another remote or copies its address.
 - A stash applies, renames, saves its patch or deletes. Items that cannot apply are left out or disabled; writes that need input open a dialog.
 - Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; a local branch switches at once when there are no changes, and one checked out elsewhere goes to `OpenWorktree`.

@@ -17,7 +17,7 @@ User-facing release notes for Onegit.
 - Double-click a ref or commit to check it out, keeping, stashing or discarding changes; a branch checked out elsewhere opens its worktree.
 - Apply a stash by double-clicking it, deleting it afterwards unless you keep it or it conflicts.
 - Rebase the checked-out branch from a dialog that names both sides, tests for conflicts, and can update dependent branches or stash local changes.
-- Act on refs and commits from their menus: checkout, worktree, pull, merge, rebase, branch, tag, reset, cherry-pick, revert, patch, delete or copy.
+- Act on refs and commits from their menus: checkout, worktree, pull, merge, rebase, branch, tag, reset, cherry-pick, revert, patch, delete or copy; a commit a branch, remote branch or tag points at also acts as that ref.
 - Branch menus also push, fast-forward, rename, change tracking and delete a branch with its worktree.
 - Fetch, edit or delete remotes from their menu, fetch one automatically when a worktree opens, view a GitHub remote or copy its address.
 - Create branches and tags from their group menus, and remove the stale local branches you choose.
