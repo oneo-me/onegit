@@ -388,7 +388,11 @@ func (v *View) fileList(c *ui.Context, p *filePane, area Area, empty string) {
 		list := components.TreeVirtualized(c, &p.lists[area].state, p.roots(area), p.tree.children, func(key string) {
 			n := p.tree.nodes[key]
 			if p.browse && n.children == nil {
-				ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6).Children(func() {
+				row := ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(6)
+				if area == AreaAll {
+					v.allFilesMenu(c, row, p, area, key)
+				}
+				row.Children(func() {
 					fileIcon(c, n.name, 14)
 					components.Text(c, n.name).Grow(1).MinWidth(0).SingleLine().Ellipsis("…").FontSize(13)
 				})
@@ -400,6 +404,8 @@ func (v *View) fileList(c *ui.Context, p *filePane, area Area, empty string) {
 			}
 			if area != AreaAll {
 				v.filesMenu(c, row, p, area, key)
+			} else {
+				v.allFilesMenu(c, row, p, area, key)
 			}
 		}).Fill().Padding(t.Space(1), 8, 8, 8)
 		if area != AreaAll {

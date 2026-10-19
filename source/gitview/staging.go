@@ -3,7 +3,6 @@ package gitview
 import (
 	"bytes"
 	"path"
-	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -263,51 +262,41 @@ func (p *filePane) chosenFiles(area Area, key string) []FileChange {
 	return files
 }
 
-// filesMenu stages, unstages, discards or stashes from a row's menu the
-// files of the chosen rows, or of the row alone when it is not chosen, and
-// copies their paths.
+// filesMenu opens, reveals, stages, unstages, discards or stashes from a
+// row's menu the files of the chosen rows, or of the row alone when it is
+// not chosen, and copies their paths.
 func (v *View) filesMenu(c *ui.Context, row ui.Element, p *filePane, area Area, key string) {
 	row.ContextMenu(func(m *ui.Menu) {
 		files := p.chosenFiles(area, key)
 		disabled := !v.CanSync() || len(files) == 0
+		g := &menuGroups{m: m}
+		v.fileActions(g, p, files)
+		g.group()
 		if area == AreaStaged {
-			if m.Item(v.text("unstage_change")).Shortcut(v.shortcut()|ui.Shift, ui.KeyS).Disabled(disabled).Chosen() {
+			if g.item(v.text("unstage_change")).Shortcut(v.shortcut()|ui.Shift, ui.KeyS).Disabled(disabled).Chosen() {
 				v.stageFiles(area, files)
 			}
-			if len(files) == 1 && m.Item(v.text("unstage_all")).Disabled(disabled).Chosen() {
+			if len(files) == 1 && g.item(v.text("unstage_all")).Disabled(disabled).Chosen() {
 				v.stageFiles(area, areaFiles(p, area))
 			}
 		} else {
-			if m.Item(v.text("stage_change")).Shortcut(v.shortcut(), ui.KeyS).Disabled(disabled).Chosen() {
+			if g.item(v.text("stage_change")).Shortcut(v.shortcut(), ui.KeyS).Disabled(disabled).Chosen() {
 				v.stageFiles(area, files)
 			}
-			if m.Item(v.text("discard_changes")).Shortcut(v.shortcut()|ui.Shift, ui.KeyD).Disabled(disabled).Chosen() {
+			if g.item(v.text("discard_changes")).Shortcut(v.shortcut()|ui.Shift, ui.KeyD).Disabled(disabled).Chosen() {
 				v.askDiscard(files)
 			}
-			if len(files) == 1 && m.Item(v.text("stage_all")).Disabled(disabled).Chosen() {
+			if len(files) == 1 && g.item(v.text("stage_all")).Disabled(disabled).Chosen() {
 				v.stageFiles(area, areaFiles(p, area))
 			}
 		}
-		m.Separator()
-		if m.Item(v.textf("stash_files", map[string]any{"Count": len(files)})).Disabled(disabled).Chosen() {
+		g.group()
+		if g.item(v.textf("stash_files", map[string]any{"Count": len(files)})).Disabled(disabled).Chosen() {
 			v.openStashFiles(files)
 		}
-		if p == v.current && len(files) > 0 {
-			m.Separator()
-			if m.Item(v.text("copy_paths")).Chosen() {
-				var paths []string
-				for _, f := range files {
-					paths = append(paths, f.Path)
-				}
-				c.WriteClipboard(strings.Join(paths, "\n"))
-			}
-			if m.Item(v.text("copy_absolute_paths")).Chosen() {
-				var paths []string
-				for _, f := range files {
-					paths = append(paths, filepath.Join(p.changes.Top, filepath.FromSlash(f.Path)))
-				}
-				c.WriteClipboard(strings.Join(paths, "\n"))
-			}
+		if len(files) > 0 {
+			g.group()
+			v.copyFileActions(c, g, p, files)
 		}
 	})
 }

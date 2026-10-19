@@ -68,6 +68,9 @@ func (s *settings) gitView() *gitview.View {
 			s.saveSidebarState()
 		},
 		DialogInset: sidebar.HeaderHeight,
+		// Files open in their default application or show in the file manager.
+		OpenFile:   mygo.Shell.OpenPath,
+		RevealFile: mygo.Shell.ShowItemInFolder,
 		// A branch another worktree has checked out opens its tab.
 		OpenWorktree: s.openWorktree,
 		// A worktree added from a ref's menu gets its tab.

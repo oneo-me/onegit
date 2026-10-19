@@ -3,7 +3,9 @@ package gitview
 import (
 	"maps"
 	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -320,10 +322,11 @@ func (v *View) saveFile(title, name string, data []byte) (string, error) {
 	if v.opts.SaveFile != nil {
 		return v.opts.SaveFile(title, name, data)
 	}
-	path, err := mygo.Dialog.Save(mygo.SaveDialogOptions{
-		Title: title, DefaultPath: name,
-		Filters: []mygo.FileFilter{{Name: title, Extensions: []string{"patch", "diff"}}},
-	})
+	options := mygo.SaveDialogOptions{Title: title, DefaultPath: name}
+	if ext := strings.TrimPrefix(filepath.Ext(name), "."); ext != "" {
+		options.Filters = []mygo.FileFilter{{Name: title, Extensions: []string{ext}}}
+	}
+	path, err := mygo.Dialog.Save(options)
 	if err != nil || path == "" {
 		return path, err
 	}

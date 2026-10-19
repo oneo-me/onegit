@@ -203,6 +203,75 @@ func TestApplyStashDropsItUnlessKeptOrConflicting(t *testing.T) {
 	}
 }
 
+func TestRestoreFileToCommit(t *testing.T) {
+	t.Parallel()
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	repo := t.TempDir()
+	git(t, repo, "init", "-q", "-b", "main")
+	write := func(name, text string) {
+		t.Helper()
+		os.WriteFile(filepath.Join(repo, name), []byte(text), 0644)
+	}
+	read := func(name string) string {
+		t.Helper()
+		data, err := os.ReadFile(filepath.Join(repo, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(data)
+	}
+
+	write("a.txt", "one\n")
+	write("gone.txt", "gone\n")
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "first")
+	first, _ := g.Run(repo, "rev-parse", "HEAD")
+	write("a.txt", "two\n")
+	os.Remove(filepath.Join(repo, "gone.txt"))
+	write("new.txt", "new\n")
+	git(t, repo, "add", "-A")
+	git(t, repo, "commit", "-q", "-m", "second")
+	second, _ := g.Run(repo, "rev-parse", "HEAD")
+
+	// A tracked change returns to the version the commit holds in both the
+	// worktree and the index.
+	write("a.txt", "three\n")
+	git(t, repo, "add", "a.txt")
+	if err := g.RestoreFile(repo, first, "a.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := read("a.txt"); got != "one\n" {
+		t.Fatalf("worktree: %q", got)
+	}
+	if data, err := g.IndexFile(repo, "a.txt"); err != nil || string(data) != "one\n" {
+		t.Fatalf("index: %q, %v", data, err)
+	}
+
+	// A file the commit deleted is restored, and one it added is removed.
+	write("gone.txt", "back\n")
+	if err := g.RestoreFile(repo, first, "gone.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if got := read("gone.txt"); got != "gone\n" {
+		t.Fatalf("restored: %q", got)
+	}
+	write("new.txt", "changed\n")
+	if err := g.RestoreFile(repo, first, "new.txt"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(repo, "new.txt")); !os.IsNotExist(err) {
+		t.Fatalf("new.txt stayed: %v", err)
+	}
+	if files, _ := g.Run(repo, "ls-files", "--", "new.txt"); files != "" {
+		t.Fatalf("new.txt stayed in the index: %q", files)
+	}
+
+	// The second commit's version can be restored as well.
+	if err := g.RestoreFile(repo, second, "a.txt"); err != nil || read("a.txt") != "two\n" {
+		t.Fatalf("second: %q, %v", read("a.txt"), err)
+	}
+}
+
 func git(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	cmd := exec.Command("git", args...)

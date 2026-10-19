@@ -808,6 +808,32 @@ func (g Git) Discard(top string, files ...FileChange) error {
 	return err
 }
 
+// RestoreFile gives path, relative to the worktree at top, the version
+// commit holds in both the worktree and the index, deleting it when commit
+// has no such file.
+func (g Git) RestoreFile(top, commit, path string) error {
+	out, err := g.Run(top, "--literal-pathspecs", "ls-tree", "-r", "--name-only", "-z", commit, "--", path)
+	if err != nil {
+		return err
+	}
+	listed := false
+	for name := range strings.SplitSeq(out, "\x00") {
+		if name == path {
+			listed = true
+			break
+		}
+	}
+	if listed {
+		_, err = g.Run(top, "--literal-pathspecs", "restore", "--source="+commit, "--staged", "--worktree", "--", path)
+		return err
+	}
+	if _, err = g.Run(top, "--literal-pathspecs", "rm", "--force", "--ignore-unmatch", "--quiet", "--", path); err != nil {
+		return err
+	}
+	_, err = g.Run(top, "--literal-pathspecs", "clean", "--force", "-x", "--quiet", "--", path)
+	return err
+}
+
 // StageText stages text as the version of the file at path, relative to the
 // worktree's top, keeping the mode the index or checked out commit gives it,
 // else the worktree file's.

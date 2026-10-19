@@ -13,6 +13,7 @@ package gitview
 import (
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
@@ -75,10 +76,18 @@ type Options struct {
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)
-	// SaveFile asks where to save data such as a patch under name, writes
-	// it there and returns the chosen path, or "" when canceled. It runs
-	// off the UI thread. Nil uses MyGo's save dialog.
+	// SaveFile asks where to save data such as a patch or file under name,
+	// writes it there and returns the chosen path, or "" when canceled. It
+	// runs off the UI thread. Nil uses MyGo's save dialog.
 	SaveFile func(title, name string, data []byte) (string, error)
+	// OpenFile opens a file path with its default application, as a file
+	// menu's Open File does; a host whose Git.Host runs elsewhere decides
+	// what a path means. Nil leaves that item out.
+	OpenFile func(path string) error
+	// RevealFile shows a file path in the file manager, as a file menu's
+	// Show in File Manager does; a host whose Git.Host runs elsewhere
+	// decides what a path means. Nil leaves that item out.
+	RevealFile func(path string)
 	// DialogInset keeps the view's dialogs below a host title bar.
 	DialogInset func(c *ui.Context) float32
 }
@@ -202,10 +211,11 @@ type View struct {
 	applyStash         applyStash
 	toast              *ui.Toast
 	// deletion and discarding confirm deleting a ref from the refs pane and
-	// discarding a worktree's changes; action asks for what another write
-	// of a ref's or commit's menu needs.
+	// discarding a worktree's changes; restoring resets a file to a commit;
+	// action asks for what another write of a ref's or commit's menu needs.
 	deletion   refDeletion
 	discarding discarding
+	restoring  restoring
 	action     refAction
 	// rebase, reset, cherryPick and revert are the history's dialogs, and
 	// pushTag the tag menu's; stashRename and stashDeletion change a stash.
@@ -227,6 +237,10 @@ type View struct {
 	// watches follow the repository's Git directory and shown worktrees.
 	watches map[string]*gitWatch
 	closed  bool
+	// tempMu guards tempDirs, the temporary directories holding versions of
+	// files opened from commits or stashes.
+	tempMu   sync.Mutex
+	tempDirs []string
 }
 
 // repositoryState is the repository's history and refs, and its worktrees'
@@ -357,6 +371,7 @@ func (v *View) Resume() {
 func (v *View) Close() {
 	v.closed = true
 	v.stopWatches()
+	v.removeTempDirs()
 }
 
 // Selected names the selected history row while the history shows: an
@@ -633,6 +648,7 @@ func (v *View) Layout(c *ui.Context) {
 	v.stashDeletionDialogView(c)
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
+	v.restoreFileDialog(c)
 	v.refActionDialog(c)
 	v.remoteDialogView(c)
 	v.remoteDeletionDialog(c)
