@@ -30,6 +30,10 @@ var ErrNothingToStash = errors.New("no local changes to save")
 // ErrNoRemote is a push that names no remote to send the branch to.
 var ErrNoRemote = errors.New("no remote to push the branch to")
 
+// ErrNoGitHubCLI is a GitHub repository creation without the GitHub CLI to
+// run it.
+var ErrNoGitHubCLI = errors.New("the GitHub CLI (gh) is not installed")
+
 // ErrNotMerged is a branch deletion that would lose commits neither the
 // branch's upstream nor the checked out branch has.
 var ErrNotMerged = errors.New("neither the branch's upstream nor the checked out branch has all of its commits")
@@ -1142,6 +1146,70 @@ func (g Git) PushBranch(path string, o PushOptions) error {
 		args = append(args, "--set-upstream")
 	}
 	return g.network(path, append(args, o.Remote, "refs/heads/"+o.Branch+":refs/heads/"+o.To)...)
+}
+
+// ghDirs are where Homebrew installs gh, looked in after PATH.
+var ghDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
+
+// GitHubCLI returns the path of the GitHub CLI, gh, on the PATH of Env or
+// the process environment, else where Homebrew installs it, as apps opened
+// from the Finder get a PATH without it. It is empty when none is found and
+// with a Host, which runs only git.
+func (g Git) GitHubCLI() string {
+	if g.Host != nil {
+		return ""
+	}
+	dirs := filepath.SplitList(os.Getenv("PATH"))
+	if g.Env != nil {
+		dirs = nil
+		for _, entry := range g.Env {
+			if k, v, ok := strings.Cut(entry, "="); ok && k == "PATH" {
+				dirs = filepath.SplitList(v)
+			}
+		}
+	}
+	for _, dir := range append(dirs, ghDirs...) {
+		if dir == "" {
+			continue
+		}
+		if p, err := exec.LookPath(filepath.Join(dir, "gh")); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+// CreateGitHubRepository creates a GitHub repository with the GitHub CLI
+// and adds it to the repository containing path as the remote origin,
+// without pushing. name is NAME for the signed-in account or OWNER/NAME.
+func (g Git) CreateGitHubRepository(path, name string, private bool) error {
+	gh := g.GitHubCLI()
+	if gh == "" {
+		return ErrNoGitHubCLI
+	}
+	visibility := "--public"
+	if private {
+		visibility = "--private"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, gh, "repo", "create", name, visibility, "--source", path, "--remote", "origin")
+	hideConsole(cmd)
+	cmd.Dir = path
+	env := g.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	cmd.Env = append(slices.Clone(env), "GH_PROMPT_DISABLED=1", "GIT_TERMINAL_PROMPT=0", "NO_COLOR=1")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return errors.New(msg)
+		}
+		return err
+	}
+	return nil
 }
 
 // DeleteBranch deletes a local branch of the repository containing path.

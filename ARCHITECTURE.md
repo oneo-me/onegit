@@ -1,6 +1,6 @@
 # Onegit architecture
 
-Onegit is a single Go module in [source](source/) built on [Onevra](https://github.com/oneo-me/onevra) components and the MyGo runtime. It has three moving parts: project discovery for the sidebar, a repository page for the selected project, and settings with persisted state. All Git access goes through the `git` executable on `PATH`.
+Onegit is a single Go module in [source](source/) built on [Onevra](https://github.com/oneo-me/onevra) components and the MyGo runtime. It has three moving parts: project discovery for the sidebar, a repository page for the selected project, and settings with persisted state. All Git access goes through the `git` executable on `PATH`; only creating a GitHub repository runs the GitHub CLI, `gh`.
 
 Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides themed controls and the `shells/sidebar` window shell; Onegit owns application state, persistence and background work.
 

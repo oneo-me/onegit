@@ -306,3 +306,61 @@ func TestAddRefFolder(t *testing.T) {
 		t.Fatalf("nested remote %+v", children)
 	}
 }
+
+func TestViewPushCreatesGitHubRepository(t *testing.T) {
+	repo := testRepo(t)
+	dir := t.TempDir()
+	bare := filepath.Join(dir, "github.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", bare)
+	// A stand-in for the GitHub CLI records its arguments and adds the
+	// remote as gh repo create --source does.
+	bin := filepath.Join(dir, "bin")
+	os.Mkdir(bin, 0755)
+	script := "#!/bin/sh\necho \"$@\" > \"$GH_LOG\"\ngit -C \"$6\" remote add origin \"$GH_REMOTE\"\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	log := filepath.Join(dir, "gh.log")
+	env := append(os.Environ(), "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"), "GH_LOG="+log, "GH_REMOTE="+bare)
+
+	v, pump := testView(t, Options{Git: Git{Env: env}})
+	v.SetPath(repo)
+	ready := func() bool { return !v.Loading() && v.Syncing() == "" && v.repo.loaded }
+	pump(func() bool { return ready() && v.tracking.Branch == "main" })
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+
+	// Without remotes, the push dialog offers a private GitHub repository
+	// named after the folder.
+	v.OpenPush()
+	pump(func() bool { return v.dialog.remotes != nil })
+	view.Frame()
+	if !v.dialog.gh || v.dialog.public || v.dialog.name != filepath.Base(repo) || !view.HasText("Create and Push") {
+		t.Fatalf("push dialog %+v: %v", v.dialog, view.Texts())
+	}
+	v.dialog.name = "owner/project"
+	view.Frame()
+	if err := view.Click("Create and Push"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && v.tracking.Upstream == "origin/main" })
+	if got, _ := os.ReadFile(log); strings.TrimSpace(string(got)) != "repo create owner/project --private --source "+repo+" --remote origin" {
+		t.Fatalf("gh %q", got)
+	}
+	if out, _ := v.git.Run(bare, "rev-parse", "main"); out != v.repo.head {
+		t.Fatalf("pushed %q, want %q", out, v.repo.head)
+	}
+
+	// Without the GitHub CLI, the dialog says how to get it.
+	v.git = Git{Env: append(os.Environ(), "PATH=")}
+	dirs := ghDirs
+	ghDirs = nil
+	t.Cleanup(func() { ghDirs = dirs })
+	git(t, repo, "remote", "remove", "origin")
+	v.OpenPush()
+	pump(func() bool { return v.dialog.remotes != nil })
+	view.Frame()
+	if v.dialog.gh || !view.HasText(v.text("github_cli_missing")) {
+		t.Fatalf("missing gh %+v: %v", v.dialog, view.Texts())
+	}
+}

@@ -11,6 +11,7 @@ User-facing release notes for Onegit.
 - Find projects and open Settings from the command palette (`⌘E`).
 - Switch between a project's worktrees with tabs in the title bar, returning to the last project and worktree.
 - Fetch, pull, push, stash and switch branches from the title bar, with dialogs and commit counts; fetch every remote or one branch.
+- Push a repository without remotes to a new GitHub repository, private unless you choose public, using the GitHub CLI.
 - Browse changes, commits, filterable branches, remote branches, tags and stashes, open their commits, delete refs and see stashed files.
 - Double-click a ref or commit to check it out, keeping, stashing or discarding changes; a branch checked out elsewhere opens its worktree.
 - Apply a stash by double-clicking it, deleting it afterwards unless you keep it or it conflicts.

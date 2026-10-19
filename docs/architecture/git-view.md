@@ -28,6 +28,8 @@
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
 - The rebase dialog names both branches, lists the local branches `--update-refs` moves, tests for conflicts with `git replay --ref-action=print`, and offers autostash.
+- Pushing from a local repository without remotes creates a GitHub repository instead: `gh repo create --source` names it and makes it private or public, adds it as `origin`, then the branch is pushed.
+- `gh` is looked up on `PATH`, then in Homebrew's directories; without it the dialog explains how to install it and sign in. Hosts with `Git.Host` keep the plain notice.
 - Fetch updates every remote, or with its switch off one remote branch. A commit or stash patch is written where the host's `SaveFile` or MyGo's save dialog chooses.
 
 | Menu item | Git |

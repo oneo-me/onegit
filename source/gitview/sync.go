@@ -206,7 +206,9 @@ func (v *View) write(op, failed string, run func(git Git, path string) error, do
 // remotes is what the worktree offers, nil while it is read. A fetch updates
 // branch of remote unless it updates every remote, a pull brings branch from
 // remote into the checked out branch, and a push sends the local branch to
-// to.
+// to. A push from a repository without remotes on this computer creates
+// a GitHub repository named name instead, private unless public, when gh,
+// the GitHub CLI, is found, and sends the branch there.
 type syncDialog struct {
 	op         string
 	open       bool
@@ -216,6 +218,16 @@ type syncDialog struct {
 	branch     string
 	to         RemoteBranch
 	force      bool
+	gh         bool
+	name       string
+	public     bool
+}
+
+// createsGitHub reports whether the dialog pushes to a GitHub repository it
+// creates.
+func (v *View) createsGitHub() bool {
+	d := &v.dialog
+	return d.op == OpPush && d.remotes != nil && len(d.remotes.Names) == 0 && v.git.Host == nil
 }
 
 // openSync opens the fetch, pull or push dialog and reads the remotes and
@@ -223,11 +235,16 @@ type syncDialog struct {
 // and still offered, instead of their defaults.
 func (v *View) openSync(op string, from RemoteBranch, branch string) {
 	path := v.path
-	v.dialog = syncDialog{op: op, open: true, generation: v.dialog.generation + 1}
+	name := v.repo.root
+	if name == "" {
+		name = path
+	}
+	v.dialog = syncDialog{op: op, open: true, generation: v.dialog.generation + 1, name: filepath.Base(name)}
 	generation, git := v.dialog.generation, v.git
 	v.invalidate()
 	go func() {
 		remotes, err := git.Remotes(path)
+		gh := op == OpPush && len(remotes.Names) == 0 && git.GitHubCLI() != ""
 		v.dispatch(func() {
 			d := &v.dialog
 			if generation != d.generation || !d.open || v.closed {
@@ -239,7 +256,7 @@ func (v *View) openSync(op string, from RemoteBranch, branch string) {
 				v.toast = &ui.Toast{Title: v.text(op + "_failed"), Description: err.Error(), Type: components.ToastError}
 				return
 			}
-			d.remotes = &remotes
+			d.remotes, d.gh = &remotes, gh
 			if up, ok := remotes.Upstreams[remotes.Current]; ok {
 				d.remote = up.Remote
 			} else {
@@ -317,19 +334,26 @@ func pushTargets(r Remotes, branch string) []RemoteBranch {
 // choices and options.
 func (v *View) syncDialogView(c *ui.Context) {
 	d := &v.dialog
-	title := v.text(d.op)
+	title, description, confirm := v.text(d.op), v.text(d.op+"_description"), v.text(d.op)
+	if v.createsGitHub() {
+		description, confirm = v.text("github_create_description"), v.text("github_create")
+	}
 	components.Dialog(c, &d.open, components.DialogOptions{Label: title, Inset: v.dialogInset(c)}, func(panel ui.Element) {
 		t := c.Theme()
 		panel.Width(t.Space(110))
 		ui.Column(c).FillWidth().Gap(t.Space(1)).Children(func() {
 			components.Text(c, title).Bold().FontSize(t.Rem(1.1))
-			components.Text(c, v.text(d.op+"_description")).Wrap().FillWidth().TextColor(t.TextMuted)
+			components.Text(c, description).Wrap().FillWidth().TextColor(t.TextMuted)
 		})
 		r := d.remotes
 		ready := false
 		switch {
 		case r == nil:
 			components.Spinner(c, components.SpinnerRing).Size(16, 16)
+		case v.createsGitHub() && !d.gh:
+			components.Text(c, v.text("github_cli_missing")).Wrap().FillWidth().TextColor(t.TextMuted)
+		case v.createsGitHub():
+			ready = v.githubFields(c, r)
 		case len(r.Names) == 0:
 			components.Text(c, v.text("no_remotes")).Wrap().FillWidth().TextColor(t.TextMuted)
 		case d.op == OpFetch:
@@ -344,7 +368,7 @@ func (v *View) syncDialogView(c *ui.Context) {
 			if components.Button(c, v.text("cancel"), components.ButtonSecondary).Clicked() {
 				d.open = false
 			}
-			if components.Button(c, title, components.ButtonPrimary).Disabled(!ready).AutoFocus().Clicked() {
+			if components.Button(c, confirm, components.ButtonPrimary).Disabled(!ready).AutoFocus().Clicked() {
 				d.open = false
 				v.runSyncDialog()
 			}
@@ -367,6 +391,16 @@ func (v *View) runSyncDialog() {
 	case d.op == OpPull:
 		o := PullOptions{Remote: d.remote, Branch: d.branch, Rebase: v.state.PullRebase, Stash: v.state.PullStash}
 		v.syncRepository(OpPull, v.text("pull_failed"), func(git Git, path string) error { return git.Pull(path, o) })
+		return
+	case v.createsGitHub():
+		name, private := strings.TrimSpace(d.name), !d.public
+		o := PushOptions{Branch: d.branch, Remote: "origin", To: d.branch, Tags: v.state.PushTags}
+		v.syncRepository(OpPush, v.text("github_create_failed"), func(git Git, path string) error {
+			if err := git.CreateGitHubRepository(path, name, private); err != nil {
+				return err
+			}
+			return git.PushBranch(path, o)
+		})
 		return
 	}
 	o := PushOptions{Branch: d.branch, Remote: d.to.Remote, To: d.to.Branch, Tags: v.state.PushTags, Force: d.force}
@@ -446,21 +480,7 @@ func (v *View) remoteBranchField(c *ui.Context, r *Remotes, disabled bool) {
 // goes to, and how; they report whether the push can run.
 func (v *View) pushFields(c *ui.Context, r *Remotes) bool {
 	d := &v.dialog
-	syncField(c, v.text("sync_branch"), false, func() {
-		before := d.branch
-		sel := components.Select(c, &d.branch)
-		sel.Trigger.Label(v.text("sync_branch")).FillWidth().Children(func() { branchChoice(c, d.branch) })
-		sel.Popup(func(panel ui.Element) {
-			syncChoices(c, panel, func() {
-				for _, b := range r.Local {
-					sel.Item(b).Label(b).Children(func() { branchChoice(c, b) })
-				}
-			})
-		})
-		if d.branch != before {
-			d.to = pushTarget(*r, d.branch)
-		}
-	})
+	v.pushBranchField(c, r)
 	targets := pushTargets(*r, d.branch)
 	label := func(to RemoteBranch) string {
 		name := to.Remote + "/" + to.Branch
@@ -486,6 +506,46 @@ func (v *View) pushFields(c *ui.Context, r *Remotes) bool {
 	v.syncOption(c, &v.state.PushTags, v.text("push_tags"), true)
 	v.syncOption(c, &d.force, v.text("push_force"), false)
 	return d.branch != "" && d.to.Remote != "" && d.to.Branch != ""
+}
+
+// pushBranchField chooses the local branch a push sends, moving its target
+// to the branch's default.
+func (v *View) pushBranchField(c *ui.Context, r *Remotes) {
+	d := &v.dialog
+	syncField(c, v.text("sync_branch"), false, func() {
+		before := d.branch
+		sel := components.Select(c, &d.branch)
+		sel.Trigger.Label(v.text("sync_branch")).FillWidth().Children(func() { branchChoice(c, d.branch) })
+		sel.Popup(func(panel ui.Element) {
+			syncChoices(c, panel, func() {
+				for _, b := range r.Local {
+					sel.Item(b).Label(b).Children(func() { branchChoice(c, b) })
+				}
+			})
+		})
+		if d.branch != before {
+			d.to = pushTarget(*r, d.branch)
+		}
+	})
+}
+
+// githubFields choose the local branch a push sends to the GitHub
+// repository it creates, and the repository's name and visibility; they
+// report whether the push can run.
+func (v *View) githubFields(c *ui.Context, r *Remotes) bool {
+	d := &v.dialog
+	v.pushBranchField(c, r)
+	syncField(c, v.text("github_name"), false, func() {
+		components.TextBox(c, &d.name, components.TextBoxOptions{}).FillWidth().Label(v.text("github_name")).Placeholder(v.text("github_name_placeholder"))
+	})
+	syncField(c, v.text("github_visibility"), false, func() {
+		ui.Row(c).Gap(c.Theme().Space(4)).Children(func() {
+			components.Radio(c, &d.public, false, v.text("github_private"))
+			components.Radio(c, &d.public, true, v.text("github_public"))
+		})
+	})
+	v.syncOption(c, &v.state.PushTags, v.text("push_tags"), true)
+	return d.branch != "" && strings.TrimSpace(d.name) != ""
 }
 
 // syncLabelWidth is the width of syncField's labels in theme spaces.
