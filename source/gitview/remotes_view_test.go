@@ -363,4 +363,33 @@ func TestViewPushCreatesGitHubRepository(t *testing.T) {
 	if v.dialog.gh || !view.HasText(v.text("github_cli_missing")) {
 		t.Fatalf("missing gh %+v: %v", v.dialog, view.Texts())
 	}
+
+	// A host that runs gh creates the repository there, as this computer
+	// does; one that runs only git keeps the plain notice.
+	host := &githubHost{env: env}
+	v.git = Git{Host: host}
+	v.OpenPush()
+	pump(func() bool { return v.dialog.remotes != nil })
+	view.Frame()
+	if !v.dialog.gh || !view.HasText("Create and Push") {
+		t.Fatalf("host push dialog %+v: %v", v.dialog, view.Texts())
+	}
+	if err := view.Click("Create and Push"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return ready() && v.tracking.Upstream == "origin/main" })
+	host.mu.Lock()
+	runs := host.ghRuns
+	host.mu.Unlock()
+	if got, _ := os.ReadFile(log); runs != 1 || strings.TrimSpace(string(got)) != "repo create "+filepath.Base(repo)+" --private --source "+repo+" --remote origin" {
+		t.Fatalf("host ran gh %d times: %q", runs, got)
+	}
+	v.git = Git{Host: &countingHost{}}
+	git(t, repo, "remote", "remove", "origin")
+	v.OpenPush()
+	pump(func() bool { return v.dialog.remotes != nil })
+	view.Frame()
+	if v.dialog.gh || !view.HasText(v.text("no_remotes")) {
+		t.Fatalf("git-only host %+v: %v", v.dialog, view.Texts())
+	}
 }

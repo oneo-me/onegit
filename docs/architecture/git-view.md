@@ -30,8 +30,8 @@
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
 - The rebase dialog names both branches, lists the local branches `--update-refs` moves, tests for conflicts with `git replay --ref-action=print`, and offers autostash.
-- Pushing from a local repository without remotes creates a GitHub repository instead: `gh repo create --source` names it and makes it private or public, adds it as `origin`, then the branch is pushed.
-- `gh` is looked up on `PATH`, then in Homebrew's directories; without it the dialog explains how to install it and sign in. Hosts with `Git.Host` keep the plain notice.
+- Pushing from a repository without remotes creates a GitHub repository instead: `gh repo create --source` names it and makes it private or public, adds it as `origin`, then the branch is pushed.
+- `gh` is looked up on `PATH`, then in Homebrew's directories, or by a `Host` that is also a `GitHubHost`; without it the dialog explains how to install it and sign in. Other hosts keep the plain notice.
 - Fetch updates every remote, or with its switch off one remote branch. A file's version or a commit's or stash's patch is written where the host's `SaveFile` or MyGo's save dialog chooses.
 
 | Menu item | Git |
@@ -71,7 +71,7 @@ Options:
 | Option | Purpose |
 | --- | --- |
 | `Dispatch` | Required. Runs results on the UI thread |
-| `Git` | Environment for the `git` executable, or a `Host` that runs git, reads files and watches them on another computer |
+| `Git` | Environment for the `git` executable, or a `Host` that runs git, reads files and watches them on another computer, and as a `GitHubHost` runs `gh` there |
 | `RefFilter` | Hides refs from the pane and the history, with the commits only they reach |
 | `Entries` | Rows the host inserts above a revision. Each row has its own leading mark, columns and file readers |
 | `Busy` | Disables Git writes while host work runs |
@@ -90,6 +90,7 @@ Options:
 - Frame builders do no I/O. Git runs in goroutines, and results carry a generation so stale ones are dropped.
 - The view writes from user actions: the toolbar, the file, ref, commit and remote menus, staging, discarding, resetting files, commits and the host's `Run`. The only automatic write is fetching a remote the user set to fetch when a worktree opens. It never checks out on its own.
 - Network commands run with `GIT_TERMINAL_PROMPT=0`, so missing credentials fail instead of hanging.
+- Every action works through a `Host` as it does on this computer. One that runs a program other than git extends `Host` with an optional interface, as `GitHubHost` does for `gh`.
 
 ## Neorio mapping
 
@@ -99,4 +100,4 @@ Neorio's Git window shows this view and leads its title bar with `Toolbar`; its 
 - `Entries` adds a row per task worktree, led by a robot animated while it works, with its agents and working time, and `RevealEntry` selects the task the window opens for.
 - `Busy` reports landings, `Overlay` shows the command panel, and `OnWrite` rereads the sidebar's status.
 - `Watch` stays on.
-- `Git.Host` runs git and reads files through the server of the task's device, this computer's or an SSH host's.
+- `Git.Host` runs git and `gh`, reads files and watches through the server of the shown device, this computer's or an SSH host's.

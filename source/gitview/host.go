@@ -30,6 +30,18 @@ type Host interface {
 	Watch(ctx context.Context, dir string, repository bool) (Watcher, error)
 }
 
+// GitHubHost is a Host that also runs the GitHub CLI, gh, there, so a push
+// from a repository without remotes creates a GitHub repository as it does
+// on this computer. A Host without it keeps the plain notice.
+type GitHubHost interface {
+	Host
+	// GitHubCLI returns the path of gh on the host, empty when it has none.
+	GitHubCLI(ctx context.Context) (string, error)
+	// RunGitHubCLI runs gh in dir with args and env added to its
+	// environment, returning what Run returns for git.
+	RunGitHubCLI(ctx context.Context, dir string, env []string, args ...string) (stdout, stderr []byte, err error)
+}
+
 // Watcher reports changes under a watched directory. Next waits for the
 // next batch of them; it fails once the watch ended.
 type Watcher interface {

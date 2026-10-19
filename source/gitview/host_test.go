@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 )
@@ -52,6 +53,30 @@ func (h *countingHost) Watch(_ context.Context, dir string, repository bool) (Wa
 	h.watched = append(h.watched, dir)
 	h.watchFailures++
 	return nil, errors.New("no watch")
+}
+
+// githubHost is a countingHost that also runs the gh on env's PATH, with
+// env, counting its runs.
+type githubHost struct {
+	countingHost
+	env    []string
+	ghRuns int
+}
+
+func (h *githubHost) GitHubCLI(context.Context) (string, error) {
+	return Git{Env: h.env}.GitHubCLI(), nil
+}
+
+func (h *githubHost) RunGitHubCLI(ctx context.Context, dir string, env []string, args ...string) ([]byte, []byte, error) {
+	h.mu.Lock()
+	h.ghRuns++
+	h.mu.Unlock()
+	cmd := exec.CommandContext(ctx, Git{Env: h.env}.GitHubCLI(), args...)
+	cmd.Dir, cmd.Env = dir, append(slices.Clone(h.env), env...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 func TestHostRunsGitAndReadsFiles(t *testing.T) {

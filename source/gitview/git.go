@@ -1179,11 +1179,18 @@ var ghDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
 
 // GitHubCLI returns the path of the GitHub CLI, gh, on the PATH of Env or
 // the process environment, else where Homebrew installs it, as apps opened
-// from the Finder get a PATH without it. It is empty when none is found and
-// with a Host, which runs only git.
+// from the Finder get a PATH without it. With a Host it is the path a
+// GitHubHost finds there. It is empty when none is found.
 func (g Git) GitHubCLI() string {
 	if g.Host != nil {
-		return ""
+		h, ok := g.Host.(GitHubHost)
+		if !ok {
+			return ""
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), readTimeout)
+		defer cancel()
+		path, _ := h.GitHubCLI(ctx)
+		return path
 	}
 	dirs := filepath.SplitList(os.Getenv("PATH"))
 	if g.Env != nil {
@@ -1205,37 +1212,51 @@ func (g Git) GitHubCLI() string {
 	return ""
 }
 
+// runsGitHubCLI reports whether gh runs where git does: on this computer,
+// or on a GitHubHost.
+func (g Git) runsGitHubCLI() bool {
+	_, ok := g.Host.(GitHubHost)
+	return ok || g.Host == nil
+}
+
 // CreateGitHubRepository creates a GitHub repository with the GitHub CLI
 // and adds it to the repository containing path as the remote origin,
 // without pushing. name is NAME for the signed-in account or OWNER/NAME.
 func (g Git) CreateGitHubRepository(path, name string, private bool) error {
-	gh := g.GitHubCLI()
-	if gh == "" {
-		return ErrNoGitHubCLI
-	}
 	visibility := "--public"
 	if private {
 		visibility = "--private"
 	}
+	args := []string{"repo", "create", name, visibility, "--source", path, "--remote", "origin"}
+	quiet := []string{"GH_PROMPT_DISABLED=1", "GIT_TERMINAL_PROMPT=0", "NO_COLOR=1"}
 	ctx, cancel := context.WithTimeout(context.Background(), networkTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, gh, "repo", "create", name, visibility, "--source", path, "--remote", "origin")
-	hideConsole(cmd)
-	cmd.Dir = path
-	env := g.Env
-	if env == nil {
-		env = os.Environ()
-	}
-	cmd.Env = append(slices.Clone(env), "GH_PROMPT_DISABLED=1", "GIT_TERMINAL_PROMPT=0", "NO_COLOR=1")
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return errors.New(msg)
+	var stderr []byte
+	var err error
+	if h, ok := g.Host.(GitHubHost); ok {
+		_, stderr, err = h.RunGitHubCLI(ctx, path, append(slices.Clone(g.Env), quiet...), args...)
+	} else {
+		gh := g.GitHubCLI()
+		if gh == "" {
+			return ErrNoGitHubCLI
 		}
-		return err
+		cmd := exec.CommandContext(ctx, gh, args...)
+		hideConsole(cmd)
+		cmd.Dir = path
+		env := g.Env
+		if env == nil {
+			env = os.Environ()
+		}
+		cmd.Env = append(slices.Clone(env), quiet...)
+		var out bytes.Buffer
+		cmd.Stderr = &out
+		err = cmd.Run()
+		stderr = out.Bytes()
 	}
-	return nil
+	if msg := strings.TrimSpace(string(stderr)); err != nil && msg != "" {
+		return errors.New(msg)
+	}
+	return err
 }
 
 // DeleteBranch deletes a local branch of the repository containing path.

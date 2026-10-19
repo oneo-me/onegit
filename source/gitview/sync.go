@@ -195,9 +195,9 @@ func (v *View) write(op, failed string, run func(git Git, path string) error, do
 // remotes is what the worktree offers, nil while it is read. A fetch updates
 // branch of remote unless it updates every remote, a pull brings branch from
 // remote into the checked out branch, and a push sends the local branch to
-// to. A push from a repository without remotes on this computer creates
-// a GitHub repository named name instead, private unless public, when gh,
-// the GitHub CLI, is found, and sends the branch there.
+// to. A push from a repository without remotes on this computer or a
+// GitHubHost creates a GitHub repository named name instead, private unless
+// public, when gh, the GitHub CLI, is found, and sends the branch there.
 type syncDialog struct {
 	op         string
 	open       bool
@@ -216,7 +216,7 @@ type syncDialog struct {
 // creates.
 func (v *View) createsGitHub() bool {
 	d := &v.dialog
-	return d.op == OpPush && d.remotes != nil && len(d.remotes.Names) == 0 && v.git.Host == nil
+	return d.op == OpPush && d.remotes != nil && len(d.remotes.Names) == 0 && v.git.runsGitHubCLI()
 }
 
 // openSync opens the fetch, pull or push dialog and reads the remotes and
