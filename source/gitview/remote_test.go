@@ -411,3 +411,55 @@ func TestFastForwardTrackAndRename(t *testing.T) {
 		t.Fatalf("still tracks %+v", refs.Branches[0])
 	}
 }
+
+func TestFetchOneRemoteAndManageRemotes(t *testing.T) {
+	t.Parallel()
+	g := Git{}
+	dir := t.TempDir()
+	origin := filepath.Join(dir, "origin.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", origin)
+	seed := filepath.Join(dir, "seed")
+	git(t, dir, "clone", "-q", origin, seed)
+	git(t, seed, "commit", "-q", "--allow-empty", "-m", "init")
+	git(t, seed, "push", "-q", "origin", "main")
+	mine := filepath.Join(dir, "mine")
+	git(t, dir, "clone", "-q", origin, mine)
+
+	// One remote fetches without reading another's branches.
+	git(t, seed, "commit", "-q", "--allow-empty", "-m", "theirs")
+	git(t, seed, "push", "-q", "origin", "main")
+	if err := g.FetchRemote(mine, "origin"); err != nil {
+		t.Fatal(err)
+	}
+	if tracking, err := g.Tracking(mine); err != nil || tracking.Behind != 1 {
+		t.Fatalf("tracking %+v %v", tracking, err)
+	}
+
+	// A remote is added, renamed, given another address and deleted.
+	mirror := filepath.Join(dir, "mirror.git")
+	git(t, dir, "init", "-q", "--bare", "-b", "main", mirror)
+	if err := g.AddRemote(mine, "mirror", mirror); err != nil {
+		t.Fatal(err)
+	}
+	if urls, _ := g.RemoteURLs(mine); urls["mirror"] != mirror {
+		t.Fatalf("added %+v", urls)
+	}
+	if err := g.RenameRemote(mine, "mirror", "copy"); err != nil {
+		t.Fatal(err)
+	}
+	if urls, _ := g.RemoteURLs(mine); urls["copy"] != mirror || urls["mirror"] != "" {
+		t.Fatalf("renamed %+v", urls)
+	}
+	if err := g.SetRemoteURL(mine, "copy", "https://example.com/m.git"); err != nil {
+		t.Fatal(err)
+	}
+	if urls, _ := g.RemoteURLs(mine); urls["copy"] != "https://example.com/m.git" {
+		t.Fatalf("set %+v", urls)
+	}
+	if err := g.DeleteRemote(mine, "copy"); err != nil {
+		t.Fatal(err)
+	}
+	if urls, _ := g.RemoteURLs(mine); urls["copy"] != "" || len(urls) != 1 {
+		t.Fatalf("deleted %+v", urls)
+	}
+}

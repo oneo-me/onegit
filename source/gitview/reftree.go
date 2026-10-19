@@ -50,17 +50,52 @@ func newRefTree(refs []Ref) []*refNode {
 		parent.children = append(parent.children, &refNode{name: ref.Name[strings.LastIndex(ref.Name, "/")+1:], path: ref.Name, hash: ref.Hash, upstream: ref.Upstream, ahead: ref.Ahead, behind: ref.Behind})
 	}
 	for _, folder := range folders {
-		slices.SortStableFunc(folder.children, func(a, b *refNode) int {
-			if fa, fb := a.children != nil, b.children != nil; fa != fb {
-				if fa {
-					return -1
-				}
-				return 1
-			}
-			return cmp.Compare(a.name, b.name)
-		})
+		sortRefChildren(folder.children)
 	}
 	return root.children
+}
+
+// sortRefChildren lists folders before refs, each sorted by name.
+func sortRefChildren(nodes []*refNode) {
+	slices.SortStableFunc(nodes, func(a, b *refNode) int {
+		if fa, fb := a.children != nil, b.children != nil; fa != fb {
+			if fa {
+				return -1
+			}
+			return 1
+		}
+		return cmp.Compare(a.name, b.name)
+	})
+}
+
+// addRefFolder adds a folder for path to nodes, with its parents, unless
+// they exist, so a remote without fetched branches still has a row.
+func addRefFolder(nodes []*refNode, path string) []*refNode {
+	if path == "" {
+		return nodes
+	}
+	current, prefix := &nodes, ""
+	for _, part := range strings.Split(path, "/") {
+		if prefix == "" {
+			prefix = part
+		} else {
+			prefix += "/" + part
+		}
+		var folder *refNode
+		for _, n := range *current {
+			if n.path == prefix && n.children != nil {
+				folder = n
+				break
+			}
+		}
+		if folder == nil {
+			folder = &refNode{name: part, path: prefix, children: []*refNode{}}
+			*current = append(*current, folder)
+			sortRefChildren(*current)
+		}
+		current = &folder.children
+	}
+	return nodes
 }
 
 // filterRefs keeps the refs whose name contains query, ignoring case, and

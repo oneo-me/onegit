@@ -23,7 +23,8 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 
 - The worktree is the unit of context. Branch and working tree state belong to a worktree, never to the repository as a whole.
 - Selecting a worktree changes what Onegit reads. It never runs `git checkout` or `git switch`.
-- Git write commands run only from an explicit user action: fetch, pull, push, stash and stash renaming, checkout, worktree creation, merge, rebase, fast-forwards, new branches and tags, tag pushes, branch renames and upstreams, ref deletion, staging, discarding changes, committing, and resetting, cherry-picking or reverting commits.
+- Git write commands run only from an explicit user action: fetch, pull, push, stash, checkout, worktree creation, merge, rebase, fast-forward, branch, tag, track, rename, delete refs, stage, discard, commit, reset, cherry-pick and revert.
+- A remote the user set to fetch automatically is the only write that runs without a click, when a worktree opens; nothing polls.
 - Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
 - Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
 - The sidebar tree mirrors the disk. It does not infer links between a repository and worktrees outside the parent directory.
@@ -47,7 +48,8 @@ Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.
 - In-memory values change only after a successful write. Load and save errors appear in the UI.
 - When `~/.onegit` does not exist, an earlier `~/.oneo/onegit` directory is moved there at startup.
 - A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
-- State covers the main window's bounds and maximized or full-screen state, which MyGo saves through a window state store, the sidebar width and collapse, the project cache per parent directory, expansion, pinning, group collapse, the last selections and the Git view's layout and options.
+- State covers the main window's bounds and state through MyGo's window state store, sidebar width and collapse, project cache, expansion, pinning, group collapse and last selections.
+- It also covers the Git view's layout, options and automatic fetch choices per repository.
 - Commit authors' avatars are downloaded from GitHub or Gravatar and cached in `avatars/` in the same directory.
 - Worktree lists and Git data are never persisted.
 

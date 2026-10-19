@@ -114,6 +114,9 @@ type State struct {
 	StashTrackedOnly bool `yaml:"stashTrackedOnly,omitempty" json:"stashTrackedOnly,omitempty"`
 	// StashKeepApplied keeps a stash after applying it.
 	StashKeepApplied bool `yaml:"stashKeepApplied,omitempty" json:"stashKeepApplied,omitempty"`
+	// AutoFetch lists the remotes fetched when a worktree opens, by the
+	// repository main worktree path.
+	AutoFetch map[string][]string `yaml:"autoFetch,omitempty" json:"autoFetch,omitempty"`
 }
 
 // Entry is a row the host inserts into the history right above the commit
@@ -213,6 +216,14 @@ type View struct {
 	pushTag       pushTagDialog
 	stashRename   stashRenameDialog
 	stashDeletion stashDeletionDialog
+	// remoteDialog adds or edits a remote, remoteDeletion confirms deleting
+	// one, and stale chooses stale local branches to delete.
+	remoteDialog   remoteDialog
+	remoteDeletion remoteDeletion
+	stale          staleBranches
+	// autoFetchPending fetches the remotes chosen for automatic fetching
+	// once the repository read after SetPath finishes.
+	autoFetchPending bool
 	// watches follow the repository's Git directory and shown worktrees.
 	watches map[string]*gitWatch
 	closed  bool
@@ -234,13 +245,17 @@ type repositoryState struct {
 	commits []Commit
 	count   int
 	graph   []graphRow
-	// head is the commit the worktree has checked out.
+	// head is the commit the worktree has checked out, and root the
+	// repository main worktree path, shared by all of its worktrees.
 	head      string
+	root      string
 	refTrees  refTrees
 	stashes   []Stash
 	checkouts []Checkout
-	// github maps each remote to whether it is hosted on GitHub.
-	github map[string]bool
+	// remoteURLs maps each remote to its fetch URL, and github to whether it
+	// is hosted on GitHub.
+	remoteURLs map[string]string
+	github     map[string]bool
 	// entries are the host's rows by ID.
 	entries map[string]Entry
 }
@@ -301,6 +316,7 @@ func (v *View) SetPath(path string) {
 	v.path = path
 	v.repo.generation++
 	v.repo = repositoryState{generation: v.repo.generation}
+	v.autoFetchPending = path != ""
 	v.clearFiles(v.current, "")
 	v.current.key = ""
 	v.seekChanges = true
@@ -308,6 +324,8 @@ func (v *View) SetPath(path string) {
 	v.ref = ""
 	v.clearStash()
 	v.tracking = Tracking{}
+	v.remoteDialog.open, v.remoteDeletion.open = false, false
+	v.stale = staleBranches{generation: v.stale.generation + 1}
 	v.Reload()
 }
 
@@ -446,7 +464,8 @@ func (v *View) loadRepository() {
 		var refs, hidden Refs
 		var checkouts []Checkout
 		var stashes []Stash
-		var github map[string]bool
+		var remoteURLs map[string]string
+		github := map[string]bool{}
 		_, err := git.Top(path)
 		if err == nil {
 			if refs, err = git.Refs(path); err == nil {
@@ -461,7 +480,10 @@ func (v *View) loadRepository() {
 		}
 		if err == nil {
 			// Without them, remotes just lose their GitHub mark.
-			github, _ = git.GitHubRemotes(path)
+			remoteURLs, _ = git.RemoteURLs(path)
+			for name, url := range remoteURLs {
+				github[name] = onGitHub(url)
+			}
 		}
 		// An entry whose head no longer resolves has no row.
 		var shown []Entry
@@ -476,6 +498,9 @@ func (v *View) loadRepository() {
 			}
 		}
 		signature, trees := refsSignature(refs, hidden, checkouts, shown), newRefTrees(refs)
+		for remote := range remoteURLs {
+			trees.remotes = addRefFolder(trees.remotes, remote)
+		}
 		var commits []Commit
 		var graph []graphRow
 		var head string
@@ -497,12 +522,20 @@ func (v *View) loadRepository() {
 			if v.repo.again {
 				defer v.loadRepository()
 			}
+			if len(checkouts) > 0 {
+				v.repo.root = checkouts[0].Path
+			}
+			if v.autoFetchPending {
+				v.autoFetchPending = false
+				defer v.fetchAutomatic()
+			}
 			if err != nil {
 				v.repo.err = err.Error()
 				v.repo.signature = ""
 				return
 			}
-			v.repo.err, v.repo.refTrees, v.repo.checkouts, v.repo.github, v.repo.stashes = "", trees, checkouts, github, stashes
+			v.repo.err, v.repo.refTrees, v.repo.checkouts, v.repo.stashes = "", trees, checkouts, stashes
+			v.repo.remoteURLs, v.repo.github = remoteURLs, github
 			v.keepStash()
 			v.repo.entries = map[string]Entry{}
 			for _, e := range shown {
@@ -601,6 +634,9 @@ func (v *View) Layout(c *ui.Context) {
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
 	v.refActionDialog(c)
+	v.remoteDialogView(c)
+	v.remoteDeletionDialog(c)
+	v.staleBranchesDialogView(c)
 	v.rebaseDialogView(c)
 	v.resetDialogView(c)
 	v.cherryPickDialogView(c)
@@ -667,13 +703,22 @@ func (v *View) refsPane(c *ui.Context) {
 				// A filter hides the groups it empties.
 				if query == "" || len(g.nodes) > 0 {
 					found = true
-					v.refGroup(c, g.key, g.label, g.icon, g.open, query != "", func() { v.refRows(c, g.key, query != "", g.nodes) })
+					var menu func(*ui.Menu)
+					switch g.key {
+					case "branches":
+						menu = v.branchGroupMenu
+					case "remotes":
+						menu = v.remoteGroupMenu
+					case "tags":
+						menu = v.tagGroupMenu
+					}
+					v.refGroup(c, g.key, g.label, g.icon, g.open, query != "", menu, func() { v.refRows(c, g.key, query != "", g.nodes) })
 				}
 			}
 			// Stashes show only when there are some.
 			if stashes := filterStashes(v.repo.stashes, query); len(stashes) > 0 {
 				found = true
-				v.refGroup(c, "stashes", v.text("stashes"), lucide.Archive(), true, query != "", func() { v.stashRows(c, stashes) })
+				v.refGroup(c, "stashes", v.text("stashes"), lucide.Archive(), true, query != "", nil, func() { v.stashRows(c, stashes) })
 			}
 			if !found {
 				components.Text(c, v.text("no_results")).FontSize(12).Wrap().FillWidth().TextColor(t.TextMuted).Padding(t.Space(1), t.Space(2))
@@ -736,8 +781,9 @@ func sidebarItem(c *ui.Context, label string, icon *ui.SVG, selected bool, trail
 func arrowSpan(c *ui.Context) float32 { return c.Theme().Space(4) + c.Theme().Space(1.5) }
 
 // refFolder is a collapsible refs pane row, led by icon in its text color
-// unless it is nil: clicking anywhere on it opens or closes it.
-func refFolder(c *ui.Context, key, label string, icon func() *ui.SVG, open *bool, rows func()) ui.Element {
+// unless it is nil: clicking anywhere on it opens or closes it, and menu
+// fills its context menu unless it is nil.
+func refFolder(c *ui.Context, key, label string, icon func() *ui.SVG, open *bool, menu func(*ui.Menu), rows func()) ui.Element {
 	var leading func(*ui.Context, float32)
 	if icon != nil {
 		leading = func(c *ui.Context, _ float32) {
@@ -749,6 +795,9 @@ func refFolder(c *ui.Context, key, label string, icon func() *ui.SVG, open *bool
 	ui.Column(c).Key("group-" + key).FillWidth().Shrink(0).Children(func() {
 		row = components.TreeItemWithLeading(c, label, open, false, leading, rows).Height(treeRow(c))
 	})
+	if menu != nil {
+		row.ContextMenu(menu)
+	}
 	// The row toggles itself on a double click.
 	if row.Clicked() && !row.DoubleClicked() {
 		*open = !*open
@@ -769,8 +818,9 @@ func (v *View) disclosure(key string, open bool) *bool {
 }
 
 // refGroup lists rows under a collapsible heading, led by icon, whose
-// disclosure is remembered. A filter shows the group open.
-func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, filtering bool, rows func()) {
+// disclosure is remembered. A filter shows the group open, and menu fills
+// the heading's context menu unless it is nil.
+func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, filtering bool, menu func(*ui.Menu), rows func()) {
 	t := c.Theme()
 	if saved, ok := v.state.Groups[key]; ok {
 		open = saved
@@ -791,6 +841,9 @@ func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, fi
 		// icons above it.
 		parts.Trigger.Height(treeRow(c)).Padding(0, t.Space(2)).Gap(t.Space(1.5)).
 			FontSize(t.Rem(.8)).Bold().TextColor(t.TextMuted)
+		if menu != nil {
+			parts.Trigger.ContextMenu(menu)
+		}
 	})
 	if !filtering && *state != open {
 		groups := map[string]bool{}
@@ -848,12 +901,14 @@ func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*ref
 			state = new(bool)
 			*state = true
 		}
-		// A remote's folder carries the mark of its host.
+		// A remote's folder carries the mark of its host and its menu.
 		var icon func() *ui.SVG
-		if _, remote := v.repo.github[n.path]; remote && group == "remotes" {
+		var menu func(*ui.Menu)
+		if _, remote := v.repo.remoteURLs[n.path]; remote && group == "remotes" {
 			icon = remoteIcon(v.repo.github, n.path)
+			menu = func(m *ui.Menu) { v.remoteMenu(c, m, n.path) }
 		}
-		refFolder(c, id+"/", n.name, icon, state, func() { v.refRows(c, group, filtering, n.children) })
+		refFolder(c, id+"/", n.name, icon, state, menu, func() { v.refRows(c, group, filtering, n.children) })
 	}
 }
 

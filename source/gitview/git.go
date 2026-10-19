@@ -360,20 +360,34 @@ func trackCounts(track string) (ahead, behind int) {
 	return ahead, behind
 }
 
-// GitHubRemotes maps every remote of the repository containing path to
-// whether its fetch URL is on github.com, over HTTPS or SSH.
-func (g Git) GitHubRemotes(path string) (map[string]bool, error) {
+// RemoteURLs maps every remote of the repository containing path to its
+// fetch URL.
+func (g Git) RemoteURLs(path string) (map[string]string, error) {
 	out, err := g.Run(path, "remote", "-v")
 	if err != nil {
 		return nil, err
 	}
-	remotes := map[string]bool{}
+	remotes := map[string]string{}
 	for line := range strings.Lines(out) {
 		name, rest, _ := strings.Cut(strings.TrimSpace(line), "\t")
 		url, kind, _ := strings.Cut(rest, " ")
 		if kind == "(fetch)" {
-			remotes[name] = onGitHub(url)
+			remotes[name] = url
 		}
+	}
+	return remotes, nil
+}
+
+// GitHubRemotes maps every remote of the repository containing path to
+// whether its fetch URL is on github.com, over HTTPS or SSH.
+func (g Git) GitHubRemotes(path string) (map[string]bool, error) {
+	urls, err := g.RemoteURLs(path)
+	if err != nil {
+		return nil, err
+	}
+	remotes := map[string]bool{}
+	for name, url := range urls {
+		remotes[name] = onGitHub(url)
 	}
 	return remotes, nil
 }
@@ -393,6 +407,27 @@ func onGitHub(url string) bool {
 		host = host[i+1:]
 	}
 	return strings.EqualFold(host, "github.com") || strings.EqualFold(host, "www.github.com")
+}
+
+// githubWebURL is the page of a remote on GitHub for a URL such as
+// https://github.com/o/r, git@github.com:o/r or ssh://git@github.com/o/r,
+// or empty when the remote is not on GitHub.
+func githubWebURL(remote string) string {
+	if !onGitHub(remote) {
+		return ""
+	}
+	var path string
+	if _, rest, ok := strings.Cut(remote, "://"); ok {
+		_, path, _ = strings.Cut(rest, "/")
+	} else {
+		_, path, _ = strings.Cut(remote, ":")
+		path = strings.TrimPrefix(path, "/")
+	}
+	path = strings.TrimSuffix(strings.TrimSuffix(path, "/"), ".git")
+	if path == "" {
+		return ""
+	}
+	return "https://github.com/" + path
 }
 
 // Checkout is one of a repository's worktrees.
@@ -949,6 +984,40 @@ func (g Git) FetchBranch(path, remote, branch string) error {
 	return g.network(path, "fetch", "--quiet", remote, "refs/heads/"+branch)
 }
 
+// FetchRemote updates the remote branches and tags of one remote of the
+// repository containing path, dropping remote branches the remote no longer
+// has.
+func (g Git) FetchRemote(path, remote string) error {
+	return g.network(path, "fetch", "--prune", "--quiet", remote)
+}
+
+// AddRemote adds a remote to the repository containing path.
+func (g Git) AddRemote(path, name, url string) error {
+	_, err := g.Run(path, "remote", "add", name, url)
+	return err
+}
+
+// RenameRemote renames a remote of the repository containing path, moving
+// its remote branches and configuration too.
+func (g Git) RenameRemote(path, name, newName string) error {
+	_, err := g.Run(path, "remote", "rename", name, newName)
+	return err
+}
+
+// SetRemoteURL changes the fetch URL of a remote of the repository
+// containing path; a push URL that is not set separately follows it.
+func (g Git) SetRemoteURL(path, remote, url string) error {
+	_, err := g.Run(path, "remote", "set-url", remote, url)
+	return err
+}
+
+// DeleteRemote removes a remote of the repository containing path, with its
+// remote branches and configuration.
+func (g Git) DeleteRemote(path, remote string) error {
+	_, err := g.Run(path, "remote", "remove", remote)
+	return err
+}
+
 // Remotes are the remotes and branches a fetch, pull or push chooses from.
 type Remotes struct {
 	// Current is the checked out branch, empty for a detached HEAD.
@@ -1104,6 +1173,34 @@ func (g Git) DeleteWorktreeBranch(path, dir, branch string) error {
 		return err
 	}
 	return g.DeleteBranch(path, branch)
+}
+
+// BranchDate is a local branch and the commit date of its tip.
+type BranchDate struct {
+	Name string
+	Date time.Time
+}
+
+// BranchDates reads the local branches of the repository containing path
+// with the commit date of each tip.
+func (g Git) BranchDates(path string) ([]BranchDate, error) {
+	out, err := g.Run(path, "for-each-ref", "--format=%(refname:short)%00%(committerdate:unix)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	var dates []BranchDate
+	for line := range strings.Lines(out) {
+		fields := strings.Split(strings.TrimRight(line, "\n"), "\x00")
+		if len(fields) < 2 || fields[0] == "" {
+			continue
+		}
+		seconds, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+		dates = append(dates, BranchDate{Name: fields[0], Date: time.Unix(seconds, 0)})
+	}
+	return dates, nil
 }
 
 // DeleteRemoteBranch deletes branch from remote and drops its remote

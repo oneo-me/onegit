@@ -68,6 +68,9 @@ func TestHistoryReadsCommitsRefsAndCheckouts(t *testing.T) {
 	if remotes, err := g.GitHubRemotes(wt); err != nil || len(remotes) != 4 || !remotes["origin"] || !remotes["web"] || remotes["other"] || remotes["local"] {
 		t.Fatalf("GitHub remotes: %v %v", remotes, err)
 	}
+	if urls, err := g.RemoteURLs(wt); err != nil || urls["origin"] != "git@github.com:o/r.git" || urls["web"] != "https://user@GitHub.com/o/r" {
+		t.Fatalf("remote URLs: %v %v", urls, err)
+	}
 
 	checkouts, err := g.Checkouts(wt)
 	if err != nil {
