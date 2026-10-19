@@ -33,7 +33,7 @@ The sidebar shows two collapsible groups, Pinned and Other Projects, both expand
 - Groups are a view over the cached nodes. They do not change the tree, selection or expansion.
 - Pinning is stored per parent directory. Group collapse is shared across parent directories.
 
-Nodes start collapsed. The tree uses Onevra `Tree` inside a `ScrollView`, and the group headers use `Collapsible`.
+Nodes start collapsed. The tree uses Onevra `Tree` inside a `Sidebar` in a `ScrollView`, and the group headers use `Collapsible`.
 
 ## Command palette
 
