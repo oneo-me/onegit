@@ -12,18 +12,33 @@ import (
 // opRestore is the Git write resetting a file to a commit's version.
 const opRestore = "restore"
 
-// fileActions adds opening and showing the chosen file to g: one file at a
-// time, disabled while a directory or several files are chosen.
-func (v *View) fileActions(g *menuGroups, p *filePane, files []FileChange) {
+// fileActions adds opening and showing the row the menu opened on to g: its
+// file, one at a time, or its directory, which dir names relative to the
+// worktree as a directory row's does. Opening is disabled while several
+// files are chosen.
+func (v *View) fileActions(g *menuGroups, p *filePane, files []FileChange, dir string) {
 	one := len(files) == 1
+	openable := dir != "" || one
 	if v.opts.OpenFile != nil {
-		if g.item(v.text("open_file")).Disabled(!one).Chosen() && one {
-			v.openFile(p, files[0])
+		label := v.text("open_file")
+		if dir != "" {
+			label = v.text("open_folder")
+		}
+		if g.item(label).Disabled(!openable).Chosen() && openable {
+			if dir == "" {
+				v.openFile(p, files[0])
+			} else {
+				v.openFolder(p, dir)
+			}
 		}
 	}
 	if v.opts.RevealFile != nil {
-		if g.item(v.text("show_in_file_manager")).Disabled(!one).Chosen() && one {
-			v.revealFile(p, files[0])
+		if g.item(v.text("show_in_file_manager")).Disabled(!openable).Chosen() && openable {
+			if dir == "" {
+				v.revealPath(p.changes.Top, files[0].Path)
+			} else {
+				v.revealPath(p.changes.Top, dir)
+			}
 		}
 	}
 }
@@ -47,17 +62,18 @@ func (v *View) copyFileActions(c *ui.Context, g *menuGroups, p *filePane, files 
 	}
 }
 
-// allFilesMenu fills the menu of a file in a commit's or stash's files: the
-// common file actions, saving one file, and copying the chosen paths. A
-// commit's Changes also resets a file to the commit's version or switches to
-// its Files tab.
+// allFilesMenu fills the menu of a file in a commit's, stash's or browsed
+// set of files: the common file actions, saving one file, and copying the
+// chosen paths. A commit's Changes also resets a file to the commit's version
+// or switches to its Files tab. A directory row opens its folder and acts on
+// the files below it.
 func (v *View) allFilesMenu(c *ui.Context, row ui.Element, p *filePane, area Area, key string) {
 	row.ContextMenu(func(m *ui.Menu) {
-		files := p.chosenFiles(area, key)
-		one := len(files) == 1
+		files, dir := p.chosenFiles(area, key), p.rowDir(key)
+		one := len(files) == 1 && dir == ""
 		g := &menuGroups{m: m}
-		v.fileActions(g, p, files)
-		if p == v.history.changes {
+		v.fileActions(g, p, files, dir)
+		if p == v.history.changes && dir == "" {
 			if _, entry := entryID(v.history.selected); !entry {
 				g.group()
 				v.restoreItems(g, v.history.selected, files)
@@ -263,28 +279,44 @@ func (v *View) removeTempDirs() {
 	}
 }
 
-// revealFile shows f's worktree path in the file manager, falling back to
-// its directory or the worktree's top when the version shown is not there.
-func (v *View) revealFile(p *filePane, f FileChange) {
+// openFolder opens dir, a directory row's path relative to the worktree's
+// top, in the file manager, which shows its files.
+func (v *View) openFolder(p *filePane, dir string) {
+	if v.opts.OpenFile == nil {
+		return
+	}
+	title, top := v.text("open_folder_failed"), p.changes.Top
+	go func() {
+		if err := v.opts.OpenFile(v.worktreePath(top, dir)); err != nil {
+			v.showFileActionError(title, err)
+		}
+	}()
+}
+
+// revealPath shows rel, a file's or directory's path relative to the
+// worktree's top, in the file manager, falling back to its nearest
+// directory or the top when the version shown is not there.
+func (v *View) revealPath(top, rel string) {
 	if v.opts.RevealFile == nil {
 		return
 	}
-	top := p.changes.Top
-	go func() {
-		full := filepath.Join(top, filepath.FromSlash(f.Path))
-		if _, err := v.git.lstat(full); err != nil {
-			if dir := filepath.Dir(full); dir != full {
-				if _, err := v.git.lstat(dir); err == nil {
-					full = dir
-				} else {
-					full = top
-				}
-			} else {
-				full = top
-			}
+	go func() { v.opts.RevealFile(v.worktreePath(top, rel)) }()
+}
+
+// worktreePath returns rel, a path relative to the worktree at top, as a
+// path in the worktree: its own when it is there, else its nearest
+// directory's, else the top.
+func (v *View) worktreePath(top, rel string) string {
+	full := filepath.Join(top, filepath.FromSlash(rel))
+	if _, err := v.git.lstat(full); err == nil {
+		return full
+	}
+	for dir := filepath.Dir(full); dir != top && dir != filepath.Dir(dir); dir = filepath.Dir(dir) {
+		if _, err := v.git.lstat(dir); err == nil {
+			return dir
 		}
-		v.opts.RevealFile(full)
-	}()
+	}
+	return top
 }
 
 // saveFileChange asks where to save f's version and writes it there.

@@ -15,7 +15,7 @@
 - Double-clicking a ref or commit, or Enter on a commit, opens the checkout dialog; a local branch switches at once when there are no changes, and one checked out elsewhere goes to `OpenWorktree`.
 - Double-clicking a stash opens one applying it.
 - **Changes.** A file tree beside the selected file's diff; images are compared side by side.
-- A file's menu opens it in its default application or shows it in the file manager, stages, unstages or discards it, stashes the chosen files, and copies their paths.
+- A file's menu opens it in its default application or shows it in the file manager, stages, unstages or discards it, stashes the chosen files, and copies their paths. A directory's menu opens its folder in the file manager and acts on the files below it.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`.
 - Double-clicking a file, a diff change's button or selected lines stage or unstage.
 - Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
@@ -25,7 +25,7 @@
 - Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars.
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - A commit's Changes menu also resets a file to the commit's version or its parent's after a confirmation, or shows it in the Files tab.
-- Changes and Files open, save, reveal or copy a file; a commit's version opens and saves from a temporary copy.
+- Changes and Files open, save, reveal or copy a file, open a folder in the file manager, and open a commit's version or save it from a temporary copy.
 - **Toolbar.** Labeled buttons for a host's title bar: Fetch, Pull and Push followed by the commits they move, and Stash.
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
@@ -54,7 +54,7 @@
 | Delete | Refs only, after a confirmation, optionally on the remote too. A branch checked out in another worktree, not the shown or main one, needs that worktree's `worktree remove` too, after checking that `branch -d` would succeed |
 | Stash | Apply, rename or delete a stash from a dialog, or save chosen files from the changes menu |
 | Copy | A ref's name, a commit's full hash or message, or the chosen files' paths |
-| Open File, Show in File Manager | The worktree's file in its default application or file manager; a commit's or stash's version from a temporary copy |
+| Open File, Open Folder, Show in File Manager | A file in its default application, a directory row's folder in the file manager, or either shown in the file manager; a commit's or stash's version opens from a temporary copy |
 | Save as… | Writes the shown version of a file where the user chooses |
 | Show in Files, Reset File to | A commit's Changes shows the file in its Files tab, or resets the index and worktree to the commit's or its parent's version, deleting the file the revision lacks, after a confirmation |
 
@@ -82,7 +82,7 @@ Options:
 | `Language`, `Text` | Built-in English and Chinese strings. `Text` overrides them by key |
 | `AvatarDir` | Avatar cache; empty draws initials and never downloads |
 | `SaveFile` | Writes a file's version or a commit's or stash's patch where the host chooses; nil uses MyGo's save dialog |
-| `OpenFile`, `RevealFile` | Opens a file in its default application or shows it in the file manager; nil leaves those menu items out |
+| `OpenFile`, `RevealFile` | Opens a file in its default application or a directory's folder in the file manager, and shows either in the file manager; nil leaves those menu items out |
 | `Overlay`, `DialogInset` | Host content over the section, and title bar clearance for dialogs |
 
 ## Boundaries

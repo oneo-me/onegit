@@ -22,7 +22,7 @@ User-facing release notes for Onegit.
 - Create branches and tags from their group menus, and remove the stale local branches you choose.
 - Apply, rename or delete a stash from its menu, or save its patch.
 - Split changes into unstaged and staged lists, stage, unstage, discard or stash chosen files, copy paths, and stage changes or selected lines.
-- Open, save, reveal or reset changed and committed files from their menus.
+- Open, save, reveal or reset changed and committed files from their menus, and open their folders in the file manager.
 - Commit the staged files with a message (`⌘Enter`).
 - See the full commit graph with collapsible merges, find, avatars, and commit details with diffs and file contents.
 - Install Onegit on macOS, Windows and Linux from a disk image, an installer, a Debian package or an archive.

@@ -264,19 +264,20 @@ func (p *filePane) chosenFiles(area Area, key string) []FileChange {
 
 // filesMenu opens, reveals, stages, unstages, discards or stashes from a
 // row's menu the files of the chosen rows, or of the row alone when it is
-// not chosen, and copies their paths.
+// not chosen, and copies their paths. A directory row opens its folder.
 func (v *View) filesMenu(c *ui.Context, row ui.Element, p *filePane, area Area, key string) {
 	row.ContextMenu(func(m *ui.Menu) {
-		files := p.chosenFiles(area, key)
+		files, dir := p.chosenFiles(area, key), p.rowDir(key)
+		one := len(files) == 1 && dir == ""
 		disabled := !v.CanSync() || len(files) == 0
 		g := &menuGroups{m: m}
-		v.fileActions(g, p, files)
+		v.fileActions(g, p, files, dir)
 		g.group()
 		if area == AreaStaged {
 			if g.item(v.text("unstage_change")).Shortcut(v.shortcut()|ui.Shift, ui.KeyS).Disabled(disabled).Chosen() {
 				v.stageFiles(area, files)
 			}
-			if len(files) == 1 && g.item(v.text("unstage_all")).Disabled(disabled).Chosen() {
+			if one && g.item(v.text("unstage_all")).Disabled(disabled).Chosen() {
 				v.stageFiles(area, areaFiles(p, area))
 			}
 		} else {
@@ -286,7 +287,7 @@ func (v *View) filesMenu(c *ui.Context, row ui.Element, p *filePane, area Area, 
 			if g.item(v.text("discard_changes")).Shortcut(v.shortcut()|ui.Shift, ui.KeyD).Disabled(disabled).Chosen() {
 				v.askDiscard(files)
 			}
-			if len(files) == 1 && g.item(v.text("stage_all")).Disabled(disabled).Chosen() {
+			if one && g.item(v.text("stage_all")).Disabled(disabled).Chosen() {
 				v.stageFiles(area, areaFiles(p, area))
 			}
 		}

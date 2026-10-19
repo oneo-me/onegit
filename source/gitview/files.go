@@ -101,6 +101,16 @@ func (p *filePane) roots(area Area) []string {
 	return p.tree.children(areaKeys[area])
 }
 
+// rowDir is key's path relative to the worktree when its row is a
+// directory, and "" when it is a file.
+func (p *filePane) rowDir(key string) string {
+	n := p.tree.nodes[key]
+	if n == nil || n.children == nil {
+		return ""
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(key, areaKeys[keyArea(key)]), "/")
+}
+
 // keyArea is the area whose list shows the row of key.
 func keyArea(key string) Area {
 	for area, prefix := range areaKeys {

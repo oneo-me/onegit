@@ -226,3 +226,114 @@ func TestViewFileMenus(t *testing.T) {
 		t.Fatalf("before reset: %q", data)
 	}
 }
+
+func TestViewFolderMenus(t *testing.T) {
+	repo := testRepo(t)
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	os.MkdirAll(filepath.Join(repo, "sub"), 0o755)
+	os.WriteFile(filepath.Join(repo, "sub", "b.txt"), []byte("b\n"), 0o644)
+	git(t, repo, "add", ".")
+	git(t, repo, "commit", "-q", "-m", "folder")
+	added, _ := g.Run(repo, "rev-parse", "HEAD")
+	os.WriteFile(filepath.Join(repo, "sub", "b.txt"), []byte("changed\n"), 0o644)
+
+	opened := make(chan string, 8)
+	revealed := make(chan string, 8)
+	v, pump := testView(t, Options{
+		Git:        g,
+		OpenFile:   func(path string) error { opened <- path; return nil },
+		RevealFile: func(path string) { revealed <- path },
+	})
+	v.SetPath(repo)
+	pump(func() bool { return !v.Loading() && v.Syncing() == "" })
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	view.Frame()
+
+	// A changed directory opens in the file manager and shows itself there
+	// instead of standing for the files below it.
+	if err := view.RightClick("sub"); err != nil {
+		t.Fatal(err)
+	}
+	menu := view.Menu()
+	for _, item := range []string{"Open Folder", "Show in File Manager", "Stage", "Discard Changes…", "Stash 1 File…", "Copy File Paths"} {
+		if !contains(menu, item) {
+			t.Fatalf("%q missing from the folder menu %v", item, menu)
+		}
+	}
+	for _, item := range []string{"Open File", "Stage All Changes", "Save as…"} {
+		if contains(menu, item) {
+			t.Fatalf("%q in the folder menu %v", item, menu)
+		}
+	}
+	if err := view.ChooseMenuItem("Open Folder"); err != nil {
+		t.Fatal(err)
+	}
+	if got := await(t, opened); got != filepath.Join(repo, "sub") {
+		t.Fatalf("opened %q", got)
+	}
+	view.Advance(time.Second)
+	if err := view.RightClick("sub"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Show in File Manager"); err != nil {
+		t.Fatal(err)
+	}
+	if got := await(t, revealed); got != filepath.Join(repo, "sub") {
+		t.Fatalf("revealed %q", got)
+	}
+
+	// A commit's Files tab offers the same for its directory rows, leaving
+	// out the items only one file has.
+	view.Advance(time.Second)
+	if err := view.Click("All commits"); err != nil {
+		t.Fatal(err)
+	}
+	view.Advance(time.Second)
+	if err := view.Click("folder"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool { return v.history.selected == added && v.history.open })
+	if err := view.Click("Files"); err != nil {
+		t.Fatal(err)
+	}
+	pump(func() bool {
+		return v.history.files.loaded && !v.history.files.loading && !v.history.files.fileLoading
+	})
+	view.Frame()
+	if err := view.RightClick("sub"); err != nil {
+		t.Fatal(err)
+	}
+	menu = view.Menu()
+	for _, item := range []string{"Open Folder", "Show in File Manager", "Copy File Paths"} {
+		if !contains(menu, item) {
+			t.Fatalf("%q missing from the Files folder menu %v", item, menu)
+		}
+	}
+	for _, item := range []string{"Open File", "Save as…", "Show in Files"} {
+		if contains(menu, item) {
+			t.Fatalf("%q in the Files folder menu %v", item, menu)
+		}
+	}
+	if err := view.ChooseMenuItem("Open Folder"); err != nil {
+		t.Fatal(err)
+	}
+	if got := await(t, opened); got != filepath.Join(repo, "sub") {
+		t.Fatalf("opened %q from the Files tab", got)
+	}
+
+	// A folder the worktree no longer has opens the nearest directory there.
+	view.Advance(time.Second)
+	if err := os.RemoveAll(filepath.Join(repo, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.RightClick("sub"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Open Folder"); err != nil {
+		t.Fatal(err)
+	}
+	if got := await(t, opened); got != repo {
+		t.Fatalf("opened %q for the folder gone from the worktree", got)
+	}
+}

@@ -80,13 +80,14 @@ type Options struct {
 	// writes it there and returns the chosen path, or "" when canceled. It
 	// runs off the UI thread. Nil uses MyGo's save dialog.
 	SaveFile func(title, name string, data []byte) (string, error)
-	// OpenFile opens a file path with its default application, as a file
-	// menu's Open File does; a host whose Git.Host runs elsewhere decides
-	// what a path means. Nil leaves that item out.
+	// OpenFile opens a file path with its default application, or a directory
+	// in the file manager, as a file menu's Open File and Open Folder do; a
+	// host whose Git.Host runs elsewhere decides what a path means. Nil
+	// leaves those items out.
 	OpenFile func(path string) error
-	// RevealFile shows a file path in the file manager, as a file menu's
-	// Show in File Manager does; a host whose Git.Host runs elsewhere
-	// decides what a path means. Nil leaves that item out.
+	// RevealFile shows a file's or directory's path in the file manager, as a
+	// file menu's Show in File Manager does; a host whose Git.Host runs
+	// elsewhere decides what a path means. Nil leaves that item out.
 	RevealFile func(path string)
 	// DialogInset keeps the view's dialogs below a host title bar.
 	DialogInset func(c *ui.Context) float32
