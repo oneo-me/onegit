@@ -41,6 +41,7 @@ type historyState struct {
 	match            int
 	list             components.ListState
 	cursor           int
+	chosen           ui.Selection[any]
 	// collapsed holds the merges whose commits fold into their row, folded
 	// maps each commit they hide to its merge, and rows and graph are the
 	// shown commits' indexes and revision graph. toggle is a merge to
@@ -70,6 +71,7 @@ func (v *View) initHistory() {
 	h.changes = v.newFilePane(false)
 	h.files = v.newFilePane(true)
 	h.list.Selected = &h.cursor
+	h.list.Selection = &h.chosen
 	h.list.Key = func(i int) any { return v.repo.commits[h.rows[i]].Hash }
 	h.list.Label = func(i int) string { return v.repo.commits[h.rows[i]].Subject }
 	h.list.OnChange = func() {
@@ -99,6 +101,7 @@ func (v *View) clearHistory() {
 	h := &v.history
 	h.finding, h.search, h.searched, h.matches, h.match = false, "", "", nil, 0
 	h.selected, h.reveal, h.cursor = "", "", 0
+	h.chosen.Clear()
 	h.collapsed, h.toggle = nil, ""
 	v.clearFiles(h.changes, "")
 	v.clearFiles(h.files, "")

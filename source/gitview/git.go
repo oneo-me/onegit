@@ -596,7 +596,24 @@ func (g Git) WorktreeStatus(path string) (Changes, error) {
 				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
 		}
 	}
-	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
+	// An unmerged file can appear as both U and M in the worktree diff;
+	// keep one row, preferring the conflict.
+	byPath := map[string]FileChange{}
+	var order []string
+	for _, f := range worktree {
+		if _, ok := byPath[f.Path]; ok {
+			if f.Status == 'U' {
+				byPath[f.Path] = f
+			}
+			continue
+		}
+		byPath[f.Path] = f
+		order = append(order, f.Path)
+	}
+	worktree = worktree[:0]
+	for _, path := range order {
+		worktree = append(worktree, byPath[path])
+	}
 	slices.SortFunc(worktree, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
 	for _, f := range worktree {
 		f.Area = AreaUnstaged
@@ -1604,10 +1621,12 @@ func (g Git) AddWorktree(path, dir string, o CheckoutOptions) error {
 // IntegrateOptions choose how a merge or rebase brings in a revision.
 type IntegrateOptions struct {
 	// NoFastForward records a merge commit even when the branch could move
-	// ahead; a rebase ignores it. Stash sets uncommitted changes aside
-	// meanwhile, and UpdateRefs moves the local branches pointing into the
-	// rebased commits with them.
-	NoFastForward, Stash, UpdateRefs bool
+	// ahead; a rebase ignores it. Squash stages the merged changes without
+	// committing them, and NoCommit stops before committing a merge whose
+	// changes are staged; a rebase ignores both. Stash sets uncommitted
+	// changes aside meanwhile, and UpdateRefs moves the local branches
+	// pointing into the rebased commits with them.
+	NoFastForward, Squash, NoCommit, Stash, UpdateRefs bool
 }
 
 // Merge merges rev into the branch checked out at path with Git's default
@@ -1615,7 +1634,12 @@ type IntegrateOptions struct {
 // git merge does.
 func (g Git) Merge(path, rev string, o IntegrateOptions) error {
 	args := []string{"merge", "--quiet", "--no-edit", "--no-autostash"}
-	if o.NoFastForward {
+	switch {
+	case o.Squash:
+		args = append(args, "--squash")
+	case o.NoCommit:
+		args = append(args, "--no-commit")
+	case o.NoFastForward:
 		args = append(args, "--no-ff")
 	}
 	if o.Stash {

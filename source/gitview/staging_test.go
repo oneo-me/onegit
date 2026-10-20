@@ -171,7 +171,7 @@ func TestViewStagesAndDiscardsChosenFiles(t *testing.T) {
 	if err := view.RightClick("other.txt"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(view.Menu(), ","); got != "Stage,Discard Changes…,Stage All Changes,-,Stash 1 File…,-,Copy File Paths,Copy Absolute Paths" {
+	if got := strings.Join(view.Menu(), ","); got != "File History…,Blame…,-,Stage,Discard Changes…,Stage All Changes,-,Stash 1 File…,-,Copy File Paths,Copy Absolute Paths" {
 		t.Fatalf("menu: %s", got)
 	}
 	view.CloseMenu()

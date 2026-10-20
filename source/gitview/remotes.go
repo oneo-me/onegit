@@ -46,6 +46,12 @@ func (v *View) branchGroupMenu(m *ui.Menu) {
 	if m.Item(v.text("ref_select_stale")).Disabled(!v.available()).Chosen() {
 		v.openStaleBranches()
 	}
+	if m.Item(v.text("bulk_push_branches")).Disabled(!v.CanSync()).Chosen() {
+		v.openBulk(bulkPushBranches)
+	}
+	if m.Item(v.text("bulk_delete_branches")).Disabled(!v.CanSync()).Chosen() {
+		v.openBulk(bulkDeleteBranches)
+	}
 }
 
 // remoteGroupMenu fills the Remote branches heading's menu: adding a remote.
@@ -61,6 +67,12 @@ func (v *View) tagGroupMenu(m *ui.Menu) {
 	t, hasHead := v.headTarget()
 	if m.Item(v.text("ref_new_tag")).Disabled(!v.CanSync() || !hasHead).Chosen() && hasHead {
 		v.openRefAction(opTag, t)
+	}
+	if m.Item(v.text("bulk_push_tags")).Disabled(!v.CanSync()).Chosen() {
+		v.openBulk(bulkPushTags)
+	}
+	if m.Item(v.text("bulk_delete_tags")).Disabled(!v.CanSync()).Chosen() {
+		v.openBulk(bulkDeleteTags)
 	}
 }
 

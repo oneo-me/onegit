@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -41,7 +42,7 @@ func TestViewGroupMenus(t *testing.T) {
 	if err := view.RightClick("Branches"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := view.Menu(), []string{"New Branch…", "Select Stale Local Branches"}; !slices.Equal(got, want) {
+	if got, want := view.Menu(), []string{"New Branch…", "Select Stale Local Branches", "Push Multiple Branches…", "Delete Multiple Branches…"}; !slices.Equal(got, want) {
 		t.Fatalf("branches menu %q", got)
 	}
 	if err := view.ChooseMenuItem("New Branch…"); err != nil {
@@ -63,7 +64,7 @@ func TestViewGroupMenus(t *testing.T) {
 	if err := view.RightClick("Tags"); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := view.Menu(), []string{"New Tag…"}; !slices.Equal(got, want) {
+	if got, want := view.Menu(), []string{"New Tag…", "Push Multiple Tags…", "Delete Multiple Tags…"}; !slices.Equal(got, want) {
 		t.Fatalf("tags menu %q", got)
 	}
 	if err := view.ChooseMenuItem("New Tag…"); err != nil {
@@ -308,6 +309,9 @@ func TestAddRefFolder(t *testing.T) {
 }
 
 func TestViewPushCreatesGitHubRepository(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the gh stand-in is a POSIX script")
+	}
 	repo := testRepo(t)
 	dir := t.TempDir()
 	bare := filepath.Join(dir, "github.git")

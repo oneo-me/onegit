@@ -734,8 +734,8 @@ func TestViewBranchMenu(t *testing.T) {
 
 	// A branch another worktree has checked out leaves out what cannot
 	// apply to it, and fast-forwards only once its upstream moves on.
-	want := []string{"Fast-Forward to 'origin/main'", "Push to 'origin'…", "-", "Merge into '123'…", "Rebase '123' on 'main'…", "-",
-		"New Branch…", "New Tag…", "-", "Tracking", "Rename…", "-", "Copy Branch Name"}
+	want := []string{"Fast-Forward to 'origin/main'", "Push to 'origin'…", "-", "Merge into '123'…", "Rebase '123' on 'main'…",
+		"Interactively Rebase '123' onto 'main'…", "-", "New Branch…", "New Tag…", "-", "Tracking", "Rename…", "Pin Reference", "-", "Copy Branch Name"}
 	if got := menu("main"); !slices.Equal(got, want) {
 		t.Fatalf("menu %q", got)
 	}

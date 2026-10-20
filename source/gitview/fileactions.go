@@ -41,6 +41,15 @@ func (v *View) fileActions(g *menuGroups, p *filePane, files []FileChange, dir s
 			}
 		}
 	}
+	if one && dir == "" {
+		if g.item(v.text("file_history")).Chosen() {
+			v.openFileHistory(p, files[0])
+		}
+		blame := files[0].Status != 'D' && (files[0].Status != 'A' || p.changes.To != "")
+		if g.item(v.text("blame")).Disabled(!blame).Chosen() && blame {
+			v.openBlame(p, files[0])
+		}
+	}
 }
 
 // copyFileActions adds copying the chosen files' paths to g, relative to the

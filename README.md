@@ -11,14 +11,18 @@ Onegit is a worktree-centered macOS app that gathers many Git repositories in on
 - Open a project's folder or remove it from the sidebar in its menu, with undo and restore.
 - Find projects and settings with the command palette (`⌘E`).
 - Switch between all worktrees of a project with tabs.
-- Review staged and unstaged changes, stage whole files, single changes or selected lines, stash chosen files or copy their paths, and commit them with a message.
+- Review staged and unstaged changes, stage whole files, single changes or selected lines, discard a change or selected lines, stash chosen files or copy their paths, and commit them with a message.
+- Amend the last commit, commit and push in one action, and keep a draft message per worktree.
 - Browse the full commit graph with collapsible merges, find in history, and commit details with diffs and file contents.
+- Pin refs, show lost commits from the reflog, search history by message, author, changed path or content, compare commits or a commit with the worktree, and open a file's history or blame.
 - Open or reveal a changed or committed file, open a folder in the file manager, save the version shown, or reset a file to a commit's or its parent's version from its menu.
 - Browse local branches, remote branches and tags, create branches or tags from their group menus, delete stale local branches, and jump to their commits.
 - Double-click a ref or commit to check it out, or use its menu for checkout, worktrees, pull, merge, rebase, branch, tag, delete and copy; branch menus also push, fast-forward, rename and track.
 - Manage remotes from their menu: fetch, edit or delete one, fetch it when a worktree opens, open it on GitHub or copy its address.
-- Rebase from a dialog that reports conflicts and can update dependent branches or stash local changes.
+- Rebase from a dialog that reports conflicts and can update dependent branches or stash local changes; rebase interactively with reword, squash, fixup and drop.
+- Continue or abort a stopped merge, rebase, cherry-pick or revert, resolving a conflicted file with either side and staging it.
 - Reset, cherry-pick, revert or save a commit as a patch, and apply, rename or delete a stash, from their menus.
+- Choose the merge type, including squash and no commit, and delete or push several branches or tags at once.
 - Every Git write, such as fetch, pull, push, stash or a menu action, runs only when you click, except remotes you set to fetch automatically when a worktree opens.
 
 ## Run

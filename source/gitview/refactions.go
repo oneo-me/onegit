@@ -58,6 +58,16 @@ func (t refTarget) rev() string {
 	return t.hash
 }
 
+// mergeChoice is how a merge records its result.
+type mergeChoice int
+
+const (
+	mergeDefault mergeChoice = iota
+	mergeNoFF
+	mergeSquash
+	mergeNoCommit
+)
+
 // refAction is the dialog of a refs menu's write, op, on target: a checkout
 // or new worktree, a merge, or a new branch or tag. name is the new branch
 // or tag, path the new worktree's directory and message an annotated tag's;
@@ -71,6 +81,7 @@ type refAction struct {
 	name, path, suggested, message string
 	checkout                       bool
 	changes                        LocalChanges
+	merge                          mergeChoice
 	options                        IntegrateOptions
 }
 
@@ -191,6 +202,9 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 			if g.item(v.textf("ref_rebase", args)).Disabled(!can || same).Chosen() && !same {
 				v.openRebase(t)
 			}
+			if g.item(v.textf("ref_rebase_interactive", args)).Disabled(!can || same || v.git.Host != nil).Chosen() && !same && v.git.Host == nil {
+				v.openInteractiveRebase(t.hash)
+			}
 		}
 	}
 	g.group()
@@ -207,6 +221,13 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 			if g.item(v.text("ref_rename")).Disabled(!can).Chosen() {
 				v.openRefAction(opRename, t)
 			}
+		}
+		pin := v.text("ref_pin")
+		if v.isPinned(t.group, t.name) {
+			pin = v.text("ref_unpin")
+		}
+		if g.item(pin).Chosen() {
+			v.togglePinned(t.group, t.name)
 		}
 		if d, ok := v.newRefDeletion(t.group, n); ok && g.item(v.text("delete_ref")).Disabled(!can).Chosen() {
 			v.deletion = d
@@ -331,6 +352,9 @@ func (v *View) commitMenu(c *ui.Context, m *ui.Menu, commit Commit) {
 		if g.item(v.textf("ref_rebase_here", args)).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
 			v.openRebase(t)
 		}
+		if g.item(v.textf("ref_rebase_interactive_here", args)).Disabled(!can || commit.Hash == v.repo.head || v.git.Host != nil).Chosen() && commit.Hash != v.repo.head && v.git.Host == nil {
+			v.openInteractiveRebase(commit.Hash)
+		}
 	}
 	g.group()
 	if g.item(v.textf("ref_reset_here", args)).Disabled(!can || commit.Hash == v.repo.head).Chosen() && commit.Hash != v.repo.head {
@@ -349,6 +373,7 @@ func (v *View) commitMenu(c *ui.Context, m *ui.Menu, commit Commit) {
 	if g.item(v.text("ref_save_patch")).Disabled(!can).Chosen() {
 		v.saveCommitPatch(commit)
 	}
+	v.compareItems(g, commit)
 	g.group()
 	if g.item(v.text("ref_copy_commit")).Chosen() {
 		c.WriteClipboard(commit.Hash)
@@ -526,6 +551,12 @@ func (v *View) openRefAction(op string, t refTarget) {
 		return
 	}
 	a := refAction{open: true, op: op, target: t, checkout: true}
+	if op == opMerge {
+		a.merge = mergeChoice(v.state.MergeChoice)
+		if a.merge < mergeDefault || a.merge > mergeNoCommit {
+			a.merge = mergeDefault
+		}
+	}
 	if t.group == "remotes" && (op == opCheckout || op == OpWorktree) {
 		if remote := refRemote(v.repo.github, t.name); remote != "" {
 			a.name = t.name[len(remote)+1:]
@@ -644,8 +675,19 @@ func (v *View) refActionDialog(c *ui.Context) {
 			field(v.text("ref_tag_name"), &a.name, "", true)
 			field(v.text("ref_tag_message"), &a.message, v.text("ref_tag_lightweight"), false)
 		case opMerge:
-			formOption(c, refLabelWidth, &a.options.NoFastForward, v.text("ref_no_ff"))
+			formField(c, refLabelWidth, v.text("ref_merge_type"), false, func() {
+				ui.Column(c).Gap(t.Space(2)).Children(func() {
+					components.Radio(c, &a.merge, mergeDefault, v.text("ref_merge_default"))
+					components.Radio(c, &a.merge, mergeNoFF, v.text("ref_no_ff"))
+					components.Radio(c, &a.merge, mergeSquash, v.text("ref_merge_squash"))
+					components.Radio(c, &a.merge, mergeNoCommit, v.text("ref_merge_no_commit"))
+				})
+			})
 			formOption(c, refLabelWidth, &a.options.Stash, v.text("pull_stash"))
+			if a.merge != mergeChoice(v.state.MergeChoice) {
+				v.state.MergeChoice = int(a.merge)
+				v.saveState()
+			}
 		}
 		ready, problem := v.actionReady()
 		if problem != "" {
@@ -690,7 +732,11 @@ func (v *View) runRefAction() {
 		dir := strings.TrimSpace(a.path)
 		v.Run(OpWorktree, v.text("ref_worktree_failed"), func(git Git, path string) error { return git.AddWorktree(path, dir, checkout) })
 	case opMerge:
-		v.Run(opMerge, v.text("ref_merge_failed"), func(git Git, path string) error { return git.Merge(path, t.rev(), a.options) })
+		o := a.options
+		o.NoFastForward = a.merge == mergeNoFF
+		o.Squash = a.merge == mergeSquash
+		o.NoCommit = a.merge == mergeNoCommit
+		v.Run(opMerge, v.text("ref_merge_failed"), func(git Git, path string) error { return git.Merge(path, t.rev(), o) })
 	case opBranch:
 		v.Run(opBranch, v.text("ref_branch_failed"), func(git Git, path string) error {
 			if a.checkout {

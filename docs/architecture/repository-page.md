@@ -16,7 +16,7 @@ The view's `Toolbar`, shared with Neorio's Git window, follows the name or tabs:
 
 - Watching is off: the view reads when a worktree is shown and after an action.
 - No ref filter and no inserted history rows.
-- The view's layout, ref group disclosure, line wrapping, fetch, pull, push, stash, rebase and cherry-pick options, and remotes fetched automatically are saved in `state.yaml` under `gitView`.
+- The view's layout, ref group disclosure, line wrapping, drafts, pinned refs, reflog choice, merge type, fetch, pull, push, stash, rebase and cherry-pick options, and remotes fetched automatically are saved in `state.yaml` under `gitView`.
 - Commit authors' avatars are cached in `~/.onegit/avatars/`, downloaded from GitHub or Gravatar.
 
 ## Selection defaults

@@ -49,13 +49,13 @@ Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.
 - When `~/.onegit` does not exist, an earlier `~/.oneo/onegit` directory is moved there at startup.
 - A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
 - State covers the main window's bounds and state through MyGo's window state store, sidebar width and collapse, project cache, expansion, pinning, group collapse and last selections.
-- It also covers the Git view's layout, options and automatic fetch choices per repository.
+- It also covers the Git view's layout, options, drafts, pinned refs, reflog choice, merge type and automatic fetch choices per repository.
 - Commit authors' avatars are downloaded from GitHub or Gravatar and cached in `avatars/` in the same directory.
 - Worktree lists and Git data are never persisted.
 
 ## Verification
 
-`go test` covers settings and persistence, project detection, scan cancellation and cache merging, sidebar menus and removal, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. Tests use real temporary Git repositories.
+`go test` covers settings and persistence, project detection, scan cancellation and cache merging, sidebar menus and removal, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. It also covers conflict resolution and stopped operations, draft commits, reflog, pinned refs, comparisons, file history, blame, history search, interactive rebase and bulk ref actions. Tests use real temporary Git repositories.
 
 Review these manually: the native directory picker, and packaging and the app icon on each platform.
 

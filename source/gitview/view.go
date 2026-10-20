@@ -127,6 +127,16 @@ type State struct {
 	// AutoFetch lists the remotes fetched when a worktree opens, by the
 	// repository main worktree path.
 	AutoFetch map[string][]string `yaml:"autoFetch,omitempty" json:"autoFetch,omitempty"`
+	// Drafts holds the commit message typed for a worktree, by its path,
+	// until it is committed or cleared.
+	Drafts map[string]string `yaml:"drafts,omitempty" json:"drafts,omitempty"`
+	// ShowReflog lists lost commits from the reflogs in the history.
+	ShowReflog bool `yaml:"showReflog,omitempty" json:"showReflog,omitempty"`
+	// MergeChoice remembers how the merge dialog records a merge.
+	MergeChoice int `yaml:"mergeChoice,omitempty" json:"mergeChoice,omitempty"`
+	// Pinned lists the refs pinned in the refs pane, by repository root, as
+	// "branches/name", "remotes/name" or "tags/name".
+	Pinned map[string][]string `yaml:"pinned,omitempty" json:"pinned,omitempty"`
 }
 
 // Entry is a row the host inserts into the history right above the commit
@@ -165,6 +175,9 @@ const (
 	sectionCommits
 	// sectionStash lists the files a stash saved.
 	sectionStash
+	// sectionCompare lists the files two commits or a commit and the
+	// worktree differ in.
+	sectionCompare
 )
 
 // View is the repository view of one worktree at a time.
@@ -176,6 +189,15 @@ type View struct {
 	// path is the worktree shown.
 	path    string
 	section section
+	// operation is the Git operation that stopped in the worktree, such as
+	// a conflicted merge, until the user completes or aborts it. amend
+	// records that the commit box will replace the checked out commit, and
+	// draftGeneration discards a draft save a newer edit replaced.
+	operation       Operation
+	amend           bool
+	draftGeneration uint64
+	// abortingOperation shows the dialog confirming the operation's abort.
+	abortingOperation bool
 	// overlayHeight is the overlay's height, which the history's list keeps
 	// its first rows clear of.
 	overlayHeight float32
@@ -199,8 +221,14 @@ type View struct {
 	history  historyState
 	// stash is the hash of the stash chosen in sectionStash, whose files
 	// stashFiles lists.
-	stash      string
-	stashFiles *filePane
+	stash       string
+	stashFiles  *filePane
+	compare     compareState
+	fileHistory fileHistoryDialog
+	blame       blameDialog
+	search      historySearchDialog
+	interactive interactiveRebaseDialog
+	bulk        bulkDialog
 	// tracking compares the worktree's branch with its upstream; syncing
 	// names the Git write running in each worktree, and toast reports the
 	// last one that failed; dialog chooses a fetch's, pull's or push's branches.
@@ -212,12 +240,15 @@ type View struct {
 	applyStash         applyStash
 	toast              *ui.Toast
 	// deletion and discarding confirm deleting a ref from the refs pane and
-	// discarding a worktree's changes; restoring resets a file to a commit;
-	// action asks for what another write of a ref's or commit's menu needs.
+	// discarding a worktree's changes; discardingChange discards part of a
+	// file, and restoring resets a file to a commit; action asks for what
+	// another write of a ref's or commit's menu needs.
 	deletion   refDeletion
 	discarding discarding
-	restoring  restoring
-	action     refAction
+	// discardChange asks before discarding a hunk or selected lines.
+	discardChange discardChange
+	restoring     restoring
+	action        refAction
 	// rebase, reset, cherryPick and revert are the history's dialogs, and
 	// pushTag the tag menu's; stashRename and stashDeletion change a stash.
 	rebase        rebaseDialog
@@ -271,6 +302,7 @@ type repositoryState struct {
 	// is hosted on GitHub.
 	remoteURLs map[string]string
 	github     map[string]bool
+	operation  Operation
 	// entries are the host's rows by ID.
 	entries map[string]Entry
 }
@@ -278,6 +310,9 @@ type repositoryState struct {
 // New creates a view showing nothing until SetPath.
 func New(opts Options) *View {
 	v := &View{opts: opts, git: opts.Git, state: opts.State, section: sectionCommits, groups: map[string]*bool{}, messages: map[string]string{}, syncing: map[string]string{}}
+	for path, message := range opts.State.Drafts {
+		v.messages[path] = message
+	}
 	if v.state.RefsWidth <= 0 {
 		v.state.RefsWidth = refsWidth
 	}
@@ -293,6 +328,7 @@ func New(opts Options) *View {
 	}
 	v.current = v.newFilePane(false)
 	v.stashFiles = v.newFilePane(false)
+	v.compare.files = v.newFilePane(false)
 	v.initHistory()
 	return v
 }
@@ -328,6 +364,7 @@ func (v *View) SetPath(path string) {
 	if v.path == path {
 		return
 	}
+	v.saveDraft()
 	v.path = path
 	v.repo.generation++
 	v.repo = repositoryState{generation: v.repo.generation}
@@ -338,7 +375,12 @@ func (v *View) SetPath(path string) {
 	v.clearHistory()
 	v.ref = ""
 	v.clearStash()
+	v.clearCompare()
 	v.tracking = Tracking{}
+	v.amend, v.abortingOperation = false, false
+	v.fileHistory.open, v.blame.open, v.search.open = false, false, false
+	v.interactive.open, v.bulk.open = false, false
+	v.discardChange = discardChange{}
 	v.remoteDialog.open, v.remoteDeletion.open = false, false
 	v.stale = staleBranches{generation: v.stale.generation + 1}
 	v.Reload()
@@ -352,6 +394,9 @@ func (v *View) Reload() {
 	}
 	v.loadRepository()
 	v.loadChanges()
+	if v.section == sectionCompare {
+		v.loadCompare()
+	}
 	v.targetChanged()
 }
 
@@ -370,6 +415,7 @@ func (v *View) Resume() {
 
 // Close stops the view's watches and drops its pending results.
 func (v *View) Close() {
+	v.saveDraft()
 	v.closed = true
 	v.stopWatches()
 	v.removeTempDirs()
@@ -470,6 +516,7 @@ func (v *View) loadRepository() {
 	v.repo.again = false
 	v.repo.generation++
 	generation, known, path, git, keep := v.repo.generation, v.repo.signature, v.path, v.git, v.opts.RefFilter
+	reflog := v.state.ShowReflog
 	var entries []Entry
 	if v.opts.Entries != nil {
 		entries = v.opts.Entries()
@@ -481,9 +528,13 @@ func (v *View) loadRepository() {
 		var checkouts []Checkout
 		var stashes []Stash
 		var remoteURLs map[string]string
+		var operation Operation
 		github := map[string]bool{}
 		_, err := git.Top(path)
 		if err == nil {
+			// A stopped operation changes the meaning of the worktree even
+			// when its refs did not change.
+			operation, _ = git.Operation(path)
 			if refs, err = git.Refs(path); err == nil {
 				refs, hidden = refs.split(keep)
 				checkouts, err = git.Checkouts(path)
@@ -513,7 +564,7 @@ func (v *View) loadRepository() {
 				shown, heads = append(shown, e), append(heads, hash)
 			}
 		}
-		signature, trees := refsSignature(refs, hidden, checkouts, shown), newRefTrees(refs)
+		signature, trees := refsSignature(refs, hidden, checkouts, shown, reflog), newRefTrees(refs)
 		for remote := range remoteURLs {
 			trees.remotes = addRefFolder(trees.remotes, remote)
 		}
@@ -523,7 +574,12 @@ func (v *View) loadRepository() {
 		count := 0
 		reread := err == nil && signature != known
 		if reread {
-			if commits, err = git.Commits(path, hidden, heads...); err == nil {
+			if reflog {
+				if commits, err = git.Reflog(path); err == nil {
+					count, head = len(commits), headCommit(commits)
+					graph = buildGraph(commits)
+				}
+			} else if commits, err = git.Commits(path, hidden, heads...); err == nil {
 				count, head = len(commits), headCommit(commits)
 				commits = withEntries(commits, shown)
 				graph = buildGraph(commits)
@@ -552,6 +608,7 @@ func (v *View) loadRepository() {
 			}
 			v.repo.err, v.repo.refTrees, v.repo.checkouts, v.repo.stashes = "", trees, checkouts, stashes
 			v.repo.remoteURLs, v.repo.github = remoteURLs, github
+			v.repo.operation = operation
 			v.keepStash()
 			v.repo.entries = map[string]Entry{}
 			for _, e := range shown {
@@ -572,8 +629,11 @@ func (e errorText) Error() string { return string(e) }
 
 // refsSignature describes every shown and hidden ref, checked out commit
 // and entry, which together decide the history.
-func refsSignature(refs, hidden Refs, checkouts []Checkout, entries []Entry) string {
+func refsSignature(refs, hidden Refs, checkouts []Checkout, entries []Entry, reflog bool) string {
 	var b strings.Builder
+	if reflog {
+		b.WriteString("reflog\n")
+	}
 	for _, list := range [][]Ref{refs.Branches, refs.Remotes, refs.Tags, hidden.Branches, hidden.Remotes, hidden.Tags} {
 		for _, r := range list {
 			b.WriteString(r.Name + " " + r.Hash + "\n")
@@ -618,16 +678,22 @@ func (v *View) Layout(c *ui.Context) {
 	if v.path == "" {
 		return
 	}
+	if c.Shortcut(v.shortcut()|ui.Shift, ui.KeyF) {
+		v.openHistorySearch()
+	}
 	refs := func() {
 		ui.Column(c).Fill().MinHeight(0).Children(func() { v.refsPane(c) })
 	}
 	section := func() {
 		ui.Column(c).Fill().MinHeight(0).MinWidth(0).Children(func() {
+			v.operationBanner(c)
 			switch v.section {
 			case sectionCommits:
 				v.historyView(c)
 			case sectionStash:
 				v.filesView(c, v.stashFiles, v.text("no_changes"))
+			case sectionCompare:
+				v.compareView(c)
 			default:
 				v.filesView(c, v.current, "")
 			}
@@ -649,7 +715,9 @@ func (v *View) Layout(c *ui.Context) {
 	v.stashDeletionDialogView(c)
 	v.refDeletionDialog(c)
 	v.discardDialog(c)
+	v.discardChangeDialog(c)
 	v.restoreFileDialog(c)
+	v.abortOperationDialog(c)
 	v.refActionDialog(c)
 	v.remoteDialogView(c)
 	v.remoteDeletionDialog(c)
@@ -659,6 +727,11 @@ func (v *View) Layout(c *ui.Context) {
 	v.cherryPickDialogView(c)
 	v.revertDialogView(c)
 	v.pushTagDialogView(c)
+	v.fileHistoryDialogView(c)
+	v.blameDialogView(c)
+	v.historySearchDialogView(c)
+	v.interactiveRebaseDialogView(c)
+	v.bulkDialogView(c)
 }
 
 // overlay floats the host's overlay at the top of the section, measuring
@@ -700,11 +773,53 @@ func (v *View) refsPane(c *ui.Context) {
 					components.Text(c, strconv.Itoa(n)).FontSize(11.5).Shrink(0).TextColor(t.TextMuted).SingleLine()
 				}
 			}
-			if sidebarItem(c, v.text("all_commits"), lucide.GitGraph(), v.section == sectionCommits && v.ref == "", count).Clicked() {
+			label := v.text("all_commits")
+			if v.state.ShowReflog {
+				label = v.text("all_commits_reflog")
+			}
+			all := sidebarItem(c, label, lucide.GitGraph(), v.section == sectionCommits && v.ref == "", count)
+			all.ContextMenu(func(m *ui.Menu) {
+				if m.Item(v.text("search_history")).Shortcut(v.shortcut()|ui.Shift, ui.KeyF).Chosen() {
+					v.openHistorySearch()
+				}
+				if m.Item(v.text("show_reflog")).Checked(v.state.ShowReflog).Chosen() {
+					v.state.ShowReflog = !v.state.ShowReflog
+					v.saveState()
+					v.loadRepository()
+					v.invalidate()
+				}
+			})
+			if all.Clicked() {
 				v.section, v.ref, v.seekChanges = sectionCommits, "", false
 				v.targetChanged()
 			}
+			if v.compare.from != "" {
+				row := sidebarItem(c, v.text("compare_refs"), lucide.GitCompare(), v.section == sectionCompare, nil)
+				components.Tooltip(c, row, v.compareLabel())
+				if row.Clicked() {
+					v.section, v.ref, v.seekChanges = sectionCompare, "", false
+					v.targetChanged()
+				}
+			}
 			trees, query := v.repo.refTrees, strings.TrimSpace(v.refFilter)
+			found := false
+			if pinned := v.pinnedRefs(); len(pinned) > 0 {
+				visible := false
+				if query == "" {
+					visible = true
+				} else {
+					for _, ref := range pinned {
+						if strings.Contains(strings.ToLower(ref.name), strings.ToLower(query)) {
+							visible = true
+							break
+						}
+					}
+				}
+				if visible {
+					found = true
+					v.refGroup(c, "pinned", v.text("pinned_refs"), lucide.Pin(), true, query != "", nil, func() { v.pinnedRows(c, query) })
+				}
+			}
 			groups := []struct {
 				key, label string
 				icon       *ui.SVG
@@ -715,7 +830,6 @@ func (v *View) refsPane(c *ui.Context) {
 				{"remotes", v.text("remote_branches"), lucide.Cloud(), false, filterRefs(trees.remotes, query)},
 				{"tags", v.text("tags"), lucide.Tag(), false, filterRefs(trees.tags, query)},
 			}
-			found := false
 			for _, g := range groups {
 				// A filter hides the groups it empties.
 				if query == "" || len(g.nodes) > 0 {

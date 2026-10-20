@@ -16,15 +16,16 @@ User-facing release notes for Onegit.
 - Browse changes, commits, filterable branches, remote branches, tags and stashes, open their commits, delete refs and see stashed files.
 - Double-click a ref or commit to check it out, keeping, stashing or discarding changes; a branch checked out elsewhere opens its worktree.
 - Apply a stash by double-clicking it, deleting it afterwards unless you keep it or it conflicts.
-- Rebase the checked-out branch from a dialog that names both sides, tests for conflicts, and can update dependent branches or stash local changes.
+- Rebase the checked-out branch from a dialog that names both sides, tests for conflicts, and can update dependent branches or stash local changes; rebase interactively with reword, squash, fixup and drop.
+- Continue or abort a stopped merge, rebase, cherry-pick or revert, and resolve a conflicted file with either side before staging it.
 - Act on refs and commits from their menus: checkout, worktree, pull, merge, rebase, branch, tag, reset, cherry-pick, revert, patch, delete or copy; a commit a branch, remote branch or tag points at also acts as that ref.
-- Branch menus also push, fast-forward, rename, change tracking and delete a branch with its worktree.
+- Branch menus also push, fast-forward, rename, change tracking and delete a branch with its worktree; choose a merge type and delete or push several branches or tags at once.
 - Fetch, edit or delete remotes from their menu, fetch one automatically when a worktree opens, view a GitHub remote or copy its address.
 - Create branches and tags from their group menus, and remove the stale local branches you choose.
 - Apply, rename or delete a stash from its menu, or save its patch.
-- Split changes into unstaged and staged lists, stage, unstage, discard or stash chosen files, copy paths, and stage changes or selected lines.
+- Split changes into unstaged and staged lists, stage, unstage, discard or stash chosen files, copy paths, stage or discard changes and selected lines, and amend, commit (`⌘Enter`) and push from the commit box with a per-worktree draft.
 - Open, save, reveal or reset changed and committed files from their menus, and open their folders in the file manager.
-- Commit the staged files with a message (`⌘Enter`).
 - See the full commit graph with collapsible merges, find, avatars, and commit details with diffs and file contents.
+- Pin refs, show lost commits from the reflog, search history by message, author, changed path or content, compare commits or a commit with the worktree, and open a file's history or blame.
 - Install Onegit on macOS, Windows and Linux from a disk image, an installer, a Debian package or an archive.
 - Avoid the UI freezing while choosing the project parent directory.

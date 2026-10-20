@@ -39,6 +39,14 @@ func (v *View) CanSync() bool {
 	return v.available() && v.Syncing() == "" && !v.busy()
 }
 
+// CanStage reports whether the view may write the worktree's index: its
+// changes are read and no write runs there. Staging and discarding part of a
+// file do not need the repository's refs or history.
+func (v *View) CanStage() bool {
+	return v.path != "" && v.current != nil && v.current.loaded && v.current.err == "" &&
+		v.Syncing() == "" && !v.busy()
+}
+
 // CanPull reports whether a pull may start, which needs a checked out
 // branch.
 func (v *View) CanPull() bool { return v.CanSync() && v.tracking.Branch != "" }

@@ -280,10 +280,18 @@ func (v *View) loadFile(p *filePane) {
 	p.fileLoading = true
 	git := v.git
 	go func() {
-		before, after, err := git.FileVersions(changes, file)
+		var before, after []byte
 		var preview *imagePreview
-		if err == nil {
-			preview, err = imagePreviewFor(file, before, after)
+		var err error
+		if file.Status == 'U' {
+			// A conflicted file has no single indexed version, so show its
+			// worktree text with Git's conflict markers.
+			after, err = git.WorktreeFile(changes.Top, file.Path)
+		} else {
+			before, after, err = git.FileVersions(changes, file)
+			if err == nil {
+				preview, err = imagePreviewFor(file, before, after)
+			}
 		}
 		v.dispatch(func() {
 			defer v.invalidate()
@@ -291,6 +299,23 @@ func (v *View) loadFile(p *filePane) {
 				return
 			}
 			p.fileLoading = false
+			if file.Status == 'U' {
+				p.preview, p.diff, p.before = nil, nil, nil
+				p.after = after
+				if err != nil {
+					p.note, p.view = err.Error(), nil
+					return
+				}
+				p.note = ""
+				if p.view == nil {
+					buffer := editor.NewBuffer(string(after))
+					buffer.SetLanguage(editor.LanguageFor(file.Path))
+					p.view = &editor.State{Buffer: buffer, ReadOnly: true}
+				} else if p.view.Buffer.String() != string(after) {
+					p.view.Buffer.Reset(string(after))
+				}
+				return
+			}
 			note := ""
 			switch {
 			case errors.Is(err, errImageTooLarge):
@@ -431,6 +456,12 @@ func (v *View) fileContent(c *ui.Context, p *filePane) {
 	ui.Column(c).Fill().MinHeight(0).MinWidth(0).Children(func() {
 		if p.path != "" {
 			v.fileHeader(c, p)
+		}
+		if p.file.Status == 'U' && p.view != nil {
+			ui.Row(c).FillWidth().Shrink(0).Padding(t.Space(1), t.Space(2), t.Space(1), t.Space(2)).
+				Background(t.Warning.Alpha(.08)).Children(func() {
+				components.Text(c, v.text("conflict_hint")).FontSize(12).Wrap().FillWidth().TextColor(t.TextMuted)
+			})
 		}
 		switch {
 		case p.diff != nil:
