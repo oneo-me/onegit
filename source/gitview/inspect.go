@@ -3,7 +3,6 @@ package gitview
 import (
 	"bufio"
 	"bytes"
-	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -233,17 +232,11 @@ func (g Git) diffWorktree(top, commit string) (Changes, error) {
 	if err != nil {
 		return Changes{}, err
 	}
-	untracked, err := g.Run(top, "ls-files", "--others", "--exclude-standard", "-z")
+	untracked, err := g.untracked(top)
 	if err != nil {
 		return Changes{}, err
 	}
-	for name := range strings.SplitSeq(untracked, "\x00") {
-		if name != "" {
-			files = append(files, FileChange{Path: name, OldPath: name, Status: 'A',
-				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
-		}
-	}
-	slices.SortFunc(files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
-	changes.Files = files
+	changes.Files = g.withUntracked(changes, files, untracked)
+	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
 	return changes, nil
 }

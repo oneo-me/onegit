@@ -168,6 +168,38 @@ func TestStashSavesChangesWithOrWithoutUntrackedFiles(t *testing.T) {
 	}
 }
 
+func TestFileRemovedFromIndexListsOnceAsModified(t *testing.T) {
+	t.Parallel()
+	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+	repo := testRepo(t)
+	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("1\n2\n"), 0644)
+	git(t, repo, "rm", "-q", "--cached", "a.txt")
+	head, _ := g.Run(repo, "rev-parse", "HEAD")
+	check := func(name string, changes Changes, err error) {
+		t.Helper()
+		if err != nil || len(changes.Files) != 1 {
+			t.Fatalf("%s: %+v %v", name, changes, err)
+		}
+		f := changes.Files[0]
+		if f.Path != "a.txt" || f.Status != 'M' || f.Added != 1 || f.Deleted != 0 {
+			t.Fatalf("%s: %+v", name, f)
+		}
+		if before, after, err := g.FileVersions(changes, f); err != nil || string(before) != "1\n" || string(after) != "1\n2\n" {
+			t.Fatalf("%s versions: %q %q %v", name, before, after, err)
+		}
+	}
+	changes, err := g.WorktreeChanges(repo, "")
+	check("worktree", changes, err)
+	changes, err = g.DiffBetween(repo, head, "")
+	check("compare", changes, err)
+	if err := g.SaveStash(repo, "", true); err != nil {
+		t.Fatal(err)
+	}
+	stashes, _ := g.Stashes(repo)
+	changes, err = g.StashChanges(repo, stashes[0].Hash)
+	check("stash", changes, err)
+}
+
 func TestApplyStashDropsItUnlessKeptOrConflicting(t *testing.T) {
 	t.Parallel()
 	g := Git{}.withEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")

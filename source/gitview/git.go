@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/egoist/mygo/ui/editor"
 )
 
 // Timeouts bound local reads, full history reads and commands that may reach
@@ -538,16 +540,11 @@ func (g Git) WorktreeChanges(path, base string) (Changes, error) {
 	if changes.Files, err = g.diffFiles(top, "diff", from); err != nil {
 		return Changes{}, err
 	}
-	untracked, err := g.Run(top, "ls-files", "--others", "--exclude-standard", "-z")
+	untracked, err := g.untracked(top)
 	if err != nil {
 		return Changes{}, err
 	}
-	for name := range strings.SplitSeq(untracked, "\x00") {
-		if name != "" {
-			changes.Files = append(changes.Files, FileChange{Path: name, OldPath: name, Status: 'A',
-				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
-		}
-	}
+	changes.Files = g.withUntracked(changes, changes.Files, untracked)
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
 	return changes, nil
 }
@@ -586,16 +583,11 @@ func (g Git) WorktreeStatus(path string) (Changes, error) {
 	if err != nil {
 		return Changes{}, err
 	}
-	untracked, err := g.Run(top, "ls-files", "--others", "--exclude-standard", "-z")
+	untracked, err := g.untracked(top)
 	if err != nil {
 		return Changes{}, err
 	}
-	for name := range strings.SplitSeq(untracked, "\x00") {
-		if name != "" {
-			worktree = append(worktree, FileChange{Path: name, OldPath: name, Status: 'A',
-				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
-		}
-	}
+	worktree = append(worktree, untracked...)
 	// An unmerged file can appear as both U and M in the worktree diff;
 	// keep one row, preferring the conflict.
 	byPath := map[string]FileChange{}
@@ -620,6 +612,51 @@ func (g Git) WorktreeStatus(path string) (Changes, error) {
 		changes.Files = append(changes.Files, f)
 	}
 	return changes, nil
+}
+
+// untracked lists the worktree's untracked files at top as additions.
+func (g Git) untracked(top string) ([]FileChange, error) {
+	out, err := g.Run(top, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	var files []FileChange
+	for name := range strings.SplitSeq(out, "\x00") {
+		if name != "" {
+			files = append(files, FileChange{Path: name, OldPath: name, Status: 'A',
+				Added: g.textLines(filepath.Join(top, filepath.FromSlash(name)))})
+		}
+	}
+	return files, nil
+}
+
+// withUntracked adds untracked to files, which changes compares, listing
+// each path once. A file removed from the index but still on disk is both
+// deleted and untracked; it lists as modified, with the lines its two
+// versions differ in. A stash also saves such a file with its tracked
+// ones, which list it already.
+func (g Git) withUntracked(changes Changes, files, untracked []FileChange) []FileChange {
+	listed := map[string]int{}
+	for i, f := range files {
+		listed[f.Path] = i
+	}
+	for _, u := range untracked {
+		i, ok := listed[u.Path]
+		if !ok {
+			files = append(files, u)
+			continue
+		}
+		f := &files[i]
+		if f.Status != 'D' {
+			continue
+		}
+		f.Status, f.Commit, f.Added, f.Deleted = 'M', u.Commit, 0, 0
+		if before, after, err := g.FileVersions(changes, *f); err == nil && !isBinary(before) && !isBinary(after) {
+			d := editor.DiffState{Old: editor.NewBuffer(string(before)), New: editor.NewBuffer(string(after))}
+			f.Added, f.Deleted = d.Stats()
+		}
+	}
+	return files
 }
 
 // diffFiles lists the files a diff command reports, with their changed
@@ -1530,10 +1567,10 @@ func (g Git) StashChanges(path, hash string) (Changes, error) {
 		if err != nil {
 			return Changes{}, err
 		}
-		for _, f := range files {
-			f.Commit = untracked
-			changes.Files = append(changes.Files, f)
+		for i := range files {
+			files[i].Commit = untracked
 		}
+		changes.Files = g.withUntracked(changes, changes.Files, files)
 	}
 	slices.SortFunc(changes.Files, func(a, b FileChange) int { return strings.Compare(a.Path, b.Path) })
 	return changes, nil
