@@ -9,10 +9,9 @@ import (
 )
 
 // Toolbar builds the view's Git actions for a host's title bar as raised
-// squares, each an icon that widens to show its name while hovered or
-// keyboard-focused: fetch, and the pull and push dialogs followed by the
-// commits a pull would bring and a push would send, and the stash dialog.
-// Every action runs through the view.
+// buttons with an icon and name: fetch, and the pull and push dialogs followed
+// by the commits a pull would bring and a push would send, and the stash
+// dialog. Every action runs through the view.
 func (v *View) Toolbar(c *ui.Context, size float32) {
 	tr := v.tracking
 	ui.Row(c).Key("gitview-toolbar").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() {
@@ -32,28 +31,29 @@ func (v *View) toolbarAction(c *ui.Context, op string, icon func() *ui.SVG, labe
 	})
 }
 
-// toolButton is a toolbar button for op resting as its icon, which widens to
-// show the label, followed by count when set, while hovered or keyboard-focused.
-// A running action shows a spinner instead and names its action in a tooltip.
+// toolButton is a toolbar button for op showing its icon and label. A running
+// action shows a spinner in place of the icon, and count, when set, follows
+// the label as the commits it moves.
 func (v *View) toolButton(c *ui.Context, op string, icon func() *ui.SVG, label string, size float32, count int, disabled bool) ui.Element {
 	t := c.Theme()
-	if v.Syncing() == op {
-		b := components.Button(c, "", components.ButtonToolbar).Label(label).
-			Size(size, size).Padding(0).Disabled(true)
-		b.Children(func() { components.Spinner(c, components.SpinnerRing).Size(16, 16) })
-		if tip := v.ActionTooltip(op); tip != "" {
-			components.Tooltip(c, b, tip)
-		}
-		return b
-	}
-	b := components.IconButton(c, icon(), label, components.IconButtonToolbarExpanding)
+	b := components.Button(c, "", components.ButtonToolbar).Label(label).Height(size).
+		Padding(0, t.Space(3)).Shrink(0).Gap(t.Space(1.5)).AlignItems(ui.Center)
 	if disabled {
 		b.Disabled(true)
 	}
-	if count > 0 && (b.Hovered() || b.FocusVisible()) {
-		b.Children(func() {
-			components.Text(c, strconv.Itoa(count)).TextColor(t.TextMuted).SingleLine().Shrink(0)
-		})
+	b.Children(func() {
+		if v.Syncing() == op {
+			components.Spinner(c, components.SpinnerRing).Size(16, 16)
+		} else {
+			components.Icon(c, icon).Size(16, 16).Shrink(0)
+		}
+		components.Text(c, label).SingleLine()
+		if count > 0 {
+			components.Text(c, strconv.Itoa(count)).TextColor(t.TextMuted).SingleLine()
+		}
+	})
+	if tip := v.ActionTooltip(op); tip != "" {
+		components.Tooltip(c, b, tip)
 	}
 	return b
 }

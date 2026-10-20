@@ -29,7 +29,7 @@
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - A commit's Changes menu also resets a file to the commit's version or its parent's after a confirmation, or shows it in the Files tab.
 - Changes and Files open, save, reveal or copy a file, open a folder in the file manager, and open a commit's version or save it from a temporary copy.
-- **Toolbar.** Icon buttons for a host's title bar that reveal their name on hover or keyboard focus: Fetch, Pull and Push with the commits they move, and Stash. A running action shows a spinner.
+- **Toolbar.** Labeled buttons for a host's title bar: Fetch, Pull and Push followed by the commits they move, and Stash. A running action shows a spinner.
 - Two chosen commits, or a commit and the worktree, open a comparison section with their files and diffs. File History and Blame dialogs list a file's commits or lines.
 - **Operations.** A banner names a stopped merge, rebase, cherry-pick, revert or squash, counts the remaining conflicts, and offers Continue and Abort.
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, interactive rebase, remote and stale-branch dialogs, ref deletion, bulk ref actions and the menus' writes.

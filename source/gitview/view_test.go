@@ -327,24 +327,10 @@ func TestViewFetchDialog(t *testing.T) {
 	if out, _ := v.git.Run(mine, "branch", "-r", "--list", "origin/other"); out != "" {
 		t.Fatalf("fetched other branches: %q", out)
 	}
-	// The buttons rest as icons. The pull button reveals its name and the
-	// fetched commit while hovered, then collapses again.
+	// The pull button names the fetched commit after its label.
 	toolbar := ui.NewTester(func(c *ui.Context) { v.Toolbar(c, 32) }, 600, 48)
-	for _, label := range []string{"Fetch", "Pull", "Push", "Stash"} {
-		if r, ok := toolbar.Find(label); !ok || r.W != 32 {
-			t.Fatalf("resting %s: %+v", label, r)
-		}
-	}
-	rest, _ := toolbar.Find("Pull")
-	toolbar.Move(rest.X+rest.W/2, rest.Y+rest.H/2)
-	toolbar.Advance(time.Second)
-	if open, _ := toolbar.Find("Pull"); open.W <= rest.W || !toolbar.HasText("1") {
-		t.Fatalf("hovered pull: %+v, %v", open, toolbar.Texts())
-	}
-	toolbar.Move(590, 40)
-	toolbar.Advance(time.Second)
-	if r, _ := toolbar.Find("Pull"); r.W-rest.W > .5 {
-		t.Fatalf("pull did not collapse: %+v", r)
+	if texts := toolbar.Texts(); !slices.Equal(texts, []string{"Fetch", "Fetch", "Pull", "Pull", "1", "Push", "Push", "Stash", "Stash"}) {
+		t.Fatalf("toolbar: %v", texts)
 	}
 }
 
