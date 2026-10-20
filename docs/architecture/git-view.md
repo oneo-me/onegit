@@ -27,7 +27,7 @@
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - A commit's Changes menu also resets a file to the commit's version or its parent's after a confirmation, or shows it in the Files tab.
 - Changes and Files open, save, reveal or copy a file, open a folder in the file manager, and open a commit's version or save it from a temporary copy.
-- **Toolbar.** Labeled buttons for a host's title bar: Fetch, Pull and Push followed by the commits they move, and Stash.
+- **Toolbar.** Icon buttons for a host's title bar that reveal their name on hover or keyboard focus: Fetch, Pull and Push with the commits they move, and Stash. A running action shows a spinner.
 - **Dialogs.** Fetch, pull, push, stash, rename-stash, push-tag, reset, cherry-pick, revert, rebase, remote and stale-branch dialogs, ref deletion and the menus' writes.
 - A stash takes an optional message and includes untracked files unless unchecked. Applying one runs `stash apply`, then drops it by hash unless kept or applying failed.
 - The rebase dialog names both branches, lists the local branches `--update-refs` moves, tests for conflicts with `git replay --ref-action=print`, and offers autostash.
