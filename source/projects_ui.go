@@ -44,7 +44,12 @@ func (s *settings) startProjectScan(onMain func(func())) {
 	go func() {
 		defer cancel()
 		tree, err := scanProjects(ctx, root)
+		// A missing parent directory, such as an unmounted volume, keeps the
+		// cache; only paths under a present parent directory are dropped.
 		missing := map[string]bool{}
+		if _, statErr := os.Stat(root); errors.Is(statErr, os.ErrNotExist) {
+			paths = nil
+		}
 		for _, path := range paths {
 			if ctx.Err() != nil {
 				return

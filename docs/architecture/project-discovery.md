@@ -19,7 +19,7 @@ The scan runs silently with no progress text. A failed directory keeps the proje
 The cache is keyed by parent directory, so switching directories restores each tree independently. Scan results merge on the main thread by path.
 
 - New nodes are added; existing nodes and their expansion are kept.
-- Paths that no longer exist are marked missing and cleared when they reappear.
+- Paths that no longer exist are dropped with their pinning and removal, as are folders they leave empty. A missing parent directory, such as an unmounted volume, keeps the cache.
 - A stale scan for a previous directory never overwrites the current one.
 
 State is saved after a merge, after pin or expansion changes and when the window closes normally.
@@ -46,6 +46,6 @@ Right-clicking a folder offers Open Folder. A repository row also offers pinning
 
 ## Command palette
 
-The palette searches every cached project for the current parent directory, including collapsed and missing ones but not removed ones. It matches names and paths and opens the same node the sidebar would. While a project is hidden, it also lists Restore Removed Projects.
+The palette searches every cached project for the current parent directory, including collapsed ones but not removed ones. It matches names and paths and opens the same node the sidebar would. While a project is hidden, it also lists Restore Removed Projects.
 
 It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; Onevra `CommandDialog` owns filtering, keyboard navigation and focus. The palette does not open over the settings dialog or the native directory picker.

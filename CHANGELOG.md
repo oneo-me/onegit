@@ -6,7 +6,7 @@ User-facing release notes for Onegit.
 
 - Browse many Git repositories in one native window; it reopens with the same size and sidebar layout.
 - Choose the project parent directory, theme and language in Settings, saved under `~/.onegit/` with legacy settings imported.
-- Scan the parent directory in the background into a project tree that marks missing paths and remembers expansion.
+- Scan the parent directory in the background into a project tree that drops projects no longer on disk and remembers expansion.
 - Pin projects to a flat, name-sorted group; both sidebar groups collapse independently.
 - Open a project's folder, or remove the project from the sidebar, from its menu; a removed project stays hidden until you undo or restore it.
 - Find projects and open Settings from the command palette (`⌘E`).

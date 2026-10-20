@@ -28,7 +28,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 - Status is read when a project is entered and after a user action. Onegit does not poll or watch files.
 - Git calls run off the main thread with a clean Git environment. Results return to the main thread and are dropped if the project or worktree changed meanwhile.
 - The sidebar tree mirrors the disk, except projects the user removed. It does not infer links between a repository and worktrees outside the parent directory.
-- Missing projects are marked, never deleted. Only a confirmed missing path counts; permission or Git errors do not.
+- Projects whose paths are gone leave the cache on the next scan; their files are never touched. Only a confirmed missing path counts; permission or Git errors and a missing parent directory do not.
 - Projects switch through the sidebar only. Tabs are reserved for worktrees inside one project.
 - Empty states stay blank, with no welcome or placeholder text. Errors are always shown.
 

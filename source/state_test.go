@@ -47,6 +47,9 @@ func TestSidebarRestartAndMerge(t *testing.T) {
 	}
 	repo := filepath.Join(root, "group", "old")
 	testGit(t, "init", repo)
+	testGit(t, "init", filepath.Join(root, "group", "kept"))
+	gone := filepath.Join(root, "gone", "repo")
+	testGit(t, "init", gone)
 	path := filepath.Join(t.TempDir(), "state.yaml")
 	s := &settings{statePath: path, values: preferences{ProjectParentDir: root}, systemLanguage: "zh-CN"}
 	finishScan(t, s)
@@ -71,7 +74,18 @@ func TestSidebarRestartAndMerge(t *testing.T) {
 	if err != nil || findProject(restored.Roots[root], group.Path).Open {
 		t.Fatal("keyboard collapse not persisted", err)
 	}
+	findProject(s.projectTree, repo).Pinned = true
+	s.state.SelectedProjects = map[string]string{root: repo}
+	if err := s.saveSidebarState(); err != nil {
+		t.Fatal(err)
+	}
+	if restored, err = loadSidebarState(path); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.RemoveAll(repo); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(gone); err != nil {
 		t.Fatal(err)
 	}
 	added := filepath.Join(root, "new-group", "new")
@@ -85,22 +99,33 @@ func TestSidebarRestartAndMerge(t *testing.T) {
 	// Expand while the worker is running; completion must retain the change.
 	findProject(restarted.projectTree, group.Path).Open = true
 	awaitNavigation(t, restarted, callbacks)
-	old := findProject(restarted.projectTree, repo)
-	if old == nil || !old.Missing || findProject(restarted.projectTree, added) == nil {
-		t.Fatal("merge lost old or new project")
+	if findProject(restarted.projectTree, repo) != nil || findProject(restarted.projectTree, filepath.Dir(gone)) != nil {
+		t.Fatal("missing project or its emptied folder kept")
+	}
+	if findProject(restarted.projectTree, added) == nil {
+		t.Fatal("merge lost new project")
+	}
+	if restarted.selectedProject == nil || restarted.selectedProject.Path == repo {
+		t.Fatal("selection did not fall back from the missing project")
 	}
 	if !findProject(restarted.projectTree, group.Path).Open || findProject(restarted.projectTree, filepath.Dir(added)).Open {
 		t.Fatal("merge changed expansion")
 	}
-	view := ui.NewTester(restarted.worktreeSidebar, 300, 720)
-	view.Frame()
-	if !view.HasText("old（已不存在）") {
-		t.Fatal("missing label absent", view.Texts())
-	}
 	testGit(t, "init", repo)
 	finishScan(t, restarted)
-	if findProject(restarted.projectTree, repo).Missing {
-		t.Fatal("reappearing project remains missing")
+	if node := findProject(restarted.projectTree, repo); node == nil || node.Missing || node.Pinned {
+		t.Fatal("reappearing project not listed afresh")
+	}
+	// A missing parent directory, like an unmounted volume, keeps the cache.
+	if err := os.Rename(root, root+"-moved"); err != nil {
+		t.Fatal(err)
+	}
+	finishScan(t, restarted)
+	if err := os.Rename(root+"-moved", root); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.scanProblem == "" || findProject(restarted.projectTree, repo) == nil {
+		t.Fatal("missing parent directory dropped the cache")
 	}
 	// A scan failure must preserve the cache without marking existing paths missing.
 	t.Setenv("PATH", "")

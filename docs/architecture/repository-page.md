@@ -23,7 +23,7 @@ The view's `Toolbar`, shared with Neorio's Git window, follows the name or tabs:
 
 The last selected project and the worktree per project are saved in state. Without a valid saved choice, Onegit selects:
 
-- the first project that is not missing, in sidebar order with pinned projects first, ignoring collapse;
+- the first available project, in sidebar order with pinned projects first, ignoring collapse;
 - the first worktree Git lists.
 
 The view shows the worktree's changes when it has some, else all commits. A missing saved project falls back to an available one. With nothing to select, the content area stays blank.

@@ -171,7 +171,9 @@ func (s *settings) saveSidebarState() error {
 	return nil
 }
 
-// Reuse cached nodes so selection and expansion changes made during a scan survive.
+// Reuse cached nodes so selection and expansion changes made during a scan
+// survive. A path confirmed missing is dropped, along with folders it leaves
+// empty; a dropped node stays marked missing so its selection falls back.
 func mergeProjects(old, fresh *projectNode, missing map[string]bool) *projectNode {
 	if old == nil {
 		return fresh
@@ -191,12 +193,21 @@ func mergeProjects(old, fresh *projectNode, missing map[string]bool) *projectNod
 			children[child.Path] = child
 		}
 	}
-	for i, child := range old.Children {
-		old.Children[i] = mergeProjects(child, children[child.Path], missing)
+	hadChildren := len(old.Children) > 0
+	kept := old.Children[:0]
+	for _, child := range old.Children {
+		if merged := mergeProjects(child, children[child.Path], missing); merged != nil {
+			kept = append(kept, merged)
+		}
 		delete(children, child.Path)
 	}
 	for _, child := range children {
-		old.Children = append(old.Children, child)
+		kept = append(kept, child)
+	}
+	old.Children = kept
+	if fresh == nil && (old.Missing || !old.Repository && hadChildren && len(kept) == 0) {
+		old.Missing = true
+		return nil
 	}
 	sort.Slice(old.Children, func(i, j int) bool { return old.Children[i].Path < old.Children[j].Path })
 	return old
