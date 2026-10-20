@@ -26,21 +26,25 @@ func (s *settings) openCommands() {
 	s.commands.open = true
 }
 
+// commandTrigger opens the command palette from a box shaped like the
+// search field of Neorio's Git window sidebar.
 func (s *settings) commandTrigger(c *ui.Context) {
 	t := c.Theme()
-	ui.Column(c).FillWidth().Shrink(0).Padding(0, t.Space(3), t.Space(2), t.Space(3)).Children(func() {
-		trigger := components.Button(c, "", components.ButtonSecondary).
-			Label(s.text("搜索项目与设置")).FillWidth().MinWidth(0).
-			Padding(t.Space(1.5), t.Space(2.5)).Gap(t.Space(2)).TextColor(t.TextMuted)
-		trigger.Children(func() {
-			components.Icon(c, lucide.Search()).Size(t.Space(4), t.Space(4)).Shrink(0)
-			components.Text(c, s.text("搜索…")).Grow(1).MinWidth(0).SingleLine()
-			components.Text(c, "⌘E").FontSize(t.Rem(.8)).Shrink(0).SingleLine()
-		})
-		if trigger.Clicked() {
-			s.openCommands()
-		}
+	border := t.Border
+	trigger := ui.ButtonBase(c).Label(s.text("搜索项目与设置")).FillWidth().MinWidth(0).Height(t.Space(7)).
+		Padding(0, t.Space(2.5)).Gap(t.Space(1.5)).Justify(ui.Start).AlignItems(ui.Center).Radius(t.Radius).
+		Background(t.Surface.Alpha(.5)).TextColor(t.TextMuted)
+	if trigger.Hovered() || trigger.Focused() {
+		border = t.Border.Mix(t.Text, .25)
+	}
+	trigger.Border(1, border).Children(func() {
+		components.Icon(c, lucide.Search).Size(t.Space(4), t.Space(4)).Shrink(0)
+		components.Text(c, s.text("搜索…")).FontSize(12).Grow(1).MinWidth(0).SingleLine()
+		components.Text(c, "⌘F").FontSize(11.5).Shrink(0).SingleLine()
 	})
+	if trigger.Clicked() {
+		s.openCommands()
+	}
 }
 
 func (s *settings) commandItems() []command.Item {
@@ -103,7 +107,7 @@ func (s *settings) activateCommand(id string) {
 }
 
 func (s *settings) renderCommands(c *ui.Context) {
-	if c.Shortcut(ui.Cmd, ui.KeyE) {
+	if c.Shortcut(ui.Cmd, ui.KeyF) {
 		s.openCommands()
 	}
 	var items []command.Item

@@ -37,7 +37,10 @@ Group headers offer New Group; user groups also rename or delete, which returns 
 
 Pinning and group membership live in the cached nodes, and the group order, names and collapse in `groups`, all per parent directory. Pinned and Ungrouped Projects share their collapse across parent directories.
 
-Nodes start collapsed. The tree uses Onevra `Tree` inside a `Sidebar` in a `ScrollView`, and the group headers use `Collapsible`.
+Nodes start collapsed. The sidebar follows Neorio's Git window: Onevra `SidebarItem` rows in a `ScrollView`, and `Collapsible` headings that count their projects.
+
+- Repositories lead with the app icon as a placeholder for project icons; folders with a folder icon.
+- Clicking a folder, Right and Left open and close it; folders are never selected.
 
 ## Context menus
 
@@ -52,4 +55,4 @@ Right-clicking a folder offers Open Folder. A repository row also offers pinning
 
 The palette searches every cached project for the current parent directory, including collapsed ones but not removed ones. It matches names and paths and opens the same node the sidebar would. While a project is hidden, it also lists Restore Removed Projects.
 
-It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; Onevra `CommandDialog` owns filtering, keyboard navigation and focus. The palette does not open over the settings dialog or the native directory picker.
+The search box above the sidebar and `⌘F` open it. It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; Onevra `CommandDialog` owns filtering, keyboard navigation and focus. The palette does not open over the settings dialog or the native directory picker.

@@ -397,6 +397,10 @@ func TestProjectGroupsMoveReorderAndRestore(t *testing.T) {
 	if !view.HasText("Ungrouped Projects") || !view.HasText("alpha") || !view.HasText("beta") {
 		t.Fatal("projects should start ungrouped", view.Texts())
 	}
+	// Headings count their projects, not folders, and empty groups show none.
+	if !view.HasText("2") || view.HasText("0") {
+		t.Fatal("ungrouped count wrong", view.Texts())
+	}
 
 	// A group made from a project's menu takes the project.
 	if err := view.RightClick("beta"); err != nil {
@@ -411,6 +415,9 @@ func TestProjectGroupsMoveReorderAndRestore(t *testing.T) {
 	view.Frame()
 	if s.groupDialog.open || beta.Group == "" || !view.HasText("Work") || view.HasText("nested") {
 		t.Fatal("new group did not take the project", beta.Group, view.Texts())
+	}
+	if view.HasText("2") || !view.HasText("1") {
+		t.Fatal("group counts not updated", view.Texts())
 	}
 	if err := view.RightClick("Ungrouped Projects"); err != nil {
 		t.Fatal(err)

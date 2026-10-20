@@ -33,7 +33,7 @@ func TestCommandSearchAndNavigation(t *testing.T) {
 	if s.commands.open || s.selectedProject != repo {
 		t.Fatal("project command did not select original node")
 	}
-	tt.Key(ui.Cmd, ui.KeyE)
+	tt.Key(ui.Cmd, ui.KeyF)
 	if !s.commands.open || s.commands.palette.Query != "" {
 		t.Fatal("shortcut did not reset palette")
 	}
@@ -49,14 +49,14 @@ func TestCommandSearchAndNavigation(t *testing.T) {
 	if s.commands.open {
 		t.Fatal("escape did not dismiss")
 	}
-	tt.Key(ui.Cmd, ui.KeyE)
+	tt.Key(ui.Cmd, ui.KeyF)
 	tt.Type("theme")
 	tt.Key(0, ui.KeyEnter)
 	tt.Frame()
 	if !s.open || s.commands.open || !tt.HasText("主题偏好") {
 		t.Fatal("settings handoff failed", tt.Texts())
 	}
-	tt.Key(ui.Cmd, ui.KeyE)
+	tt.Key(ui.Cmd, ui.KeyF)
 	if s.commands.open {
 		t.Fatal("shortcut escaped settings modal")
 	}
@@ -84,7 +84,7 @@ func TestCommandDismissalAndSettingsDestinations(t *testing.T) {
 		t.Fatal("trigger focus not restored")
 	}
 	for _, tc := range []struct{ query, title string }{{"language", "Language preference"}, {"directory", "Choose folder…"}, {"settings", "Project parent directory"}} {
-		tt.Key(ui.Cmd, ui.KeyE)
+		tt.Key(ui.Cmd, ui.KeyF)
 		tt.Type(tc.query)
 		tt.Key(0, ui.KeyEnter)
 		tt.Frame()

@@ -112,7 +112,7 @@ func (s *settings) show() {
 }
 
 func (s *settings) toolbar(c *ui.Context) {
-	if sidebar.IconButton(c, lucide.Settings(), s.text("设置")).Clicked() {
+	if sidebar.IconButton(c, lucide.Settings(), s.text("设置")+" (⌘,)").Label(s.text("设置")).Clicked() {
 		s.show()
 	}
 	ui.Spacer(c)

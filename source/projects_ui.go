@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	_ "embed"
 	"errors"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
+	"github.com/oneo-me/onevra/source/icons/lucide"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
 )
 
@@ -90,62 +94,77 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 		}
 	}()
 	s.groupDialogView(c)
-	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
-		s.commandTrigger(c)
-		components.ScrollView(c, components.ScrollViewOptions{}).Fill().ScrollbarInsets(0).Children(func() {
-			components.Sidebar(c).Children(func() {
-				if s.values.ProjectParentDir != "" {
-					if s.stateProblem != "" {
-						components.Text(c, s.stateProblem).Wrap().TextColor(c.Theme().TextMuted)
+	t := c.Theme()
+	// The layout follows Neorio's Git window sidebar. Collapsible indents its
+	// panel by half a space, which the scroll content gives up and the group
+	// headings add back.
+	ui.Column(c).Fill().MinHeight(0).Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
+		ui.Column(c).FillWidth().Shrink(0).Padding(0, t.Space(2)).Children(func() { s.commandTrigger(c) })
+		if s.values.ProjectParentDir == "" {
+			return
+		}
+		components.ScrollView(c, components.ScrollViewOptions{}).FillWidth().Grow(1).MinHeight(0).Children(func() {
+			ui.Column(c).FillWidth().Shrink(0).Gap(t.Space(1)).Padding(t.Space(1.5), t.Space(2), t.Space(1.5), t.Space(1.5)).Children(func() {
+				for _, problem := range []string{s.stateProblem, s.scanProblemText()} {
+					if problem != "" {
+						components.Text(c, problem).FontSize(12).Wrap().FillWidth().TextColor(t.TextMuted).Padding(t.Space(1), t.Space(2)+t.Space(0.5))
 					}
-					if s.scanProblem != "" {
-						components.Text(c, s.text("扫描未完成：")+s.scanProblem).Wrap().TextColor(c.Theme().TextMuted)
+				}
+				pinned, grouped, visible := sidebarProjects(s.projectTree, s.groupIDs())
+				s.projectGroup(c, "", s.text("置顶"), &s.state.PinnedOpen, len(pinned), func() {
+					for _, node := range pinned {
+						s.projectRow(c, node, 0, nil)
 					}
-
-					pinned, grouped, visible := sidebarProjects(s.projectTree, s.groupIDs())
-					components.Tree(c, func() {
-						s.projectGroup(c, "", s.text("置顶"), &s.state.PinnedOpen, func() {
-							for _, node := range pinned {
-								s.projectRow(c, node, nil)
+				})
+				for _, group := range s.projectGroups() {
+					if group.ID != ungroupedID {
+						s.projectGroup(c, group.ID, group.Name, &group.Open, len(grouped[group.ID]), func() {
+							for _, node := range grouped[group.ID] {
+								s.projectRow(c, node, 0, nil)
 							}
 						})
-						for _, group := range s.projectGroups() {
-							if group.ID != ungroupedID {
-								s.projectGroup(c, group.ID, group.Name, &group.Open, func() {
-									for _, node := range grouped[group.ID] {
-										s.projectRow(c, node, nil)
-									}
-								})
-								continue
-							}
-							s.projectGroup(c, ungroupedID, s.text("未分组项目"), &s.state.OtherOpen, func() {
-								if s.projectTree == nil {
-									return
-								}
-								if s.projectTree.Repository {
-									if visible[s.projectTree] {
-										s.projectRow(c, s.projectTree, visible)
-									}
-									return
-								}
-								for _, child := range s.projectTree.Children {
-									if visible[child] {
-										s.projectRow(c, child, visible)
-									}
-								}
-							})
+						continue
+					}
+					ungrouped := 0
+					for node := range visible {
+						if node.Repository {
+							ungrouped++
 						}
-					}).Gap(c.Theme().Space(3))
+					}
+					s.projectGroup(c, ungroupedID, s.text("未分组项目"), &s.state.OtherOpen, ungrouped, func() {
+						if s.projectTree == nil {
+							return
+						}
+						if s.projectTree.Repository {
+							if visible[s.projectTree] {
+								s.projectRow(c, s.projectTree, 0, visible)
+							}
+							return
+						}
+						for _, child := range s.projectTree.Children {
+							if visible[child] {
+								s.projectRow(c, child, 0, visible)
+							}
+						}
+					})
 				}
 			})
 		})
 	})
 }
 
+func (s *settings) scanProblemText() string {
+	if s.scanProblem == "" {
+		return ""
+	}
+	return s.text("扫描未完成：") + s.scanProblem
+}
+
 // Group collapse is a sidebar preference, independent of project expansion.
 // Every group but Pinned, whose id is empty, reorders by dragging its header
-// onto another group.
-func (s *settings) projectGroup(c *ui.Context, id, label string, expanded **bool, children func()) {
+// onto another group. Headings follow Neorio's Git window sidebar, ending in
+// their number of projects unless they have none.
+func (s *settings) projectGroup(c *ui.Context, id, label string, expanded **bool, count int, children func()) {
 	if *expanded == nil {
 		open := true
 		*expanded = &open
@@ -165,11 +184,26 @@ func (s *settings) projectGroup(c *ui.Context, id, label string, expanded **bool
 		}
 	}
 	group.Children(func() {
-		parts := components.Collapsible(c, label, *expanded, components.CollapsibleOptions{}, func() {
-			ui.Column(c).FillWidth().Shrink(0).Children(children)
+		var options components.CollapsibleOptions
+		if count > 0 {
+			// The trigger's vertical padding centers the count on the label.
+			options.Trailing = func() {
+				components.Text(c, strconv.Itoa(count)).FontSize(t.Rem(.8)).TextColor(t.TextMuted).
+					Padding(t.Space(1), t.Space(2), t.Space(1), 0)
+			}
+		}
+		parts := components.Collapsible(c, label, *expanded, options, func() {
+			ui.Column(c).FillWidth().Shrink(0).Gap(1).Children(children)
 		})
 		parts.Root.FillWidth()
-		parts.Trigger.FillWidth().TextColor(t.TextMuted)
+		// The trigger shares a row with the count, if any, and takes its room.
+		if count > 0 {
+			parts.Trigger.Grow(1)
+		} else {
+			parts.Trigger.FillWidth()
+		}
+		parts.Trigger.FontSize(t.Rem(.8)).Bold().TextColor(t.TextMuted).
+			Padding(t.Space(1), t.Space(2), t.Space(1), t.Space(2)+t.Space(0.5))
 		if id != "" {
 			parts.Trigger.Drag(groupDrag{id})
 		}
@@ -180,24 +214,38 @@ func (s *settings) projectGroup(c *ui.Context, id, label string, expanded **bool
 	})
 }
 
-func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*projectNode]bool) {
+// projectRow shows a repository led by its icon, or a folder led by a folder
+// icon; a folder's children follow, indented, while it is open. Clicking a
+// folder, Right and Left open and close it.
+func (s *settings) projectRow(c *ui.Context, node *projectNode, depth int, visible map[*projectNode]bool) {
 	label := filepath.Base(node.Path)
 	if node.Missing {
 		label += s.text("（已不存在）")
 	}
-	var children func()
-	if !node.Repository && len(node.Children) > 0 {
-		children = func() {
-			for _, child := range node.Children {
-				if visible[child] {
-					s.projectRow(c, child, visible)
-				}
-			}
-		}
-	}
+	folder := !node.Repository && len(node.Children) > 0
 	ui.Column(c).Key(node.Path).FillWidth().Shrink(0).Children(func() {
-		row := components.TreeItem(c, label, &node.Open, s.selectedProject == node, children)
-		if row.Clicked() {
+		t := c.Theme()
+		row := components.SidebarItemWithLeading(c, label, s.selectedProject == node, func(c *ui.Context, size float32) {
+			switch {
+			case node.Repository:
+				ui.Image(c, projectIcon()).Size(size, size).Fit(ui.Contain).Radius(size * .2).Shrink(0)
+			case folder && node.Open:
+				components.Icon(c, lucide.FolderOpen).Size(size, size).Shrink(0).TextColor(t.TextMuted)
+			default:
+				components.Icon(c, lucide.Folder).Size(size, size).Shrink(0).TextColor(t.TextMuted)
+			}
+		})
+		if depth > 0 {
+			row.Padding(t.Space(1.75), t.Space(2), t.Space(1.75), t.Space(2)+t.Space(4)*float32(depth))
+		}
+		if folder {
+			row.Expanded(node.Open).
+				OnShortcut(0, ui.KeyRight, func() { node.Open = true }).
+				OnShortcut(0, ui.KeyLeft, func() { node.Open = false })
+			if row.Clicked() {
+				node.Open = !node.Open
+			}
+		} else if row.Clicked() {
 			s.selectProject(node, mygo.RunOnMain)
 		}
 		row.ContextMenu(func(m *ui.Menu) {
@@ -223,7 +271,26 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*pro
 			}
 		})
 	})
+	if folder && node.Open {
+		for _, child := range node.Children {
+			if visible[child] {
+				s.projectRow(c, child, depth+1, visible)
+			}
+		}
+	}
 }
+
+//go:embed assets/icon.png
+var projectIconPNG []byte
+
+// projectIcon is the app icon, a placeholder for projects' own icons. It is
+// decoded once, on first use.
+var projectIcon = sync.OnceValue(func() ui.ImageSource {
+	if bitmap, err := ui.DecodeBitmap(projectIconPNG); err == nil {
+		return bitmap
+	}
+	return nil
+})
 
 // openFolder shows a path in the file manager: Finder, Explorer or the
 // desktop's file manager. Tests inject the platform call.
