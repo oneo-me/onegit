@@ -201,7 +201,7 @@ func TestProjectContextMenu(t *testing.T) {
 		t.Fatal(err)
 	}
 	menu := tt.Menu()
-	if len(menu) != 5 || menu[0] != "Open Folder" || menu[1] != "-" || menu[2] != "Pin Project" || menu[3] != "-" || menu[4] != "Remove Project" {
+	if len(menu) != 6 || menu[0] != "Open Folder" || menu[1] != "-" || menu[2] != "Pin Project" || menu[3] != "Move to Group" || menu[4] != "-" || menu[5] != "Remove Project" {
 		t.Fatalf("project menu: %q", menu)
 	}
 	if err := tt.ChooseMenuItem("Remove Project"); err != nil {
@@ -213,7 +213,7 @@ func TestProjectContextMenu(t *testing.T) {
 	if removed == nil || !removed.Removed {
 		t.Fatalf("project was not removed: %+v", removed)
 	}
-	if _, visible := sidebarProjects(s.projectTree); visible[removed] {
+	if _, _, visible := sidebarProjects(s.projectTree, nil); visible[removed] {
 		t.Fatal("removed project is still visible")
 	}
 	if s.selectedProject == nil || s.selectedProject.Path != beta {

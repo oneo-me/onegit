@@ -89,6 +89,7 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 			s.saveSidebarState()
 		}
 	}()
+	s.groupDialogView(c)
 	ui.Column(c).Fill().Padding(sidebar.HeaderHeight(c), 0, 0, 0).Children(func() {
 		s.commandTrigger(c)
 		components.ScrollView(c, components.ScrollViewOptions{}).Fill().ScrollbarInsets(0).Children(func() {
@@ -101,28 +102,39 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 						components.Text(c, s.text("扫描未完成：")+s.scanProblem).Wrap().TextColor(c.Theme().TextMuted)
 					}
 
-					pinned, visible := sidebarProjects(s.projectTree)
+					pinned, grouped, visible := sidebarProjects(s.projectTree, s.groupIDs())
 					components.Tree(c, func() {
-						s.projectGroup(c, "pinned", "置顶", &s.state.PinnedOpen, func() {
+						s.projectGroup(c, "", s.text("置顶"), &s.state.PinnedOpen, func() {
 							for _, node := range pinned {
 								s.projectRow(c, node, nil)
 							}
 						})
-						s.projectGroup(c, "other", "其他项目", &s.state.OtherOpen, func() {
-							if s.projectTree != nil {
+						for _, group := range s.projectGroups() {
+							if group.ID != ungroupedID {
+								s.projectGroup(c, group.ID, group.Name, &group.Open, func() {
+									for _, node := range grouped[group.ID] {
+										s.projectRow(c, node, nil)
+									}
+								})
+								continue
+							}
+							s.projectGroup(c, ungroupedID, s.text("未分组项目"), &s.state.OtherOpen, func() {
+								if s.projectTree == nil {
+									return
+								}
 								if s.projectTree.Repository {
 									if visible[s.projectTree] {
 										s.projectRow(c, s.projectTree, visible)
 									}
-								} else {
-									for _, child := range s.projectTree.Children {
-										if visible[child] {
-											s.projectRow(c, child, visible)
-										}
+									return
+								}
+								for _, child := range s.projectTree.Children {
+									if visible[child] {
+										s.projectRow(c, child, visible)
 									}
 								}
-							}
-						})
+							})
+						}
 					}).Gap(c.Theme().Space(3))
 				}
 			})
@@ -131,17 +143,37 @@ func (s *settings) worktreeSidebar(c *ui.Context) {
 }
 
 // Group collapse is a sidebar preference, independent of project expansion.
-func (s *settings) projectGroup(c *ui.Context, key, label string, expanded **bool, children func()) {
+// Every group but Pinned, whose id is empty, reorders by dragging its header
+// onto another group.
+func (s *settings) projectGroup(c *ui.Context, id, label string, expanded **bool, children func()) {
 	if *expanded == nil {
 		open := true
 		*expanded = &open
 	}
-	ui.Column(c).Key(key).FillWidth().Shrink(0).Children(func() {
-		parts := components.Collapsible(c, s.text(label), *expanded, components.CollapsibleOptions{}, func() {
+	key := "group:" + id
+	if id == "" {
+		key = "pinned"
+	}
+	t := c.Theme()
+	group := ui.Column(c).Key(key).FillWidth().Shrink(0).Radius(t.Radius)
+	if id != "" {
+		if dragged, ok := ui.DragOver[groupDrag](group); ok && dragged.id != id {
+			group.Background(t.Accent.Alpha(.12))
+		}
+		if dropped, ok := ui.Drop[groupDrag](group); ok {
+			s.moveGroup(dropped.id, id)
+		}
+	}
+	group.Children(func() {
+		parts := components.Collapsible(c, label, *expanded, components.CollapsibleOptions{}, func() {
 			ui.Column(c).FillWidth().Shrink(0).Children(children)
 		})
 		parts.Root.FillWidth()
-		parts.Trigger.FillWidth().TextColor(c.Theme().TextMuted)
+		parts.Trigger.FillWidth().TextColor(t.TextMuted)
+		if id != "" {
+			parts.Trigger.Drag(groupDrag{id})
+		}
+		parts.Trigger.ContextMenu(func(m *ui.Menu) { s.groupMenu(m, id) })
 		if parts.Changed() {
 			s.saveSidebarState()
 		}
@@ -184,6 +216,7 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, visible map[*pro
 				node.Pinned = !node.Pinned
 				s.saveSidebarState()
 			}
+			s.projectGroupMenu(m, node)
 			m.Separator()
 			if m.Item(s.text("移除项目")).Chosen() {
 				s.removeProject(node, s.repositoryDispatch())
@@ -265,8 +298,10 @@ func (s *settings) hasRemovedProjects() bool {
 	return found
 }
 
-// Derive display groups without moving cached nodes or changing expansion state.
-func sidebarProjects(root *projectNode) (pinned []*projectNode, visible map[*projectNode]bool) {
+// Derive display groups without moving cached nodes or changing expansion
+// state. Pinning wins over a group; projects of unknown groups are ungrouped.
+func sidebarProjects(root *projectNode, groups map[string]bool) (pinned []*projectNode, grouped map[string][]*projectNode, visible map[*projectNode]bool) {
+	grouped = make(map[string][]*projectNode)
 	visible = make(map[*projectNode]bool)
 	var visit func(*projectNode) bool
 	visit = func(node *projectNode) bool {
@@ -274,12 +309,13 @@ func sidebarProjects(root *projectNode) (pinned []*projectNode, visible map[*pro
 			return false
 		}
 		if node.Repository {
-			if node.Removed {
-				return false
-			}
-			if node.Pinned {
+			switch {
+			case node.Removed:
+			case node.Pinned:
 				pinned = append(pinned, node)
-			} else {
+			case groups[node.Group]:
+				grouped[node.Group] = append(grouped[node.Group], node)
+			default:
 				visible[node] = true
 			}
 			return visible[node]
@@ -292,13 +328,21 @@ func sidebarProjects(root *projectNode) (pinned []*projectNode, visible map[*pro
 		return visible[node]
 	}
 	visit(root)
-	sort.Slice(pinned, func(i, j int) bool {
-		left := strings.ToLower(filepath.Base(pinned[i].Path))
-		right := strings.ToLower(filepath.Base(pinned[j].Path))
+	sortProjects(pinned)
+	for _, nodes := range grouped {
+		sortProjects(nodes)
+	}
+	return pinned, grouped, visible
+}
+
+// sortProjects orders flat groups by name case-insensitively, then by path.
+func sortProjects(nodes []*projectNode) {
+	sort.Slice(nodes, func(i, j int) bool {
+		left := strings.ToLower(filepath.Base(nodes[i].Path))
+		right := strings.ToLower(filepath.Base(nodes[j].Path))
 		if left == right {
-			return pinned[i].Path < pinned[j].Path
+			return nodes[i].Path < nodes[j].Path
 		}
 		return left < right
 	})
-	return pinned, visible
 }

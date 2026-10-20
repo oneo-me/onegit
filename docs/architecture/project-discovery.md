@@ -22,24 +22,28 @@ The cache is keyed by parent directory, so switching directories restores each t
 - Paths that no longer exist are dropped with their pinning and removal, as are folders they leave empty. A missing parent directory, such as an unmounted volume, keeps the cache.
 - A stale scan for a previous directory never overwrites the current one.
 
-State is saved after a merge, after pin or expansion changes and when the window closes normally.
+State is saved after a merge, after pin, group or expansion changes and when the window closes normally.
 
 ## Sidebar groups
 
-The sidebar shows two collapsible groups, Pinned and Other Projects, both expanded by default.
+The sidebar shows collapsible groups, all expanded by default: Pinned first, then the user's groups and Ungrouped Projects in the user's order.
 
-- Pinned lists pinned projects flat, sorted by name case-insensitively, then by full path.
-- Other Projects keeps the directory hierarchy and hides folders that only lead to pinned projects.
+- Pinned and user groups list their projects flat, sorted by name case-insensitively, then by full path.
+- Ungrouped Projects holds every other project in the directory hierarchy, hiding folders that only lead to pinned or grouped projects.
+- Pinning wins over a group; unpinning returns a project to its group. A project naming a deleted group is ungrouped.
 - Groups are a view over the cached nodes. They do not change the tree, selection or expansion.
-- Pinning is stored per parent directory. Group collapse is shared across parent directories.
+
+Group headers offer New Group; user groups also rename or delete, which returns their projects to Ungrouped Projects. Dragging a group header onto another group moves it there; Pinned stays first.
+
+Pinning and group membership live in the cached nodes, and the group order, names and collapse in `groups`, all per parent directory. Pinned and Ungrouped Projects share their collapse across parent directories.
 
 Nodes start collapsed. The tree uses Onevra `Tree` inside a `Sidebar` in a `ScrollView`, and the group headers use `Collapsible`.
 
 ## Context menus
 
-Right-clicking a folder offers Open Folder. A repository row also offers pinning and Remove Project.
+Right-clicking a folder offers Open Folder. A repository row also offers pinning, Move to Group, which can make a new group for it, and Remove Project.
 
-- Removal hides the project from both groups, the command palette and selection fallback without touching its files.
+- Removal hides the project from every group, the command palette and selection fallback without touching its files.
 - The flag lives in the cached tree, so scans and restarts keep the project hidden.
 - The toast after a removal undoes it; the palette's Restore Removed Projects command brings back every project removed from the current parent directory.
 - Opening a folder runs `Shell.OpenPath`; a failure shows as a toast.

@@ -14,15 +14,16 @@ import (
 )
 
 type sidebarState struct {
-	Window            *mygo.WindowState       `yaml:"window,omitempty"`
-	SidebarWidth      float32                 `yaml:"sidebarWidth,omitempty"`
-	SidebarCollapsed  bool                    `yaml:"sidebarCollapsed,omitempty"`
-	SelectedProjects  map[string]string       `yaml:"selectedProjects,omitempty"`
-	SelectedWorktrees map[string]string       `yaml:"selectedWorktrees,omitempty"`
-	GitView           *gitview.State          `yaml:"gitView,omitempty"`
-	Roots             map[string]*projectNode `yaml:"roots,omitempty"`
-	PinnedOpen        *bool                   `yaml:"pinnedOpen,omitempty"`
-	OtherOpen         *bool                   `yaml:"otherOpen,omitempty"`
+	Window            *mygo.WindowState          `yaml:"window,omitempty"`
+	SidebarWidth      float32                    `yaml:"sidebarWidth,omitempty"`
+	SidebarCollapsed  bool                       `yaml:"sidebarCollapsed,omitempty"`
+	SelectedProjects  map[string]string          `yaml:"selectedProjects,omitempty"`
+	SelectedWorktrees map[string]string          `yaml:"selectedWorktrees,omitempty"`
+	GitView           *gitview.State             `yaml:"gitView,omitempty"`
+	Roots             map[string]*projectNode    `yaml:"roots,omitempty"`
+	PinnedOpen        *bool                      `yaml:"pinnedOpen,omitempty"`
+	OtherOpen         *bool                      `yaml:"otherOpen,omitempty"`
+	Groups            map[string][]*projectGroup `yaml:"groups,omitempty"`
 }
 
 const mainWindowStateKey = "main"
@@ -66,8 +67,21 @@ func (s *settings) restoreProjectSelection(onMain func(func())) {
 	}
 	path := s.state.SelectedProjects[s.projectRoot]
 	var selected, first *projectNode
-	pinned, _ := sidebarProjects(s.projectTree)
-	for _, node := range pinned {
+	// Without a saved selection, open the first project in sidebar order.
+	pinned, grouped, visible := sidebarProjects(s.projectTree, s.groupIDs())
+	ordered := pinned
+	for _, group := range s.projectGroups() {
+		if group.ID != ungroupedID {
+			ordered = append(ordered, grouped[group.ID]...)
+			continue
+		}
+		walkProjects(s.projectTree, func(node *projectNode) {
+			if node.Repository && visible[node] {
+				ordered = append(ordered, node)
+			}
+		})
+	}
+	for _, node := range ordered {
 		if !node.Missing {
 			first = node
 			break

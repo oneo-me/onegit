@@ -19,7 +19,9 @@ func (s *settings) text(zh string) string {
 var english = map[string]string{
 	"搜索项目与设置": "Search projects and settings", "搜索项目与设置…": "Search projects and settings…", "搜索…": "Search…", "命令面板": "Command palette", "没有匹配的项目或设置": "No matching projects or settings",
 	"正在读取 worktree…": "Loading worktrees…", "读取 worktree 失败：": "Could not load worktrees: ",
-	"置顶": "Pinned", "其他项目": "Other Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
+	"置顶": "Pinned", "未分组项目": "Ungrouped Projects", "置顶项目": "Pin Project", "取消置顶": "Unpin Project",
+	"移到分组": "Move to Group", "新建分组…": "New Group…", "新建分组": "New Group", "重命名分组…": "Rename Group…", "重命名分组": "Rename Group",
+	"删除分组": "Delete Group", "分组名称": "Group name", "创建": "Create", "重命名": "Rename", "取消": "Cancel",
 	"打开文件夹": "Open Folder", "移除项目": "Remove Project", "恢复已移除的项目": "Restore Removed Projects",
 	"无法打开目录": "Could not open folder", "已移除项目": "Project removed", "撤销": "Undo",
 	"（已不存在）":        " (missing)",

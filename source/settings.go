@@ -70,6 +70,7 @@ type settings struct {
 	problem           string
 	openPath          func(string) error
 	toast             *ui.Toast
+	groupDialog       groupDialog
 	window            *mygo.Window
 	shell             *sidebar.Shell
 	systemLanguage    string

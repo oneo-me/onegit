@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -218,10 +219,10 @@ func TestPinnedProjectGroupsAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	view.Frame()
-	if !pinned.Pinned || s.selectedProject != pinned || view.HasText("group") || !view.HasText("repo") || !view.HasText("other") || !view.HasText("置顶") || !view.HasText("其他项目") {
+	if !pinned.Pinned || s.selectedProject != pinned || view.HasText("group") || !view.HasText("repo") || !view.HasText("other") || !view.HasText("置顶") || !view.HasText("未分组项目") {
 		t.Fatal("pinning did not move the project out of its hierarchy", view.Texts())
 	}
-	pins, visible := sidebarProjects(root)
+	pins, _, visible := sidebarProjects(root, nil)
 	if len(pins) != 1 || pins[0] != pinned || visible[pinned] || visible[group] || !visible[other] || !group.Open {
 		t.Fatal("incorrect projection or expansion changed")
 	}
@@ -261,16 +262,16 @@ func TestPinnedProjectionIgnoresCollapsedAncestors(t *testing.T) {
 		{Path: "/projects/a", Children: []*projectNode{first}},
 		{Path: "/projects/b", Children: []*projectNode{second}},
 	}}
-	pins, visible := sidebarProjects(root)
+	pins, _, visible := sidebarProjects(root, nil)
 	if len(pins) != 2 || pins[0] != first || pins[1] != second || visible[root] {
 		t.Fatal("collapsed, missing or same-name projects lost")
 	}
-	pins, visible = sidebarProjects(second)
+	pins, _, visible = sidebarProjects(second, nil)
 	if len(pins) != 1 || visible[second] {
 		t.Fatal("repository root not pinned")
 	}
 	second.Pinned = false
-	pins, visible = sidebarProjects(second)
+	pins, _, visible = sidebarProjects(second, nil)
 	if len(pins) != 0 || !visible[second] {
 		t.Fatal("repository root not restored")
 	}
@@ -295,7 +296,7 @@ func TestSidebarGroupCollapseAndRestore(t *testing.T) {
 	if view.HasText("pin") || !view.HasText("repo") || *s.state.PinnedOpen || !*s.state.OtherOpen {
 		t.Fatal("pinned collapse affected other group", view.Texts())
 	}
-	if err := view.Click("其他项目"); err != nil {
+	if err := view.Click("未分组项目"); err != nil {
 		t.Fatal(err)
 	}
 	view.Frame()
@@ -313,7 +314,7 @@ func TestSidebarGroupCollapseAndRestore(t *testing.T) {
 	if view.HasText("pin") || view.HasText("repo") {
 		t.Fatal("restart did not restore collapse", view.Texts())
 	}
-	if err := view.Click("其他项目"); err != nil {
+	if err := view.Click("未分组项目"); err != nil {
 		t.Fatal(err)
 	}
 	view.Frame()
@@ -381,5 +382,135 @@ func TestDataDirMigration(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(filepath.Join(dir, "state.yaml")); string(data) != "old" {
 		t.Fatal("legacy data overwrote the data directory")
+	}
+}
+
+func TestProjectGroupsMoveReorderAndRestore(t *testing.T) {
+	alpha := &projectNode{Path: "/projects/alpha", Repository: true}
+	beta := &projectNode{Path: "/projects/nested/beta", Repository: true}
+	nested := &projectNode{Path: "/projects/nested", Open: true, savedOpen: true, Children: []*projectNode{beta}}
+	root := &projectNode{Path: "/projects", Children: []*projectNode{alpha, nested}}
+	s := &settings{projectRoot: root.Path, projectTree: root, statePath: filepath.Join(t.TempDir(), "state.yaml"), values: preferences{ProjectParentDir: root.Path}, systemLanguage: "en-US"}
+	view := ui.NewTester(s.worktreeSidebar, 300, 720)
+	view.SetPreferences(ui.Preferences{ReduceMotion: true})
+	view.Frame()
+	if !view.HasText("Ungrouped Projects") || !view.HasText("alpha") || !view.HasText("beta") {
+		t.Fatal("projects should start ungrouped", view.Texts())
+	}
+
+	// A group made from a project's menu takes the project.
+	if err := view.RightClick("beta"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Move to Group", "New Group…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	view.Type("Work")
+	view.Key(0, ui.KeyEnter)
+	view.Frame()
+	if s.groupDialog.open || beta.Group == "" || !view.HasText("Work") || view.HasText("nested") {
+		t.Fatal("new group did not take the project", beta.Group, view.Texts())
+	}
+	if err := view.RightClick("Ungrouped Projects"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("New Group…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	view.Type("Later")
+	view.Key(0, ui.KeyEnter)
+	view.Frame()
+	if err := view.RightClick("alpha"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Move to Group", "Later"); err != nil {
+		t.Fatal(err)
+	}
+	order := func(groups []*projectGroup) string {
+		var names []string
+		for _, group := range groups {
+			names = append(names, group.ID+"="+group.Name)
+		}
+		return strings.Join(names, ",")
+	}
+	if got := order(s.projectGroups()); got != "g1=Work,g2=Later,ungrouped=" || alpha.Group != "g2" {
+		t.Fatal("unexpected groups", got, alpha.Group)
+	}
+
+	// Dragging a header onto another group moves it there, in either direction.
+	drag := func(from, to string) {
+		t.Helper()
+		view.Frame()
+		src, ok := view.Find(from)
+		target, found := view.Find(to)
+		if !ok || !found {
+			t.Fatal("missing group header", from, to)
+		}
+		view.Press(src.X+5, src.Y+src.H/2)
+		for k := 1; k <= 4; k++ {
+			f := float32(k) / 4
+			view.Move(src.X+5, src.Y+src.H/2+(target.Y-src.Y)*f)
+		}
+		view.Release(src.X+5, target.Y+target.H/2)
+		view.Frame()
+	}
+	drag("Ungrouped Projects", "Work")
+	if got := order(s.projectGroups()); got != "ungrouped=,g1=Work,g2=Later" {
+		t.Fatal("drag up did not reorder", got)
+	}
+	drag("Work", "Later")
+	if got := order(s.projectGroups()); got != "ungrouped=,g2=Later,g1=Work" {
+		t.Fatal("drag down did not reorder", got)
+	}
+	drag("Pinned", "Work")
+	if got := order(s.projectGroups()); got != "ungrouped=,g2=Later,g1=Work" {
+		t.Fatal("pinned group moved", got)
+	}
+
+	if err := view.RightClick("Work"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Rename Group…"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if s.groupDialog.name != "Work" {
+		t.Fatalf("rename starts from %q", s.groupDialog.name)
+	}
+	s.groupDialog.name = "Client"
+	s.submitGroupDialog()
+	view.Frame()
+	if !view.HasText("Client") || view.HasText("Work") || beta.Group != "g1" {
+		t.Fatal("rename lost the group's projects", view.Texts())
+	}
+
+	// A restart restores the order, names and members.
+	state, err := loadSidebarState(s.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restarted := &settings{state: state, projectRoot: root.Path, projectTree: state.Roots[root.Path], statePath: s.statePath, values: s.values, systemLanguage: s.systemLanguage}
+	if got := order(restarted.projectGroups()); got != "ungrouped=,g2=Later,g1=Client" || findProject(restarted.projectTree, beta.Path).Group != "g1" {
+		t.Fatal("groups were not persisted", got)
+	}
+
+	// Deleting a group returns its projects to Ungrouped Projects.
+	if err := view.RightClick("Client"); err != nil {
+		t.Fatal(err)
+	}
+	if err := view.ChooseMenuItem("Delete Group"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if beta.Group != "" || view.HasText("Client") || !view.HasText("nested") || !view.HasText("beta") {
+		t.Fatal("deleted group kept its projects", view.Texts())
+	}
+	if err := view.RightClick("Ungrouped Projects"); err != nil {
+		t.Fatal(err)
+	}
+	if menu := view.Menu(); len(menu) != 1 || menu[0] != "New Group…" {
+		t.Fatalf("ungrouped menu: %q", menu)
 	}
 }

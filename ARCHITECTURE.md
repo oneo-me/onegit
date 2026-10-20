@@ -12,7 +12,7 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 | `source/settings*.go` | Settings dialog, preferences file, theme and language |
 | `source/localization.go` | UI strings keyed by their Chinese text, with English translations |
 | `source/commands.go` | Command palette data and actions |
-| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning, removal and persisted sidebar state |
+| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning, groups, removal and persisted sidebar state |
 | `source/worktrees*.go` | Worktree listing and the worktree tab strip |
 | `source/repository_ui.go` | Repository page and its title bar |
 | `source/gitview/` | Reusable Git view shared with Neorio: toolbar, refs pane, changes, commit graph, details, dialogs and Git CLI layer |
@@ -48,14 +48,14 @@ Configuration lives in `~/.onegit/config.yaml` and UI state in `~/.onegit/state.
 - In-memory values change only after a successful write. Load and save errors appear in the UI.
 - When `~/.onegit` does not exist, an earlier `~/.oneo/onegit` directory is moved there at startup.
 - A missing `config.yaml` is imported once from the legacy `Onegit/settings.json` in the user config directory, which is left in place.
-- State covers the main window's bounds and state through MyGo's window state store, sidebar width and collapse, project cache, expansion, pinning, group collapse and last selections.
+- State covers the main window's bounds and state through MyGo's window state store, sidebar width and collapse, project cache, expansion, pinning, project groups with their order and collapse, and last selections.
 - It also covers the Git view's layout, options, drafts, pinned refs, reflog choice, merge type and automatic fetch choices per repository.
 - Commit authors' avatars are downloaded from GitHub or Gravatar and cached in `avatars/` in the same directory.
 - Worktree lists and Git data are never persisted.
 
 ## Verification
 
-`go test` covers settings and persistence, project detection, scan cancellation and cache merging, sidebar menus and removal, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. It also covers conflict resolution and stopped operations, draft commits, reflog, pinned refs, comparisons, file history, blame, history search, interactive rebase and bulk ref actions. Tests use real temporary Git repositories.
+`go test` covers settings and persistence, project detection, scan cancellation and cache merging, sidebar menus, project groups and removal, legacy import, worktree tabs, and the Git view's reads, graph layout, ref filtering, inserted rows and actions. It also covers conflict resolution and stopped operations, draft commits, reflog, pinned refs, comparisons, file history, blame, history search, interactive rebase and bulk ref actions. Tests use real temporary Git repositories.
 
 Review these manually: the native directory picker, and packaging and the app icon on each platform.
 
@@ -63,6 +63,6 @@ Review these manually: the native directory picker, and packaging and the app ic
 
 | Document | When to read |
 | --- | --- |
-| [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning or the project cache |
+| [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning, groups or the project cache |
 | [Repository page](docs/architecture/repository-page.md) | Changing worktree tabs, the title bar actions or how Onegit configures the Git view |
 | [Git view](docs/architecture/git-view.md) | Changing `source/gitview` or embedding it in another app |
