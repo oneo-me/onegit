@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onegit/source/launchers"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )
@@ -73,6 +74,14 @@ func (s *settings) categories() []components.SettingsCategory {
 				}
 			}}}},
 		}},
+		{ID: "tools", Title: s.text("工具"), Section: s.text("应用"), Icon: lucide.Wrench(), Groups: []components.SettingsGroup{{ID: "launchers", Items: []components.SettingsItem{
+			{ID: "terminal", Title: s.text("终端"), Keywords: []string{"terminal", "shell", "console", "命令行"}, Build: func(c *ui.Context) {
+				s.launcherSetting(c, &s.values.Terminal, launchers.Terminal, s.text("终端"))
+			}},
+			{ID: "editor", Title: s.text("开发工具"), Keywords: []string{"editor", "IDE", "code", "编辑器", "代码"}, Build: func(c *ui.Context) {
+				s.launcherSetting(c, &s.values.Editor, launchers.Editor, s.text("开发工具"))
+			}},
+		}}}},
 		{ID: "appearance", Title: s.text("外观"), Section: s.text("应用"), Icon: lucide.Palette(), Groups: []components.SettingsGroup{{ID: "theme", Items: []components.SettingsItem{{
 			ID: "theme", Title: s.text("主题"), Description: s.text("与侧边栏底部的主题选项同步。"), Build: func(c *ui.Context) {
 				value := string(s.theme())

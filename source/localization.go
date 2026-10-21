@@ -43,6 +43,8 @@ var english = map[string]string{
 	"读取设置失败：": "Could not load settings: ", "选择目录失败：": "Could not choose folder: ", "无法访问所选目录：": "Could not access folder: ", "请选择文件夹。": "Please choose a folder.",
 	"无法确定设置保存位置。": "Could not determine where to save settings.", "保存失败，设置未更改：%v": "Could not save; settings remain unchanged: %v",
 	"搜索设置": "Search settings", "搜索设置…": "Search settings…", "设置分类": "Settings category", "搜索结果": "Search results", "没有匹配的设置": "No matching settings",
+	"工具": "Tools", "终端": "Terminal", "开发工具": "Development tool", "自动": "Automatic", "自动（%s）": "Automatic (%s)", "%s（未安装）": "%s (not installed)", "不显示": "Don't show",
+	"在 %s 中打开": "Open in %s", "在 GitHub 上打开": "Open on GitHub", "无法打开 %s": "Could not open %s",
 	"切换侧边栏": "Toggle sidebar", "调整侧边栏宽度": "Resize sidebar", "尚未接入仓库": "No repositories connected",
 	"欢迎使用 Onegit": "Welcome to Onegit", "在一个地方查看多个 Git 仓库与 worktree。": "View multiple Git repositories and worktrees in one place.",
 	"应用已初始化。仓库接入、分支状态与实时更新将在后续实现。": "The app is ready. Repository integration, branch status and live updates are coming later.",

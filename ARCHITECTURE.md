@@ -14,8 +14,9 @@ Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides 
 | `source/commands.go` | Command palette data and actions |
 | `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning, groups, removal and persisted sidebar state |
 | `source/worktrees*.go` | Worktree listing and the worktree tab strip |
-| `source/repository_ui.go` | Repository page and its title bar |
+| `source/repository_ui.go`, `source/launchers_ui.go` | Repository page and its title bar, with its launchers and their settings |
 | `source/gitview/` | Reusable Git view shared with Neorio: toolbar, refs pane, changes, commit graph, details, dialogs and Git CLI layer |
+| `source/launchers/` | File managers, terminals and development tools shared with Neorio: catalog, detection and opening a directory |
 | `source/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
 | `source/mygo.json` | Packaging; output goes to `dist/` |
 

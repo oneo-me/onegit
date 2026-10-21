@@ -1,6 +1,6 @@
 # Repository page
 
-The repository page shows one selected project. The window's title bar holds the project's name or its worktree tabs, then the view's toolbar, as in Neorio, rather than a strip of their own. A hairline separates it from the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar's layout and tabs; the view owns its toolbar and everything below it.
+The repository page shows one selected project. The window's title bar holds the project's name or its worktree tabs, then the view's toolbar and the launchers, as in Neorio, rather than a strip of their own. A hairline separates it from the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar's layout and tabs; the view owns its toolbar and everything below it.
 
 ## Worktree tabs
 
@@ -11,6 +11,12 @@ Switching tabs only changes the path the view shows. A worktree added from a ref
 ## Title bar actions
 
 The view's `Toolbar`, shared with Neorio's Git window, follows the name or tabs: raised capsules with an icon and name for Fetch, Pull, Push and Stash, and commit counts after the name. A running action shows a spinner in place of its icon. The view runs one action at a time per worktree, shows failures as toasts and rereads the worktree after each action.
+
+Raised icon buttons follow, drawn with each kind's glyph rather than the application's icon:
+
+- The file manager, terminal and development tool open the selected worktree. Onegit finds them with the shared `launchers` package off the main thread at startup; Settings chooses the terminal and tool, or hides either, saved as `terminal` and `editor` in `config.yaml`.
+- GitHub opens the view's `GitHubPage`: the page of the remote the branch tracks, else of `origin` or the only remote, shown only when that is on GitHub.
+- A launcher that fails to open shows a toast.
 
 ## Onegit's choices for the view
 

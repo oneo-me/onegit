@@ -141,7 +141,7 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 
 // repositoryTitle fills the window's title bar, as Neorio does, instead of
 // adding a toolbar strip: the project's name, or tabs naming its worktrees
-// when it has more than one, then the view's toolbar.
+// when it has more than one, then the view's toolbar and the launchers.
 func (s *settings) repositoryTitle(c *ui.Context) {
 	project := s.selectedProject
 	if project == nil || !project.Repository {
@@ -157,6 +157,7 @@ func (s *settings) repositoryTitle(c *ui.Context) {
 		}
 		ui.Spacer(c)
 		s.gitView().Toolbar(c, size)
+		ui.Row(c).Key("launchers").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() { s.launcherButtons(c) })
 	})
 }
 

@@ -75,7 +75,7 @@
 ## Host API
 
 - `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
-- `Toolbar` builds the Git actions in a host's title bar. `OpWorktree` names a write adding or removing a worktree, for `OnWrite`.
+- `Toolbar` builds the Git actions in a host's title bar, and `GitHubPage` names the GitHub page of the tracked or default remote for a host's own button. `OpWorktree` names a write adding or removing a worktree, for `OnWrite`.
 - `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` serve hosts adding their own. `CanSync`, `CanStage`, `CanPull` and `CanStash` say whether an action may start.
 - `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `Fetch` fetches every remote without the dialog.
 - `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.

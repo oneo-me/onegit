@@ -29,6 +29,16 @@ const (
 // toolbar's counts.
 func (v *View) Tracking() Tracking { return v.tracking }
 
+// GitHubPage is the GitHub page of the remote the worktree's branch tracks,
+// else of the default remote, or empty when that remote is not on GitHub.
+func (v *View) GitHubPage() string {
+	remote := refRemote(v.repo.github, v.tracking.Upstream)
+	if remote == "" {
+		remote = (Remotes{Names: slices.Sorted(maps.Keys(v.repo.remoteURLs))}).DefaultRemote()
+	}
+	return githubWebURL(v.repo.remoteURLs[remote])
+}
+
 // Syncing names the Git write running in the shown worktree, or is empty.
 func (v *View) Syncing() string { return v.syncing[v.path] }
 

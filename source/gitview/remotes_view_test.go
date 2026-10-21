@@ -294,6 +294,22 @@ func TestGitHubWebURL(t *testing.T) {
 	}
 }
 
+// The GitHub page follows the branch's upstream, else the default remote.
+func TestViewGitHubPage(t *testing.T) {
+	t.Parallel()
+	v := &View{}
+	v.repo.remoteURLs = map[string]string{"origin": "git@github.com:o/r.git", "fork": "https://github.com/me/r", "lab": "https://gitlab.com/o/r"}
+	v.repo.github = map[string]bool{"origin": true, "fork": true, "lab": false}
+	for upstream, want := range map[string]string{
+		"fork/main": "https://github.com/me/r", "": "https://github.com/o/r", "lab/main": "",
+	} {
+		v.tracking.Upstream = upstream
+		if got := v.GitHubPage(); got != want {
+			t.Errorf("upstream %q: %q, want %q", upstream, got, want)
+		}
+	}
+}
+
 func TestAddRefFolder(t *testing.T) {
 	t.Parallel()
 	nodes := addRefFolder(nil, "team/origin")

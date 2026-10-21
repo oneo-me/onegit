@@ -11,6 +11,7 @@ User-facing release notes for Onegit.
 - Open a project's folder, or remove the project from the sidebar, from its menu; a removed project stays hidden until you undo or restore it.
 - Find projects and open Settings from the command palette (`⌘F`).
 - Switch between a project's worktrees with tabs in the title bar when it has several, returning to the last project and worktree.
+- Open the shown worktree in the file manager, a terminal or a development tool, chosen or hidden in Settings, or the repository's GitHub page, from buttons after the title bar's Git actions.
 - Fetch, pull, push and stash from the title bar, with dialogs and commit counts; fetch every remote or one branch.
 - Push a repository without remotes to a new GitHub repository, private unless you choose public, using the GitHub CLI.
 - Browse changes, commits, filterable branches, remote branches, tags and stashes, open their commits, delete refs and see stashed files.

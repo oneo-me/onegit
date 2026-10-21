@@ -50,6 +50,17 @@ func TestSaveFailurePreservesSelection(t *testing.T) {
 	}
 }
 
+// Launcher choices keep known IDs of their kind and reset the rest.
+func TestLauncherPreferences(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("terminal: zed\neditor: cursor\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := loadPreferences(path); err != nil || got.Terminal != "" || got.Editor != "cursor" {
+		t.Fatalf("launchers: %+v, %v", got, err)
+	}
+}
+
 func TestMalformedPreferences(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "settings.json")
 	if err := os.WriteFile(path, []byte("{"), 0600); err != nil {

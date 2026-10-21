@@ -52,6 +52,7 @@ func main() {
 		settings.window = shell.Window()
 		settings.restoreShell(shell)
 		settings.scanProjects()
+		settings.detectLaunchers(mygo.RunOnMain)
 		mygo.App.SetMenu(settings.menu())
 		shell.Window().OnClose(func(*mygo.CloseEvent) { settings.saveSidebarState() })
 		shell.Window().OnClosed(func() {

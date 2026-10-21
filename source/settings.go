@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"go.yaml.in/yaml/v3"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
+	"github.com/oneo-me/onegit/source/launchers"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
@@ -20,6 +22,10 @@ type preferences struct {
 	ProjectParentDir string           `json:"projectParentDir,omitempty" yaml:"projectParentDir,omitempty"`
 	Theme            mygo.ThemeSource `json:"theme,omitempty" yaml:"theme,omitempty"`
 	Language         string           `json:"language,omitempty" yaml:"language,omitempty"`
+	// Terminal and Editor choose the title bar's launchers by ID, empty for
+	// the first installed one or launchers.None to hide the button.
+	Terminal string `json:"terminal,omitempty" yaml:"terminal,omitempty"`
+	Editor   string `json:"editor,omitempty" yaml:"editor,omitempty"`
 }
 
 func loadPreferences(path string) (preferences, error) {
@@ -41,6 +47,7 @@ func loadPreferences(path string) (preferences, error) {
 	if p.Language != "" && p.Language != "en" && p.Language != "zh-Hans" {
 		return preferences{}, fmt.Errorf("unknown language %q", p.Language)
 	}
+	p.Terminal, p.Editor = launchers.Normalize(p.Terminal, launchers.Terminal), launchers.Normalize(p.Editor, launchers.Editor)
 	return p, nil
 }
 
@@ -74,6 +81,10 @@ type settings struct {
 	window            *mygo.Window
 	shell             *sidebar.Shell
 	systemLanguage    string
+	// installed lists this computer's launchers once found, and runLauncher,
+	// when set, starts their commands instead of launchers.Run.
+	installed   []launchers.Installed
+	runLauncher func(*exec.Cmd) error
 }
 
 func newSettings(dir string) *settings {
