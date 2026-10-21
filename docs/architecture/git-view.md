@@ -39,6 +39,7 @@
 - `gh` is looked up on `PATH`, then in Homebrew's directories, or by a `Host` that is also a `GitHubHost`; without it the dialog explains how to install it and sign in. Other hosts keep the plain notice.
 - A merge can fast-forward, create a merge commit, squash its changes or stop before committing.
 - Bulk dialogs delete or push several local branches or tags.
+- Deleting local branches first reads `UnmergedBranches`, those `branch -d` refuses: commits their upstream lacks, or HEAD lacks without one. Such a branch is marked, and goes with `branch -D` only once the user chooses to lose its commits.
 - Fetch updates every remote, or with its switch off one remote branch. A file's version or a commit's or stash's patch is written where the host's `SaveFile` or MyGo's save dialog chooses.
 
 | Menu item | Git |
@@ -58,7 +59,7 @@
 | Cherry-pick, Revert | `cherry-pick` or `revert` of a commit, optionally without a commit and with its parent chosen for a merge |
 | Save as Patch | A commit with `format-patch`, or a stash with `stash show -p` |
 | Tracking, Rename | Local branches: `branch --set-upstream-to` or `--unset-upstream`, and `branch --move` from a dialog |
-| Delete | Refs only, after a confirmation, optionally on the remote too. A branch checked out in another worktree, not the shown or main one, needs that worktree's `worktree remove` too, after checking that `branch -d` would succeed |
+| Delete | Refs only, after a confirmation, optionally on the remote too. A branch checked out in another worktree, not the shown or main one, needs that worktree's `worktree remove` too, after the unmerged check |
 | Stash | Apply, rename or delete a stash from a dialog, or save chosen files from the changes menu |
 | Pin, Unpin | Keeps a ref in the Pinned group, saved with the view's state |
 | Resolve Conflict | Takes ours or theirs with `checkout --ours` or `--theirs`, then stages the file |

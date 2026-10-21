@@ -230,7 +230,7 @@ func (v *View) refMenu(c *ui.Context, m *ui.Menu, t refTarget, n *refNode) {
 			v.togglePinned(t.group, t.name)
 		}
 		if d, ok := v.newRefDeletion(t.group, n); ok && g.item(v.text("delete_ref")).Disabled(!can).Chosen() {
-			v.deletion = d
+			v.openRefDeletion(d)
 		}
 	}
 	g.group()

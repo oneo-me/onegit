@@ -20,6 +20,7 @@ User-facing release notes for Onegit.
 - Continue or abort a stopped merge, rebase, cherry-pick or revert, and resolve a conflicted file with either side before staging it.
 - Act on refs and commits from their menus: checkout, worktree, pull, merge, rebase, branch, tag, reset, cherry-pick, revert, patch, delete or copy; a commit a branch, remote branch or tag points at also acts as that ref.
 - Branch menus also push, fast-forward, rename, change tracking and delete a branch with its worktree; choose a merge type and delete or push several branches or tags at once.
+- Deleting a branch warns about commits its upstream or the checked out branch lacks, and deletes it anyway only when you choose to lose them.
 - Fetch, edit or delete remotes from their menu, fetch one automatically when a worktree opens, view a GitHub remote or copy its address.
 - Create branches and tags from their group menus, and remove the stale local branches you choose.
 - Apply, rename or delete a stash from its menu, or save its patch.

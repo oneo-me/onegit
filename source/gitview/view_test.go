@@ -635,6 +635,7 @@ func TestViewDeletesBranchWithItsWorktree(t *testing.T) {
 	git(t, repo, "branch", "side")
 	wt := filepath.Join(t.TempDir(), "side-wt")
 	git(t, repo, "worktree", "add", "-q", wt, "side")
+	git(t, wt, "commit", "-q", "--allow-empty", "-m", "side work")
 	var wrote []string
 	v, pump := testView(t, Options{OnWrite: func(op, _ string) { wrote = append(wrote, op) }})
 	v.SetPath(repo)
@@ -659,18 +660,29 @@ func TestViewDeletesBranchWithItsWorktree(t *testing.T) {
 	if err := view.ChooseMenuItem("Delete…"); err != nil {
 		t.Fatal(err)
 	}
+	pump(func() bool { return !v.deletion.checking })
 	view.Frame()
-	if !view.HasText("Also delete worktree side-wt") {
+	if !view.HasText("Also delete worktree side-wt") || !v.deletion.unmerged {
 		t.Fatalf("dialog: %v", view.Texts())
 	}
-	if err := view.Click("Delete"); err != nil {
-		t.Fatal(err)
+	// It needs the worktree and, as its commit is unmerged, the user's
+	// choice to lose it.
+	for _, choice := range []string{"", "Also delete worktree side-wt"} {
+		if choice != "" {
+			if err := view.Click(choice); err != nil {
+				t.Fatal(err)
+			}
+			view.Frame()
+		}
+		if err := view.Click("Delete"); err != nil {
+			t.Fatal(err)
+		}
+		view.Frame()
+		if v.Syncing() != "" || !v.deletion.open {
+			t.Fatalf("deleted without %q", choice)
+		}
 	}
-	view.Frame()
-	if v.Syncing() != "" || !v.deletion.open {
-		t.Fatal("deleted without the worktree")
-	}
-	if err := view.Click("Also delete worktree side-wt"); err != nil {
+	if err := view.Click("Delete anyway, losing those commits"); err != nil {
 		t.Fatal(err)
 	}
 	view.Frame()

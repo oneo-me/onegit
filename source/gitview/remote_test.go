@@ -1,6 +1,7 @@
 package gitview
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -153,16 +154,28 @@ func TestDeleteRefs(t *testing.T) {
 		u["wip"] != (RemoteBranch{}) || u["local"] != (RemoteBranch{}) {
 		t.Fatalf("upstreams %+v", u)
 	}
-	// A branch whose commits only it has, or that is checked out, stays.
-	if err := g.DeleteBranch(mine, "wip"); err == nil {
+	// A branch whose commits only it has, or that is checked out, stays;
+	// a branch is compared with its upstream when it has one, else HEAD.
+	unmerged := func() []string {
+		t.Helper()
+		m, err := g.UnmergedBranches(mine)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return slices.Sorted(maps.Keys(m))
+	}
+	if u := unmerged(); !slices.Equal(u, []string{"wip"}) {
+		t.Fatalf("unmerged %v", u)
+	}
+	if err := g.DeleteBranch(mine, "wip", false); err == nil {
 		t.Fatal("deleted an unmerged branch")
 	}
-	if err := g.DeleteBranch(mine, "main"); err == nil {
+	if err := g.DeleteBranch(mine, "main", true); err == nil {
 		t.Fatal("deleted the checked out branch")
 	}
 	// A branch its upstream contains is deleted, then the remote's copy,
 	// which leaves the branches tracking it without an upstream.
-	if err := g.DeleteBranch(mine, "topic"); err != nil {
+	if err := g.DeleteBranch(mine, "topic", false); err != nil {
 		t.Fatal(err)
 	}
 	if err := g.DeleteRemoteBranch(mine, "origin", "topic"); err != nil {
@@ -173,6 +186,12 @@ func TestDeleteRefs(t *testing.T) {
 	}
 	if u := upstreams(); u["follower"] != (RemoteBranch{}) {
 		t.Fatalf("gone upstream kept: %+v", u)
+	}
+	if u := unmerged(); !slices.Equal(u, []string{"follower", "wip"}) {
+		t.Fatalf("unmerged after the upstream went %v", u)
+	}
+	if err := g.DeleteBranch(mine, "follower", true); err != nil {
+		t.Fatal(err)
 	}
 	// A remote branch the remote no longer has is dropped.
 	git(t, mine, "update-ref", "refs/remotes/origin/stale", "HEAD")
@@ -187,11 +206,14 @@ func TestDeleteRefs(t *testing.T) {
 	for _, b := range []string{"wip", "local"} {
 		git(t, mine, "worktree", "add", "-q", filepath.Join(dir, b), b)
 	}
-	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "wip"), "wip"); err != ErrNotMerged {
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "wip"), "wip", false); err != ErrNotMerged {
 		t.Fatalf("unmerged: %v", err)
 	}
+	if _, err := os.Stat(filepath.Join(dir, "wip")); err != nil {
+		t.Fatalf("removed the unmerged branch's worktree: %v", err)
+	}
 	os.WriteFile(filepath.Join(dir, "local", "draft.txt"), []byte("draft\n"), 0644)
-	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local"); err == nil {
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local", false); err == nil {
 		t.Fatal("removed a worktree with changes")
 	}
 	if _, ok := upstreams()["local"]; !ok {
@@ -201,7 +223,7 @@ func TestDeleteRefs(t *testing.T) {
 		t.Fatalf("kept %+v", checkouts)
 	}
 	os.Remove(filepath.Join(dir, "local", "draft.txt"))
-	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local"); err != nil {
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "local"), "local", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := upstreams()["local"]; ok {
@@ -209,6 +231,12 @@ func TestDeleteRefs(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "local")); !os.IsNotExist(err) {
 		t.Fatalf("kept the worktree: %v", err)
+	}
+	if err := g.DeleteWorktreeBranch(mine, filepath.Join(dir, "wip"), "wip", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := upstreams()["wip"]; ok {
+		t.Fatal("kept wip")
 	}
 	// A tag is deleted from the remote, which may not have it, and locally.
 	for range 2 {

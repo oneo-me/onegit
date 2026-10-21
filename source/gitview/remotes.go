@@ -474,7 +474,7 @@ func (v *View) runStaleDeletion() {
 	v.Run(opDelete, v.text("ref_stale_failed"), func(git Git, path string) error {
 		var errs []error
 		for _, name := range names {
-			if err := git.DeleteBranch(path, name); err != nil {
+			if err := git.DeleteBranch(path, name, false); err != nil {
 				errs = append(errs, fmt.Errorf("%s: %w", name, err))
 			}
 		}

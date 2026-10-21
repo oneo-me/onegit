@@ -36,9 +36,8 @@ var ErrNoRemote = errors.New("no remote to push the branch to")
 // run it.
 var ErrNoGitHubCLI = errors.New("the GitHub CLI (gh) is not installed")
 
-// ErrNotMerged is a branch deletion that would lose commits neither the
-// branch's upstream nor the checked out branch has.
-var ErrNotMerged = errors.New("neither the branch's upstream nor the checked out branch has all of its commits")
+// ErrNotMerged is a deletion of one of UnmergedBranches without force.
+var ErrNotMerged = errors.New("the branch has commits its upstream, or the checked out branch, lacks")
 
 // ErrNotFastForward is a fast-forward of a branch with commits its target
 // lacks.
@@ -1314,34 +1313,68 @@ func (g Git) CreateGitHubRepository(path, name string, private bool) error {
 }
 
 // DeleteBranch deletes a local branch of the repository containing path.
-// Like git branch -d, it refuses a branch checked out in any worktree or
-// whose commits neither its upstream nor the checked out branch contains.
-func (g Git) DeleteBranch(path, branch string) error {
-	_, err := g.Run(path, "branch", "--delete", branch)
+// Like git branch -d, it refuses a branch checked out in any worktree, and
+// one of UnmergedBranches unless force deletes it with its commits.
+func (g Git) DeleteBranch(path, branch string, force bool) error {
+	flag := "--delete"
+	if force {
+		flag = "-D"
+	}
+	_, err := g.Run(path, "branch", flag, branch)
 	return err
 }
 
 // DeleteWorktreeBranch removes the worktree at dir, which has branch checked
-// out, then deletes branch as DeleteBranch does. It fails with ErrNotMerged
-// before removing anything when DeleteBranch would refuse, and like git
-// worktree remove it keeps a worktree with changes or untracked files.
-func (g Git) DeleteWorktreeBranch(path, dir, branch string) error {
-	// git branch -d compares with the upstream, else with HEAD.
-	base := "HEAD"
-	if _, err := g.Run(path, "rev-parse", "--verify", "--quiet", "refs/heads/"+branch+"@{upstream}"); err == nil {
-		base = "refs/heads/" + branch + "@{upstream}"
-	}
-	merged, err := g.Run(path, "for-each-ref", "--merged="+base, "--format=%(refname)", "refs/heads/"+branch)
-	if err != nil {
-		return err
-	}
-	if merged == "" {
-		return ErrNotMerged
+// out, then deletes branch as DeleteBranch does. Without force it fails with
+// ErrNotMerged before removing anything when the branch is unmerged, and
+// like git worktree remove it keeps a worktree with changes or untracked
+// files.
+func (g Git) DeleteWorktreeBranch(path, dir, branch string, force bool) error {
+	if !force {
+		unmerged, err := g.UnmergedBranches(path)
+		if err != nil {
+			return err
+		}
+		if unmerged[branch] {
+			return ErrNotMerged
+		}
 	}
 	if _, err := g.Run(path, "worktree", "remove", dir); err != nil {
 		return err
 	}
-	return g.DeleteBranch(path, branch)
+	return g.DeleteBranch(path, branch, force)
+}
+
+// UnmergedBranches returns the local branches git branch -d refuses to
+// delete in the worktree at path because their commits would be lost: those
+// with commits their upstream lacks, or HEAD lacks when the upstream is
+// unset or gone.
+func (g Git) UnmergedBranches(path string) (map[string]bool, error) {
+	out, err := g.Run(path, "for-each-ref", "--format=%(refname)%00%(upstream)%00%(upstream:track)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	head, err := g.Run(path, "for-each-ref", "--no-merged=HEAD", "--format=%(refname)", "refs/heads")
+	if err != nil {
+		return nil, err
+	}
+	outsideHead := map[string]bool{}
+	for line := range strings.Lines(head) {
+		outsideHead[strings.TrimRight(line, "\n")] = true
+	}
+	unmerged := map[string]bool{}
+	for line := range strings.Lines(out) {
+		fields := strings.Split(strings.TrimRight(line, "\n"), "\x00")
+		name, ok := strings.CutPrefix(fields[0], "refs/heads/")
+		if !ok || len(fields) < 3 {
+			continue
+		}
+		tracked := fields[1] != "" && fields[2] != "[gone]"
+		if ahead, _ := trackCounts(fields[2]); tracked && ahead > 0 || !tracked && outsideHead[fields[0]] {
+			unmerged[name] = true
+		}
+	}
+	return unmerged, nil
 }
 
 // BranchDate is a local branch and the commit date of its tip.

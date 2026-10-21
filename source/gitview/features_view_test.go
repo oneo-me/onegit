@@ -1,6 +1,7 @@
 package gitview
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -285,6 +286,9 @@ func TestViewBulkDeletesBranches(t *testing.T) {
 	repo := testRepo(t)
 	git(t, repo, "branch", "feature")
 	git(t, repo, "branch", "other")
+	git(t, repo, "switch", "-q", "-c", "draft")
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "draft work")
+	git(t, repo, "switch", "-q", "main")
 	v, pump := testView(t, Options{})
 	v.SetPath(repo)
 	pump(func() bool { return !v.Loading() })
@@ -297,13 +301,31 @@ func TestViewBulkDeletesBranches(t *testing.T) {
 	if err := view.ChooseMenuItem("Delete Multiple Branches…"); err != nil {
 		t.Fatal(err)
 	}
-	view.Frame()
-	for i := range v.bulk.refs {
-		v.bulk.refs[i].On = true
+	pump(func() bool { return !v.bulk.checking })
+	if err := view.Click("Select All"); err != nil {
+		t.Fatal(err)
 	}
-	v.runBulk()
+	view.Frame()
+	if !view.HasText("Unmerged") || !maps.Equal(v.bulk.unmerged, map[string]bool{"draft": true}) {
+		t.Fatalf("unmerged %v: %v", v.bulk.unmerged, view.Texts())
+	}
+	// An unmerged branch goes only once the user chooses to lose its commits.
+	if err := view.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if v.Syncing() != "" || !v.bulk.open {
+		t.Fatal("deleted an unmerged branch")
+	}
+	if err := view.Click("Delete them anyway, losing those commits"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if err := view.Click("Delete"); err != nil {
+		t.Fatal(err)
+	}
 	pump(func() bool { return v.Syncing() == "" && !v.Loading() })
-	if out, _ := v.git.Run(repo, "branch", "--format=%(refname:short)"); strings.Contains(out, "feature") || strings.Contains(out, "other") {
+	if out, _ := v.git.Run(repo, "branch", "--format=%(refname:short)"); out != "main" {
 		t.Fatalf("branches %q", out)
 	}
 }
