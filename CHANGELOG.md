@@ -14,7 +14,7 @@ User-facing release notes for Onegit.
 - Open the shown worktree in the file manager, a terminal or a development tool, chosen or hidden in Settings, or the repository's GitHub page, from buttons after the title bar's Git actions.
 - Fetch, pull, push and stash from the title bar, with dialogs and commit counts; fetch every remote or one branch.
 - Push a repository without remotes to a new GitHub repository, private unless you choose public, using the GitHub CLI.
-- Browse changes, commits, filterable branches, remote branches, tags and stashes, open their commits, delete refs and see stashed files.
+- Browse changes, commits, filterable branches, remote branches, tags and stashes, whose groups and folders stay as you left them, open their commits, delete refs and see stashed files.
 - Double-click a ref or commit to check it out, keeping, stashing or discarding changes; a branch checked out elsewhere opens its worktree.
 - Apply a stash by double-clicking it, deleting it afterwards unless you keep it or it conflicts.
 - Rebase the checked-out branch from a dialog that names both sides, tests for conflicts, and can update dependent branches or stash local changes; rebase interactively with reword, squash, fixup and drop.

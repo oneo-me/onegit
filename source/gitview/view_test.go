@@ -272,6 +272,47 @@ func TestViewOffersChangesAndRunsToolbarActions(t *testing.T) {
 	}
 }
 
+func TestViewRemembersRefFolders(t *testing.T) {
+	repo := testRepo(t)
+	git(t, repo, "branch", "feature/login", "main")
+
+	var saved State
+	v, pump := testView(t, Options{OnState: func(s State) { saved = s }})
+	v.SetPath(repo)
+	pump(func() bool { return v.repo.loaded && !v.repo.loading })
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	if !slices.Contains(view.Texts(), "login") {
+		t.Fatalf("open folder: %v", view.Texts())
+	}
+
+	// Collapsing a folder saves it; reopening drops it again.
+	if err := view.Click("feature"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if open, ok := saved.Groups["branches/feature/"]; !ok || open || slices.Contains(view.Texts(), "login") {
+		t.Fatalf("collapsed: %v, %v", saved.Groups, view.Texts())
+	}
+
+	// Another view restores it collapsed.
+	other, pump := testView(t, Options{State: saved})
+	other.SetPath(repo)
+	pump(func() bool { return other.repo.loaded && !other.repo.loading })
+	restored := ui.NewTester(viewFrame(other), 1000, 700)
+	if !restored.HasText("feature") || slices.Contains(restored.Texts(), "login") {
+		t.Fatalf("restored: %v", restored.Texts())
+	}
+
+	view.Advance(time.Second)
+	if err := view.Click("feature"); err != nil {
+		t.Fatal(err)
+	}
+	view.Frame()
+	if _, ok := saved.Groups["branches/feature/"]; ok || !slices.Contains(view.Texts(), "login") {
+		t.Fatalf("reopened: %v, %v", saved.Groups, view.Texts())
+	}
+}
+
 func TestViewShowsErrorOutsideRepository(t *testing.T) {
 	v, pump := testView(t, Options{})
 	v.SetPath(t.TempDir())

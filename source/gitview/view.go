@@ -100,7 +100,9 @@ type State struct {
 	RefsWidth float32 `yaml:"refsWidth,omitempty" json:"refsWidth,omitempty"`
 	TreeWidth float32 `yaml:"treeWidth,omitempty" json:"treeWidth,omitempty"`
 	// Groups holds the disclosure of the refs pane's groups by key:
-	// "branches", "remotes", "tags" and "stashes".
+	// "pinned", "branches", "remotes", "tags" and "stashes", and of their
+	// folders by group and path ending in a slash, such as
+	// "branches/feature/". It keeps only what differs from the default.
 	Groups map[string]bool `yaml:"groups,omitempty" json:"groups,omitempty"`
 	// DiffWrap wraps diff and file lines.
 	DiffWrap bool `yaml:"diffWrap,omitempty" json:"diffWrap,omitempty"`
@@ -937,15 +939,41 @@ func refFolder(c *ui.Context, key, label string, icon func() *ui.SVG, open *bool
 	return row
 }
 
-// disclosure is the refs pane row key's disclosure, open at first when open
-// is set.
+// disclosure is the refs pane row key's disclosure, restored from state and
+// otherwise open when open is set.
 func (v *View) disclosure(key string, open bool) *bool {
 	state := v.groups[key]
 	if state == nil {
+		if saved, ok := v.state.Groups[key]; ok {
+			open = saved
+		}
 		state = &open
 		v.groups[key] = state
 	}
 	return state
+}
+
+// rememberDisclosure saves the refs pane row key's disclosure when it
+// changed, dropping it once it is back to the default open.
+func (v *View) rememberDisclosure(key string, state, open bool) {
+	saved, ok := v.state.Groups[key]
+	if !ok {
+		saved = open
+	}
+	if state == saved {
+		return
+	}
+	groups := map[string]bool{}
+	for k, open := range v.state.Groups {
+		groups[k] = open
+	}
+	if state == open {
+		delete(groups, key)
+	} else {
+		groups[key] = state
+	}
+	v.state.Groups = groups
+	v.saveState()
 }
 
 // refGroup lists rows under a collapsible heading, led by icon, whose
@@ -953,9 +981,6 @@ func (v *View) disclosure(key string, open bool) *bool {
 // the heading's context menu unless it is nil.
 func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, filtering bool, menu func(*ui.Menu), rows func()) {
 	t := c.Theme()
-	if saved, ok := v.state.Groups[key]; ok {
-		open = saved
-	}
 	state := v.disclosure(key, open)
 	if filtering {
 		state = new(bool)
@@ -976,14 +1001,8 @@ func (v *View) refGroup(c *ui.Context, key, label string, icon *ui.SVG, open, fi
 			parts.Trigger.ContextMenu(menu)
 		}
 	})
-	if !filtering && *state != open {
-		groups := map[string]bool{}
-		for k, open := range v.state.Groups {
-			groups[k] = open
-		}
-		groups[key] = *state
-		v.state.Groups = groups
-		v.saveState()
+	if !filtering {
+		v.rememberDisclosure(key, *state, open)
 	}
 }
 
@@ -1001,8 +1020,9 @@ func (v *View) currentRef(group string, n *refNode) bool {
 	return false
 }
 
-// refRows lists refs as a tree of their name's folders; choosing a ref
-// selects its commit in the history. A filter shows the folders open.
+// refRows lists refs as a tree of their name's folders, whose disclosure is
+// remembered; choosing a ref selects its commit in the history. A filter
+// shows the folders open.
 func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*refNode) {
 	for _, n := range nodes {
 		id := group + "/" + n.path
@@ -1040,6 +1060,9 @@ func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*ref
 			menu = func(m *ui.Menu) { v.remoteMenu(c, m, n.path) }
 		}
 		refFolder(c, id+"/", n.name, icon, state, menu, func() { v.refRows(c, group, filtering, n.children) })
+		if !filtering {
+			v.rememberDisclosure(id+"/", *state, true)
+		}
 	}
 }
 
