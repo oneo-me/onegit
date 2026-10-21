@@ -21,8 +21,10 @@ type projectNode struct {
 	Pinned     bool   `yaml:"pinned,omitempty"`
 	Removed    bool   `yaml:"removed,omitempty"`
 	Group      string `yaml:"group,omitempty"`
-	savedOpen  bool
-	Children   []*projectNode `yaml:"children,omitempty"`
+	// Icon is the path of the image the user chose for a repository.
+	Icon      string `yaml:"icon,omitempty"`
+	savedOpen bool
+	Children  []*projectNode `yaml:"children,omitempty"`
 }
 
 func scanProjects(ctx context.Context, root string) (*projectNode, error) {

@@ -35,16 +35,19 @@ The sidebar shows collapsible groups, all expanded by default: Pinned first, the
 
 Group headers offer New Group; user groups also rename or delete, which returns their projects to Ungrouped Projects. Dragging a group header onto another group moves it there; Pinned stays first.
 
-Pinning and group membership live in the cached nodes, and the group order, names and collapse in `groups`, all per parent directory. Pinned and Ungrouped Projects share their collapse across parent directories.
+Pinning, group membership and icons live in the cached nodes, and the group order, names and collapse in `groups`, all per parent directory. Pinned and Ungrouped Projects share their collapse across parent directories.
 
 Nodes start collapsed. The sidebar follows Neorio's Git window: Onevra `SidebarItem` rows in a `ScrollView`, and `Collapsible` headings that count their projects.
 
-- Repositories lead with the app icon as a placeholder for project icons; folders with a folder icon.
+- Repositories lead with their chosen icon, else a blank placeholder tile; folders with a folder icon.
 - Clicking a folder, Right and Left open and close it; folders are never selected.
 
 ## Context menus
 
-Right-clicking a folder offers Open Folder. A repository row also offers pinning, Move to Group, which can make a new group for it, and Remove Project.
+Right-clicking a folder offers Open Folder. A repository row also offers pinning, Move to Group, which can make a new group for it, Choose Icon, Reset Icon once one is set, and Remove Project.
+
+- The icon picker opens in the project's folder and accepts PNG, JPEG, GIF, WebP, BMP and SVG. An image that does not decode leaves the icon unchanged and shows a toast.
+- The node stores the image's path. Images load in the background on first use; an unreadable one shows the placeholder.
 
 - Removal hides the project from every group, the command palette and selection fallback without touching its files.
 - The flag lives in the cached tree, so scans and restarts keep the project hidden.

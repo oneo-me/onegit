@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	_ "embed"
 	"errors"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/egoist/mygo"
@@ -228,7 +226,12 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, depth int, visib
 		row := components.SidebarItemWithLeading(c, label, s.selectedProject == node, func(c *ui.Context, size float32) {
 			switch {
 			case node.Repository:
-				ui.Image(c, projectIcon()).Size(size, size).Fit(ui.Contain).Radius(size * .2).Shrink(0)
+				if img := s.projectImage(node); img != nil {
+					ui.Image(c, img).Size(size, size).Fit(ui.Contain).Radius(size * .2).Shrink(0)
+				} else {
+					// A blank tile holds the place of a project without an icon.
+					ui.Box(c).Size(size, size).Radius(size * .2).Shrink(0).Background(t.TextMuted.Alpha(.18))
+				}
 			case folder && node.Open:
 				components.Icon(c, lucide.FolderOpen).Size(size, size).Shrink(0).TextColor(t.TextMuted)
 			default:
@@ -266,6 +269,13 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, depth int, visib
 			}
 			s.projectGroupMenu(m, node)
 			m.Separator()
+			if m.Item(s.text("选择图标…")).Chosen() {
+				s.chooseProjectIcon(node)
+			}
+			if node.Icon != "" && m.Item(s.text("恢复默认图标")).Chosen() {
+				s.resetProjectIcon(node)
+			}
+			m.Separator()
 			if m.Item(s.text("移除项目")).Chosen() {
 				s.removeProject(node, s.repositoryDispatch())
 			}
@@ -279,18 +289,6 @@ func (s *settings) projectRow(c *ui.Context, node *projectNode, depth int, visib
 		}
 	}
 }
-
-//go:embed assets/icon.png
-var projectIconPNG []byte
-
-// projectIcon is the app icon, a placeholder for projects' own icons. It is
-// decoded once, on first use.
-var projectIcon = sync.OnceValue(func() ui.ImageSource {
-	if bitmap, err := ui.DecodeBitmap(projectIconPNG); err == nil {
-		return bitmap
-	}
-	return nil
-})
 
 // openFolder shows a path in the file manager: Finder, Explorer or the
 // desktop's file manager. Tests inject the platform call.

@@ -76,6 +76,9 @@ type settings struct {
 	path              string
 	problem           string
 	openPath          func(string) error
+	openDialog        func(mygo.OpenDialogOptions) ([]string, error)
+	choosingIcon      bool
+	projectIcons      map[string]ui.ImageSource
 	toast             *ui.Toast
 	groupDialog       groupDialog
 	window            *mygo.Window

@@ -8,7 +8,7 @@ User-facing release notes for Onegit.
 - Choose the project parent directory, theme and language in Settings, saved under `~/.onegit/` with legacy settings imported.
 - Scan the parent directory in the background into a project tree that drops projects no longer on disk and remembers expansion.
 - Pin projects, or sort them into your own groups that you rename, delete and drag into order; projects start in Ungrouped Projects and every group collapses independently.
-- Open a project's folder, or remove the project from the sidebar, from its menu; a removed project stays hidden until you undo or restore it.
+- Open a project's folder, choose an image from it as the project's icon, or remove the project from the sidebar, from its menu; a removed project stays hidden until you undo or restore it.
 - Find projects and open Settings from the command palette (`⌘F`).
 - Switch between a project's worktrees with tabs in the title bar when it has several, returning to the last project and worktree.
 - Open the shown worktree in the file manager, a terminal or a development tool, chosen or hidden in Settings, or the repository's GitHub page, from buttons after the title bar's Git actions.

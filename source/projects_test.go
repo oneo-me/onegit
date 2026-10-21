@@ -2,12 +2,15 @@ package main
 
 import (
 	"context"
+	"image"
+	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 	"github.com/oneo-me/onevra/source/components"
 )
@@ -201,7 +204,7 @@ func TestProjectContextMenu(t *testing.T) {
 		t.Fatal(err)
 	}
 	menu := tt.Menu()
-	if len(menu) != 6 || menu[0] != "Open Folder" || menu[1] != "-" || menu[2] != "Pin Project" || menu[3] != "Move to Group" || menu[4] != "-" || menu[5] != "Remove Project" {
+	if len(menu) != 8 || menu[0] != "Open Folder" || menu[1] != "-" || menu[2] != "Pin Project" || menu[3] != "Move to Group" || menu[4] != "-" || menu[5] != "Choose Icon…" || menu[6] != "-" || menu[7] != "Remove Project" {
 		t.Fatalf("project menu: %q", menu)
 	}
 	if err := tt.ChooseMenuItem("Remove Project"); err != nil {
@@ -291,5 +294,116 @@ func TestScanCompletionIgnoresOldDirectory(t *testing.T) {
 	oldCompletion()
 	if s.scanning || s.projectTree != nil || s.scanProblem != "" {
 		t.Fatalf("unexpected completion: %+v", s)
+	}
+}
+
+func TestProjectIcon(t *testing.T) {
+	root := t.TempDir()
+	repo := &projectNode{Path: filepath.Join(root, "repo"), Repository: true}
+	logo := filepath.Join(repo.Path, "logo.png")
+	broken := filepath.Join(repo.Path, "broken.png")
+	if err := os.MkdirAll(repo.Path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	f, err := os.Create(logo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := png.Encode(f, image.NewRGBA(image.Rect(0, 0, 4, 4))); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	if err := os.WriteFile(broken, []byte("not an image"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	callbacks := make(chan func(), 4)
+	s := &settings{
+		statePath: filepath.Join(t.TempDir(), "state.yaml"), systemLanguage: "en-US",
+		values: preferences{ProjectParentDir: root}, projectRoot: root,
+		projectTree: &projectNode{Path: root, Open: true, Children: []*projectNode{repo}},
+	}
+	s.repo.dispatch = func(fn func()) { callbacks <- fn }
+	opened := make(chan mygo.OpenDialogOptions, 2)
+	choice := logo
+	s.openDialog = func(opts mygo.OpenDialogOptions) ([]string, error) {
+		opened <- opts
+		return []string{choice}, nil
+	}
+	tt := ui.NewTester(func(c *ui.Context) {
+		ui.Column(c).Fill().Children(func() {
+			s.worktreeSidebar(c)
+			components.Toasts(c, components.ToastOptions{})
+		})
+	}, 500, 720)
+	tt.SetPreferences(ui.Preferences{ReduceMotion: true})
+	tt.Frame()
+	choose := func() {
+		t.Helper()
+		if err := tt.RightClick("repo"); err != nil {
+			t.Fatal(err)
+		}
+		if err := tt.ChooseMenuItem("Choose Icon…"); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case opts := <-opened:
+			if opts.DefaultPath != repo.Path || opts.Directory || opts.Multiple || len(opts.Filters) != 1 {
+				t.Fatalf("picker options: %+v", opts)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("picker did not open")
+		}
+		select {
+		case fn := <-callbacks:
+			fn()
+		case <-time.After(5 * time.Second):
+			t.Fatal("picker did not finish")
+		}
+		tt.Frame()
+	}
+
+	// An image that does not decode leaves the placeholder.
+	choice = broken
+	choose()
+	if repo.Icon != "" || !tt.HasText("Could not use this image") {
+		t.Fatalf("broken image: icon %q, texts %q", repo.Icon, tt.Texts())
+	}
+
+	choice = logo
+	choose()
+	if repo.Icon != logo || s.projectIcons[logo] == nil || s.projectImage(repo) == nil {
+		t.Fatalf("icon was not applied: %q", repo.Icon)
+	}
+	saved, err := loadSidebarState(s.statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if node := findProject(saved.Roots[root], repo.Path); node == nil || node.Icon != logo {
+		t.Fatalf("icon was not saved: %+v", node)
+	}
+
+	// A restart reads the saved icon in the background.
+	s.projectIcons = nil
+	if s.projectImage(repo) != nil {
+		t.Fatal("icon should load in the background")
+	}
+	select {
+	case fn := <-callbacks:
+		fn()
+	case <-time.After(5 * time.Second):
+		t.Fatal("icon did not load")
+	}
+	if s.projectImage(repo) == nil {
+		t.Fatal("saved icon was not loaded")
+	}
+
+	if err := tt.RightClick("repo"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tt.ChooseMenuItem("Reset Icon"); err != nil {
+		t.Fatal(err)
+	}
+	if repo.Icon != "" || s.projectImage(repo) != nil {
+		t.Fatal("icon was not reset")
 	}
 }
