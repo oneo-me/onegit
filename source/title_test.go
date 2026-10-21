@@ -4,7 +4,6 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -37,25 +36,17 @@ func TestRepositoryTitleActions(t *testing.T) {
 		}
 	}
 
-	// Only a project with several worktrees shows their tabs.
-	s.overview.Worktrees = []worktree{{Path: repo}}
-	tt.Frame()
-	if !tt.HasText("demo") {
-		t.Fatalf("one worktree: %v", tt.Texts())
+	// The toolbar sits in the middle, and the name stays with several
+	// worktrees, whose tabs belong to the page.
+	fetch, _ := tt.Find("获取")
+	stash, _ := tt.Find("贮藏")
+	if mid := (fetch.X + stash.X + stash.W) / 2; mid < 380 || mid > 420 {
+		t.Fatalf("toolbar not centered: %v to %v", fetch, stash)
 	}
-	s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "feature")})
+	s.overview.Worktrees = []worktree{{Path: repo}, {Path: filepath.Join(root, "feature")}}
 	tt.Frame()
-	if !tt.HasText("demo") || !tt.HasText("feature") {
-		t.Fatalf("worktree tabs: %v", tt.Texts())
-	}
-
-	// Many worktrees scroll within the title bar and leave the actions in place.
-	for i := range 30 {
-		s.overview.Worktrees = append(s.overview.Worktrees, worktree{Path: filepath.Join(root, "worktree-"+strconv.Itoa(i))})
-	}
-	tt.Frame()
-	if r, ok := tt.Find("贮藏"); !ok || r.X+r.W > 800 {
-		t.Fatalf("worktree tabs pushed the actions out: %+v", r)
+	if !tt.HasText("demo") || tt.HasText("feature") {
+		t.Fatalf("worktrees in the title bar: %v", tt.Texts())
 	}
 
 	page := ui.NewTester(s.welcome, 800, 600)
@@ -94,7 +85,7 @@ func TestRepositoryTitleLaunchers(t *testing.T) {
 	tt.Frame()
 	stash, _ := tt.Find("Stash")
 	for _, label := range []string{"Open in Finder", "Open in Ghostty", "Open on GitHub"} {
-		if r, ok := tt.Find(label); !ok || r.X < stash.X {
+		if r, ok := tt.Find(label); !ok || r.X < stash.X || r.X+r.W > 1000 {
 			t.Fatalf("%s missing or before the Git actions: %v", label, tt.Texts())
 		}
 	}

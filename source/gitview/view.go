@@ -11,6 +11,8 @@
 package gitview
 
 import (
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -73,6 +75,10 @@ type Options struct {
 	// user double-clicks the branch another worktree has checked out. Nil
 	// leaves such branches alone.
 	OpenWorktree func(path string)
+	// Worktrees lists the repository's worktrees below the refs pane's
+	// entries, above its refs, when it has more than one, the shown one in bold;
+	// double-clicking another goes to OpenWorktree.
+	Worktrees bool
 	// Overlay builds content floating at the top of the section, such as a
 	// command panel, whose rows the history keeps clear of.
 	Overlay func(c *ui.Context)
@@ -764,6 +770,8 @@ func (v *View) refsPane(c *ui.Context) {
 	t := c.Theme()
 	components.ScrollView(c, components.ScrollViewOptions{}).FillWidth().Grow(1).MinHeight(0).Children(func() {
 		ui.Column(c).FillWidth().Shrink(0).Gap(1).Padding(t.Space(1.5), t.Space(2)).Children(func() {
+			trees, query := v.repo.refTrees, strings.TrimSpace(v.refFilter)
+			found := false
 			if sidebarItem(c, v.text("current_changes"), lucide.FileDiff(), v.section == sectionChanges, lineCounts(v.current.changes.Files)).Clicked() {
 				v.section, v.seekChanges = sectionChanges, false
 				v.loadChanges()
@@ -803,8 +811,13 @@ func (v *View) refsPane(c *ui.Context) {
 					v.targetChanged()
 				}
 			}
-			trees, query := v.repo.refTrees, strings.TrimSpace(v.refFilter)
-			found := false
+			// A repository's only worktree needs no list.
+			if v.opts.Worktrees && len(v.repo.checkouts) > 1 {
+				if checkouts := filterCheckouts(v.repo.checkouts, query); len(checkouts) > 0 {
+					found = true
+					v.refGroup(c, "worktrees", v.text("worktrees"), lucide.FolderGit2(), true, query != "", nil, func() { v.worktreeRows(c, checkouts) })
+				}
+			}
 			if pinned := v.pinnedRefs(); len(pinned) > 0 {
 				visible := false
 				if query == "" {
@@ -1064,6 +1077,61 @@ func (v *View) refRows(c *ui.Context, group string, filtering bool, nodes []*ref
 			v.rememberDisclosure(id+"/", *state, true)
 		}
 	}
+}
+
+// worktreeRows lists worktrees by their directory's name, the shown one in
+// bold. Choosing one selects its checked out commit, and
+// double-clicking another goes to OpenWorktree.
+func (v *View) worktreeRows(c *ui.Context, checkouts []Checkout) {
+	for _, w := range checkouts {
+		id := "worktrees/" + w.Path
+		shown := path.Clean(filepath.ToSlash(w.Path)) == path.Clean(filepath.ToSlash(v.path))
+		ui.Column(c).Key("ref-" + id).FillWidth().Shrink(0).Children(func() {
+			row := components.TreeItem(c, worktreeName(w.Path), nil, v.section == sectionCommits && v.ref == id, nil).Height(treeRow(c))
+			if shown {
+				row.Bold()
+			}
+			tip := w.Path
+			if w.Branch != "" {
+				tip = w.Branch + "\n" + tip
+			}
+			components.Tooltip(c, row, tip)
+			if v.opts.OpenWorktree != nil && !shown {
+				row.ContextMenu(func(m *ui.Menu) {
+					if m.Item(v.textf("ref_open_worktree", map[string]any{"Worktree": worktreeName(w.Path)})).Chosen() {
+						v.opts.OpenWorktree(w.Path)
+					}
+				})
+			}
+			if row.Clicked() && w.Head != "" {
+				v.revealCommit(w.Head)
+				v.ref = id
+			}
+			if row.DoubleClicked() && !shown && v.opts.OpenWorktree != nil {
+				v.opts.OpenWorktree(w.Path)
+			}
+		})
+	}
+}
+
+// worktreeName is the last part of a worktree's path, on this computer or a
+// host.
+func worktreeName(p string) string { return path.Base(filepath.ToSlash(p)) }
+
+// filterCheckouts keeps the worktrees whose name or branch contains query,
+// ignoring case. An empty query keeps every worktree.
+func filterCheckouts(checkouts []Checkout, query string) []Checkout {
+	query = strings.ToLower(query)
+	if query == "" {
+		return checkouts
+	}
+	var kept []Checkout
+	for _, w := range checkouts {
+		if strings.Contains(strings.ToLower(worktreeName(w.Path)), query) || strings.Contains(strings.ToLower(w.Branch), query) {
+			kept = append(kept, w)
+		}
+	}
+	return kept
 }
 
 // iconButton is a small square ghost button with a tooltip; active ones

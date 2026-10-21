@@ -71,9 +71,12 @@ func (s *settings) gitView() *gitview.View {
 		// Files open in their default application or show in the file manager.
 		OpenFile:   mygo.Shell.OpenPath,
 		RevealFile: mygo.Shell.ShowItemInFolder,
-		// A branch another worktree has checked out opens its tab.
+		// A worktree, or a branch another worktree has checked out, switches
+		// the page to that worktree.
 		OpenWorktree: s.openWorktree,
-		// A worktree added from a ref's menu gets its tab.
+		// The refs pane lists the worktrees, including one added from a
+		// ref's menu once Git lists it.
+		Worktrees: true,
 		OnWrite: func(op, _ string) {
 			if op == gitview.OpWorktree {
 				s.reloadWorktrees()
@@ -140,8 +143,8 @@ func (s *settings) repositoryMessage(c *ui.Context, message string) {
 }
 
 // repositoryTitle fills the window's title bar, as Neorio does, instead of
-// adding a toolbar strip: the project's name, or tabs naming its worktrees
-// when it has more than one, then the view's toolbar and the launchers.
+// adding a toolbar strip: the project's name, the view's toolbar centered
+// between the sides, and the launchers.
 func (s *settings) repositoryTitle(c *ui.Context) {
 	project := s.selectedProject
 	if project == nil || !project.Repository {
@@ -150,14 +153,13 @@ func (s *settings) repositoryTitle(c *ui.Context) {
 	}
 	size := max(32, c.Theme().Rem(2))
 	ui.Row(c).Grow(1).MinWidth(0).FillHeight().AlignItems(ui.Center).Gap(8).Margin(0, titleTrailing(c, size), 0, 0).Children(func() {
-		if len(s.overview.Worktrees) > 1 {
-			s.worktreeTabs(c)
-		} else {
+		// Equal sides keep the toolbar centered; the launchers' side never
+		// shrinks below them, and the name gives way first.
+		ui.Row(c).Key("title-name").Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Children(func() {
 			components.Text(c, projectName(project.Path)).Bold().SingleLine().Shrink(1).MinWidth(0)
-		}
-		ui.Spacer(c)
+		})
 		s.gitView().Toolbar(c, size)
-		ui.Row(c).Key("launchers").Shrink(0).AlignItems(ui.Center).Gap(6).Children(func() { s.launcherButtons(c) })
+		ui.Row(c).Key("launchers").Grow(1).Basis(0).Justify(ui.End).AlignItems(ui.Center).Gap(6).Children(func() { s.launcherButtons(c) })
 	})
 }
 

@@ -142,48 +142,49 @@ func TestWorktreesReloadAfterAdding(t *testing.T) {
 	}
 }
 
+// The title bar keeps the project's name, and the refs pane lists the
+// worktrees, where double-clicking one switches the page to it in place.
 func TestProjectWorktreeContent(t *testing.T) {
-	s := &settings{systemLanguage: "zh-CN", selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
-		{Path: "/repo", Branch: "main", Main: true}, {Path: "/outside/feature", Branch: "feature"},
-	}}}
-	tt := ui.NewTester(s.repositoryTitle, 800, 52)
-	tt.Frame()
-	for _, label := range []string{"repo", "feature"} {
-		if !tt.HasText(label) {
-			t.Fatalf("missing %q", label)
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(root, "repo")
+	testGit(t, "init", repo)
+	testGit(t, "-C", repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
+	feature := filepath.Join(root, "feature")
+	testGit(t, "-C", repo, "worktree", "add", "-q", feature)
+	s := &settings{systemLanguage: "zh-CN", statePath: filepath.Join(t.TempDir(), "state.yaml")}
+	callbacks := make(chan func(), 64)
+	pump := func(done func() bool) {
+		t.Helper()
+		for !done() {
+			select {
+			case fn := <-callbacks:
+				fn()
+			case <-time.After(10 * time.Second):
+				t.Fatal("read timed out")
+			}
 		}
 	}
-	page := ui.NewTester(s.welcome, 800, 600)
+	s.selectProject(&projectNode{Path: repo, Repository: true}, func(fn func()) { callbacks <- fn })
+	pump(func() bool { return len(s.overview.Worktrees) == 2 && !s.repositoryLoading() })
+	title := ui.NewTester(s.repositoryTitle, 800, 52)
+	title.Frame()
+	if !title.HasText("repo") || title.HasText("feature") {
+		t.Fatalf("title bar: %v", title.Texts())
+	}
+	page := ui.NewTester(s.welcome, 1000, 700)
 	page.Frame()
-	if page.HasText("feature") {
-		t.Fatal("worktree tabs remain below the title bar")
+	group, ok := page.Find("工作树")
+	changes, _ := page.Find("当前更改")
+	if !ok || group.Y < changes.Y || !page.HasText("feature") {
+		t.Fatalf("worktrees group: %v", page.Texts())
 	}
-}
-
-func TestWorktreeSelection(t *testing.T) {
-	s := &settings{selectedProject: &projectNode{Path: "/repo", Repository: true}, overview: projectOverview{Worktrees: []worktree{
-		{Path: "/repo", Main: true}, {Path: "/outside/feature"},
-	}}}
-	s.repo.dispatch = func(func()) {}
-	tt := ui.NewTester(s.worktreeTabs, 800, 600)
-	tt.Frame()
-	for _, row := range []struct{ label, path string }{{"feature", "/outside/feature"}, {"repo", "/repo"}} {
-		if err := tt.Click(row.label); err != nil {
-			t.Fatal(err)
-		}
-		tt.Frame()
-		if s.overview.SelectedPath != row.path {
-			t.Fatalf("selected %q, want %q", s.overview.SelectedPath, row.path)
-		}
-	}
-	tt.Key(0, ui.KeyDown)
-	tt.Frame()
-	if s.overview.SelectedPath != "/outside/feature" {
-		t.Fatal("keyboard selection failed")
-	}
-	s.selectProject(&projectNode{Path: "/folder"}, func(fn func()) { fn() })
-	if s.overview.SelectedPath != "" {
-		t.Fatal("worktree selection retained across projects")
+	page.Click("feature")
+	page.Click("feature")
+	if s.overview.SelectedPath != feature || s.gitView().Path() != feature {
+		t.Fatalf("shown %q", s.overview.SelectedPath)
 	}
 }
 
@@ -231,26 +232,18 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 			}
 		}
 	}
-	choose := func(repo, label, want string) {
+	choose := func(repo, want string) {
 		t.Helper()
 		s.selectProject(findProject(s.projectTree, repo), dispatch)
 		finish(s)
-		view := ui.NewTester(s.worktreeTabs, 800, 600)
-		view.Frame()
-		// A repository's only worktree is already selected.
-		if _, ok := view.Find(label); ok {
-			if err := view.Click(label); err != nil {
-				t.Fatal(err)
-			}
-			view.Frame()
-		}
+		s.openWorktree(want)
 		if s.overview.SelectedPath != want {
 			t.Fatalf("selected %q, want %q", s.overview.SelectedPath, want)
 		}
 		finish(s)
 	}
-	choose(repoA, "linked", linked)
-	choose(repoB, "b", repoB)
+	choose(repoA, linked)
+	choose(repoB, repoB)
 	s.selectProject(findProject(s.projectTree, repoA), dispatch)
 	finish(s)
 	if s.overview.SelectedPath != linked {
@@ -268,10 +261,8 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 		t.Fatal("cached repository was not restored immediately")
 	}
 	finish(s)
-	view := ui.NewTester(s.worktreeTabs, 800, 600)
-	view.Frame()
 	if s.overview.SelectedPath != linked || s.overview.selectedIndex != 1 {
-		t.Fatal("restart did not restore worktree highlight")
+		t.Fatal("restart did not restore the worktree")
 	}
 	s.selectProject(findProject(s.projectTree, repoB), dispatch)
 	finish(s)
@@ -295,8 +286,6 @@ func TestRememberProjectAndWorktreeSelections(t *testing.T) {
 	testGit(t, "-C", repoA, "worktree", "remove", linked)
 	s.selectProject(findProject(s.projectTree, repoA), dispatch)
 	finish(s)
-	view = ui.NewTester(s.worktreeTabs, 800, 600)
-	view.Frame()
 	if s.overview.SelectedPath != repoA || s.overview.selectedIndex != 0 {
 		t.Fatal("removed worktree did not fall back to the first entry")
 	}

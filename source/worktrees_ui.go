@@ -3,14 +3,10 @@ package main
 import (
 	"context"
 	"path/filepath"
-
-	"github.com/egoist/mygo/ui"
-	"github.com/oneo-me/onevra/source/components"
 )
 
-// projectOverview owns the worktree tabs of the selected repository. The tab
-// strip replaces the former worktree list: each worktree is one tab, and the
-// strip stays hidden while the main worktree is the only entry.
+// projectOverview holds the selected repository's worktrees and the one the
+// page shows, which the Git view's Worktrees group switches.
 type projectOverview struct {
 	Worktrees     []worktree
 	SelectedPath  string
@@ -115,9 +111,9 @@ func (s *settings) applyWorktreeSelection(project string) {
 	s.rememberWorktreeSelection()
 }
 
-// selectWorktreeTab switches the active worktree and reloads its repository
+// selectWorktree switches the active worktree and reloads its repository
 // data. It is a navigation change, never a Git branch checkout.
-func (s *settings) selectWorktreeTab(index int) {
+func (s *settings) selectWorktree(index int) {
 	if index < 0 || index >= len(s.overview.Worktrees) || index == s.overview.selectedIndex {
 		return
 	}
@@ -127,12 +123,13 @@ func (s *settings) selectWorktreeTab(index int) {
 	s.repositoryChanged()
 }
 
-// openWorktree selects the tab of the worktree at path, as Git lists it.
+// openWorktree shows the worktree at path, as Git lists it, in place of the
+// current one.
 func (s *settings) openWorktree(path string) {
 	path = filepath.Clean(filepath.FromSlash(path))
 	for i, item := range s.overview.Worktrees {
 		if item.Path == path {
-			s.selectWorktreeTab(i)
+			s.selectWorktree(i)
 			return
 		}
 	}
@@ -147,31 +144,6 @@ func (s *settings) rememberWorktreeSelection() {
 	}
 	s.state.SelectedWorktrees[s.selectedProject.Path] = s.overview.SelectedPath
 	s.saveSidebarState()
-}
-
-// worktreeTabs builds the segmented worktree tabs in the title bar, shown
-// when the project has more than one worktree.
-func (s *settings) worktreeTabs(c *ui.Context) {
-	labels := make([]string, len(s.overview.Worktrees))
-	for i, item := range s.overview.Worktrees {
-		labels[i] = worktreeLabel(item)
-	}
-	selected := max(0, s.overview.selectedIndex)
-	// Many worktrees scroll rather than push the actions out of the title bar.
-	components.ScrollView(c, components.ScrollViewOptions{Axes: components.ScrollHorizontal}).
-		Shrink(1).MinWidth(0).AlignItems(ui.Center).Children(func() {
-		parts := components.Tabs(c, &selected, components.TabsSegmented, labels...)
-		parts.List.AlignSelf(ui.Center).Shrink(0)
-		if parts.List.Changed() {
-			s.selectWorktreeTab(selected)
-		}
-	})
-}
-
-// worktreeLabel names a worktree after its directory; the main worktree's
-// directory is the project's name.
-func worktreeLabel(item worktree) string {
-	return projectName(item.Path)
 }
 
 func projectName(path string) string {

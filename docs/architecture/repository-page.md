@@ -1,18 +1,18 @@
 # Repository page
 
-The repository page shows one selected project. The window's title bar holds the project's name or its worktree tabs, then the view's toolbar and the launchers, as in Neorio, rather than a strip of their own. A hairline separates it from the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar's layout and tabs; the view owns its toolbar and everything below it.
+The repository page shows one selected project. The window's title bar holds the project's name on the left, the view's toolbar in the middle and the launchers on the right, as in Neorio, rather than a strip of their own. A hairline separates it from the [Git view](git-view.md) of the selected worktree. Onegit owns the title bar's layout and which worktree is shown; the view owns its toolbar and everything below it.
 
-## Worktree tabs
+## Worktrees
 
-The segmented tabs list every worktree Git reports for the repository, including worktrees outside the parent directory. The main worktree comes first, as Git lists it, named after its directory: the project's name. Tabs appear only for more than one worktree; otherwise, and while loading, the project's name stands in their place. Many tabs scroll before the actions.
+The view's Worktrees group, below Current changes and All commits and above the refs, lists every worktree Git reports for the repository, including worktrees outside the parent directory. It shows only for more than one worktree. The main worktree comes first, named after its directory: the project's name; the shown worktree's name is bold.
 
-Switching tabs only changes the path the view shows. A worktree added from a ref's menu gets its tab once Git lists it, one deleted with its branch loses it, and the shown tab stays. Double-clicking a branch another worktree has checked out selects that worktree's tab. Switching projects or worktrees, or closing the window, drops in-flight reads and discards their results.
+Double-clicking another worktree, or a branch it has checked out, switches the page to it in place. That only changes the path the view shows. A worktree added from a ref's menu joins the group once Git lists it, one deleted with its branch leaves it, and the shown worktree stays. Switching projects or worktrees, or closing the window, drops in-flight reads and discards their results.
 
 ## Title bar actions
 
-The view's `Toolbar`, shared with Neorio's Git window, follows the name or tabs: raised capsules with an icon and name for Fetch, Pull, Push and Stash, and commit counts after the name. A running action shows a spinner in place of its icon. The view runs one action at a time per worktree, shows failures as toasts and rereads the worktree after each action.
+The view's `Toolbar`, shared with Neorio's Git window, is centered between the name and the launchers, which keep their width while the name truncates: raised capsules with an icon and name for Fetch, Pull, Push and Stash, and commit counts after the name. A running action shows a spinner in place of its icon. The view runs one action at a time per worktree, shows failures as toasts and rereads the worktree after each action.
 
-Raised icon buttons follow, drawn with each kind's glyph rather than the application's icon:
+Raised icon buttons on the right are drawn with each kind's glyph rather than the application's icon:
 
 - The file manager, terminal and development tool open the selected worktree. Onegit finds them with the shared `launchers` package off the main thread at startup; Settings chooses the terminal and tool, or hides either, saved as `terminal` and `editor` in `config.yaml`.
 - GitHub opens the view's `GitHubPage`: the page of the remote the branch tracks, else of `origin` or the only remote, shown only when that is on GitHub.
@@ -21,7 +21,7 @@ Raised icon buttons follow, drawn with each kind's glyph rather than the applica
 ## Onegit's choices for the view
 
 - Watching is off: the view reads when a worktree is shown and after an action.
-- No ref filter and no inserted history rows.
+- The Worktrees group is on; no ref filter and no inserted history rows.
 - The view's layout, ref group disclosure, line wrapping, drafts, pinned refs, reflog choice, merge type, fetch, pull, push, stash, rebase and cherry-pick options, and remotes fetched automatically are saved in `state.yaml` under `gitView`.
 - Commit authors' avatars are cached in `~/.onegit/avatars/`, downloaded from GitHub or Gravatar.
 

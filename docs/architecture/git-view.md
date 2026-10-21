@@ -5,6 +5,7 @@
 ## What it shows
 
 - **Refs pane.** Current changes, always offered; the view opens on them once read when there are any, and otherwise on the history. All commits with its count.
+- With `Worktrees` set and more than one worktree, the worktrees by directory name follow All commits, the shown one in bold; double-clicking another goes to `OpenWorktree`.
 - Branches, remote branches and tags as folder trees, then stashes when there are any, with a filter. Choosing a ref selects its commit; a stash lists the files it saved, untracked ones included.
 - Pinned refs come first, and the All commits menu shows lost commits from the reflog.
 - The Branches heading creates a branch or selects stale ones; Remote branches adds a remote; Tags creates a tag.

@@ -839,3 +839,60 @@ func TestViewBranchMenu(t *testing.T) {
 	}
 	pump(func() bool { return ready() && hasRef(v.repo.refTrees.branches, "feature-2") })
 }
+
+// With Worktrees set, the refs pane lists the repository's worktrees between
+// its entries and the branches once it has more than one; double-clicking another opens it through
+// OpenWorktree.
+func TestViewListsWorktrees(t *testing.T) {
+	// The view shows a path as Git lists it.
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(root, "demo")
+	git(t, root, "init", "-q", "-b", "main", repo)
+	git(t, repo, "commit", "-q", "--allow-empty", "-m", "init")
+
+	var opened string
+	v, pump := testView(t, Options{Worktrees: true, OpenWorktree: func(path string) { opened = path }})
+	v.SetPath(repo)
+	pump(func() bool { return !v.Loading() && len(v.repo.checkouts) == 1 })
+	view := ui.NewTester(viewFrame(v), 1000, 700)
+	view.Frame()
+	if view.HasText("Worktrees") {
+		t.Fatal("the only worktree listed")
+	}
+
+	other := filepath.Join(root, "demo-topic")
+	git(t, repo, "worktree", "add", "-q", "-b", "topic", other)
+	v.Reload()
+	pump(func() bool { return !v.Loading() && len(v.repo.checkouts) == 2 })
+	view.Frame()
+	group, ok := view.Find("Worktrees")
+	all, _ := view.Find("All commits")
+	branches, _ := view.Find("Branches")
+	if !ok || group.Y <= all.Y || group.Y >= branches.Y || !view.HasText("demo") || !view.HasText("demo-topic") {
+		t.Fatalf("worktrees group: %v", view.Texts())
+	}
+	view.Click("demo")
+	view.Click("demo")
+	if opened != "" {
+		t.Fatalf("the shown worktree opened %q", opened)
+	}
+	view.Advance(time.Second)
+	view.Click("demo-topic")
+	view.Click("demo-topic")
+	if filepath.Base(opened) != "demo-topic" {
+		t.Fatalf("opened %q", opened)
+	}
+
+	// Without the option, the group stays out.
+	plain, pump := testView(t, Options{})
+	plain.SetPath(repo)
+	pump(func() bool { return !plain.Loading() && len(plain.repo.checkouts) == 2 })
+	view = ui.NewTester(viewFrame(plain), 1000, 700)
+	view.Frame()
+	if view.HasText("Worktrees") {
+		t.Fatal("worktrees listed without the option")
+	}
+}
