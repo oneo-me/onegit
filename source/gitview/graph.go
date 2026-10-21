@@ -46,13 +46,12 @@ type openLine struct {
 
 // buildGraph lays out the revision graph of commits, listed newest first with
 // each after its children. It keeps a line open for each parent still to come
-// and gives every line a stable ID, so a branch keeps its column and color
-// while open and a merge folds it back into its first parent. It returns a
-// row per commit.
+// and numbers a new line by the column it opens in, as Fork does, so a branch
+// takes that column's color and keeps it while open and a merge folds it back
+// into its first parent. It returns a row per commit.
 func buildGraph(commits []Commit) []graphRow {
 	rows := make([]graphRow, len(commits))
 	var previous, current []openLine
-	nextID := 0
 	for i, commit := range commits {
 		current = current[:0]
 		var first string
@@ -84,9 +83,8 @@ func buildGraph(commits []Commit) []graphRow {
 		}
 		if len(current) < maxGraphLines {
 			if !found {
-				// A branch tip opens a line.
-				column, id = len(current), nextID
-				nextID++
+				// A branch tip opens a line in the next column.
+				column, id = len(current), len(current)
 				if first != "" {
 					current = append(current, openLine{first, id})
 					lines = append(lines, graphLine{id, -1, column, column})
@@ -104,9 +102,8 @@ func buildGraph(commits []Commit) []graphRow {
 					}
 				}
 				if !joined {
-					lines = append(lines, graphLine{nextID, -1, column, len(current)})
-					current = append(current, openLine{parent, nextID})
-					nextID++
+					lines = append(lines, graphLine{len(current), -1, column, len(current)})
+					current = append(current, openLine{parent, len(current)})
 				}
 			}
 		}

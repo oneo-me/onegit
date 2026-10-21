@@ -20,13 +20,13 @@ func TestBuildGraphJoinsBranchesAndMerges(t *testing.T) {
 	}
 	// The merge opens a line to its second parent, which ends at the root
 	// beside the first parent's line. A later root needs only its own
-	// column, however wide the rows above it are.
+	// column, and takes column 0's line ID and color, as Fork does.
 	want := []string{
 		"0:0/2 [{0 -1 0 0} {1 -1 0 1}]",
 		"1:1/2 [{0 0 0 0} {1 1 1 1}]",
 		"0:0/2 [{0 0 0 0} {1 1 1 1}]",
 		"0:0/2 [{0 0 0 -1} {1 1 0 -1}]",
-		"0:2/1 []",
+		"0:0/1 []",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("graph:\n%s", strings.Join(got, "\n"))

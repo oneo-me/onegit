@@ -144,6 +144,16 @@ func commitIndex(commits []Commit, hash string) int {
 	return -1
 }
 
+// graphColumn returns the graph column of the commit at index in the history,
+// or -1 when it has no shown row.
+func (h *historyState) graphColumn(index int) int {
+	row, ok := slices.BinarySearch(h.rows, index)
+	if !ok || row >= len(h.graph) {
+		return -1
+	}
+	return h.graph[row].Column
+}
+
 // fold lays out the shown commits of repo's history, hiding those the
 // collapsed merges fold.
 func (h *historyState) fold(repo repositoryState) {
@@ -479,7 +489,7 @@ func (v *View) commitRow(c *ui.Context, commit Commit, row graphRow) {
 		ui.Row(c).Grow(1).MinWidth(0).AlignItems(ui.Center).Gap(t.Space(1.5)).Padding(0, 0, 0, t.Space(1)).Children(func() {
 			if len(commit.Refs) > 0 {
 				// Refs give way to the subject rather than hiding it.
-				ui.Row(c).Shrink(1).MinWidth(0).MaxWidth(320).Gap(t.Space(1)).Clip().Children(func() { refPills(c, commit.Refs, v.tracking.Upstream, v.repo.github) })
+				ui.Row(c).Shrink(1).MinWidth(0).MaxWidth(320).Gap(t.Space(1)).Clip().Children(func() { refPills(c, commit.Refs, v.tracking.Upstream, v.repo.github, row.Column) })
 			}
 			ui.Row(c).Grow(1).MinWidth(120).AlignItems(ui.Center).Gap(t.Space(1)).Children(func() {
 				subject := components.Text(c, commit.Subject).FontSize(13).MinWidth(0).SingleLine().Ellipsis("…")
@@ -536,23 +546,22 @@ func (v *View) entryRow(c *ui.Context, e Entry, row graphRow) {
 	})
 }
 
-// refPills labels the branches, remote branches and tags at a commit,
-// leaving out remotes' HEAD aliases. The checkout's refs are bold: its
-// branch or detached HEAD, the branch's upstream, and tags at its commit.
-// A remote branch carries the mark of its remote's host from github, and a
-// tag is cyan with an outline of the same hue.
-func refPills(c *ui.Context, refs []string, upstream string, github map[string]bool) {
+// refPills labels the branches, remote branches and tags at a commit in the
+// graph's column, leaving out remotes' HEAD aliases. A branch takes that
+// column's color for its border and tint, as Fork colors its labels, and a
+// tag takes Fork's tag hue. The checkout's refs are bold: its branch or
+// detached HEAD, the branch's upstream, and tags at its commit. A remote
+// branch carries the mark of its remote's host from github.
+func refPills(c *ui.Context, refs []string, upstream string, github map[string]bool, column int) {
 	t := c.Theme()
 	head := slices.ContainsFunc(refs, isHeadRef)
-	cyan := ui.RGB(8, 145, 178)
-	if t.Dark {
-		cyan = ui.RGB(34, 211, 238)
-	}
 	for _, ref := range refs {
-		icon, name, color, current, outline := lucide.GitBranch, ref, t.Accent, ref == upstream, false
+		border, background := refColors(column, t.Dark)
+		icon, name, current := lucide.GitBranch, ref, ref == upstream
 		switch {
 		case strings.HasPrefix(ref, "tag: "):
-			icon, name, color, current, outline = lucide.Tag, strings.TrimPrefix(ref, "tag: "), cyan, head, true
+			icon, name, current = lucide.Tag, strings.TrimPrefix(ref, "tag: "), head
+			border, background = tagColors(t.Dark)
 		case isHeadRef(ref):
 			icon, name, current = lucide.CircleDot, strings.TrimPrefix(ref, "HEAD -> "), true
 		case strings.HasSuffix(ref, "/HEAD"):
@@ -562,13 +571,10 @@ func refPills(c *ui.Context, refs []string, upstream string, github map[string]b
 				icon = remoteIcon(github, remote)
 			}
 		}
-		pill := ui.Row(c).Shrink(0).Height(18).Radius(5).Background(color.Alpha(.14)).Padding(0, 6).Gap(4).AlignItems(ui.Center)
-		if outline {
-			pill.Border(1, color.Alpha(.5))
-		}
+		pill := ui.Row(c).Shrink(0).Height(18).Radius(5).Border(1, border).Background(background).Padding(0, 6).Gap(4).AlignItems(ui.Center)
 		pill.Children(func() {
-			components.Icon(c, icon).Size(11, 11).Shrink(0).TextColor(color)
-			label := components.Text(c, name).FontSize(11).TextColor(color).SingleLine()
+			components.Icon(c, icon).Size(11, 11).Shrink(0).TextColor(t.Text)
+			label := components.Text(c, name).FontSize(11).TextColor(t.Text).SingleLine()
 			if current {
 				label.Bold()
 			}
@@ -648,15 +654,15 @@ func (v *View) commitDetails(c *ui.Context) {
 		case detailFiles:
 			v.filesView(c, h.files, v.text("no_files"))
 		default:
-			v.commitMessage(c, v.repo.commits[i])
+			v.commitMessage(c, v.repo.commits[i], v.history.graphColumn(i))
 		}
 	})
 }
 
 // commitMessage shows a commit's author, its committer when another person
 // committed it and the co-authors its message names, above its message,
-// hash, parents and refs; choosing a parent selects it.
-func (v *View) commitMessage(c *ui.Context, commit Commit) {
+// hash, parents and refs in its graph column; choosing a parent selects it.
+func (v *View) commitMessage(c *ui.Context, commit Commit, column int) {
 	t := c.Theme()
 	field := func(label string, value func()) {
 		ui.Row(c).FillWidth().MinWidth(0).AlignItems(ui.Center).Gap(t.Space(3)).Children(func() {
@@ -728,7 +734,7 @@ func (v *View) commitMessage(c *ui.Context, commit Commit) {
 				})
 			}
 			if len(commit.Refs) > 0 {
-				field(v.text("commit_refs"), func() { refPills(c, commit.Refs, v.tracking.Upstream, v.repo.github) })
+				field(v.text("commit_refs"), func() { refPills(c, commit.Refs, v.tracking.Upstream, v.repo.github, column) })
 			}
 		})
 	})
