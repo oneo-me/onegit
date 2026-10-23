@@ -16,6 +16,7 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 
 ## Working with the user
 
+- Never create sub-Agents or Git worktrees; work directly in the current checkout.
 - Onevra is consumed as the published module version in `source/go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any Onevra change with the user first, then follow that repository's own instructions.
 - Use the MyGo CLI through `go tool mygo`; never install it globally. Build output goes to the root `dist/`, and Neorio tasks live in `.neorio/config.yaml`.
 - Commit only when authorized. Never push, tag or publish without explicit authorization.
@@ -31,12 +32,14 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 
 ## Documentation
 
-- Update a document only when a fact its reader needs changes. README is onboarding, ARCHITECTURE.md is boundaries and rationale, CHANGELOG.md is user-facing release notes.
-- Keep budgets: AGENTS.md 4 KiB, each README 8 KiB, ARCHITECTURE.md 12 KiB, each subject 16 KiB.
-- CHANGELOG.md records what a user notices or must do: one short sentence per outcome, in the product's words. Omit refactors, tests, styling, copy tweaks, fixes to unreleased features and internal work; merge related entries instead of appending task histories.
-- When you edit a document, also trim stale, duplicated or overly detailed text in it.
-- Keep `README.md` and `README.zh-CN.md` equivalent, with reciprocal language links; update both in the same change.
-- Keep paragraphs to about four short sentences and list items to two lines; use lists and tables for steps and mappings.
-- Document only commands that exist and work.
+- Update a document only when a fact its reader needs changes. README is onboarding, ARCHITECTURE.md is boundaries, CHANGELOG.md is release notes.
+- Avoid secondary labels and descriptions that restate a heading or value; let the layout explain.
+- Budgets: AGENTS.md 4 KiB, READMEs 8 KiB, ARCHITECTURE 12 KiB, subjects 16 KiB.
+- CHANGELOG.md records what a user notices or must do: one short clause per outcome, in the product's words.
+- Order as `Breaking:`, Add, other, Fix; merge related entries instead of task histories. Omit refactors, tests, styling, copy tweaks, unreleased fixes and internal work.
+- When you edit a document, trim stale or duplicated text.
+- Keep READMEs equivalent with reciprocal language links; update both together.
+- Keep paragraphs to four sentences and list items to two lines; use lists and tables.
+- Document only working commands.
 - `CLAUDE.md` is a relative symlink to `AGENTS.md`; edit `AGENTS.md`.
 - Keep documentation on the code branch and reconcile it during merges.
