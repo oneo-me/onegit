@@ -38,7 +38,7 @@ Onegit 尚未发布，请按[开发](#开发)从源码构建。运行时需能�
 
 ## 开发
 
-需要 macOS、Go 1.27.1 或更新版本及 Xcode Command Line Tools。MyGo CLI 是 [go.mod](source/go.mod) 中声明的 Go 工具依赖，无需全局安装。
+需要 macOS、Go 1.27.3 或更新版本及 Xcode Command Line Tools。MyGo CLI 是 [go.mod](source/go.mod) 中声明的 Go 工具依赖，无需全局安装。
 
 在 `source/` 下运行：
 

@@ -38,7 +38,7 @@ Onegit is not released yet. Build it from source as described in [Development](#
 
 ## Development
 
-Requirements: macOS, Go 1.27.1 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source/go.mod), so no global install is needed.
+Requirements: macOS, Go 1.27.3 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source/go.mod), so no global install is needed.
 
 Run from `source/`:
 

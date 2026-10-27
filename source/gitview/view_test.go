@@ -43,7 +43,10 @@ func viewFrame(v *View) func(*ui.Context) {
 
 func testRepo(t *testing.T) string {
 	t.Helper()
-	repo := t.TempDir()
+	repo, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "init", "-q", "-b", "main")
 	os.WriteFile(filepath.Join(repo, "a.txt"), []byte("1\n"), 0644)
 	git(t, repo, "add", ".")

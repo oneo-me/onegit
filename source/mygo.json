@@ -13,6 +13,7 @@
     "maintainer": "ONEO <oneo.me@outlook.com>",
     "comment": "Browse Git repositories and their worktrees",
     "categories": ["Development", "RevisionControl"],
+    "webview": false,
     "command": "onegit"
   }
 }
