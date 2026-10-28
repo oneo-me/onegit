@@ -18,7 +18,7 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 
 - Never create sub-Agents or Git worktrees; work directly in the current checkout.
 - Onevra is consumed as the published module version in `source/go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any Onevra change with the user first, then follow that repository's own instructions.
-- Use the MyGo CLI through `go tool mygo`; never install it globally. Build output goes to the root `dist/`, and Neorio tasks live in `.neorio/config.yaml`.
+- Use the MyGo CLI through `go tool mygo`; never install it globally.
 - Commit only when authorized. Never push, tag or publish without explicit authorization.
 - Commit subjects are Conventional Commits naming the outcome in the product's words, such as `feat: delete refs from their menu`, with no body unless breaking.
 - Never launch the app, `go tool mygo dev` or anything else that opens windows, native dialogs or the Dock; the user reviews UI natively. Report what you could not verify.
@@ -35,7 +35,7 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 - Update a document only when a fact its reader needs changes. README is onboarding, ARCHITECTURE.md is boundaries, CHANGELOG.md is release notes.
 - Avoid secondary labels and descriptions that restate a heading or value; let the layout explain.
 - Budgets: AGENTS.md 4 KiB, READMEs 8 KiB, ARCHITECTURE 12 KiB, subjects 16 KiB.
-- CHANGELOG.md records what a user notices or must do: one short clause per outcome, in the product's words.
+- CHANGELOG.md records what a user notices or must do: one short clause per outcome, in the product's words, with references such as `(#12 by @alice)`.
 - Order as `Breaking:`, Add, other, Fix; merge related entries instead of task histories. Omit refactors, tests, styling, copy tweaks, unreleased fixes and internal work.
 - When you edit a document, trim stale or duplicated text.
 - Keep READMEs equivalent with reciprocal language links; update both together.
