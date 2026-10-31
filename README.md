@@ -4,6 +4,8 @@
 
 Onegit is a worktree-centered macOS app that gathers many Git repositories in one window. It covers everyday repository browsing and worktree switching, not every feature of a general Git client.
 
+![Onegit showing a project's commit graph with a commit menu open](docs/images/screenshot.jpg)
+
 ## Features
 
 - Scan a parent directory for Git repositories and browse them in a sidebar tree.

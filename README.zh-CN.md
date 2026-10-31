@@ -4,6 +4,8 @@
 
 Onegit 是以 worktree 为中心的 macOS 应用，在一个窗口中汇集多个 Git 仓库。它承接日常的仓库浏览与 worktree 切换，不追求覆盖通用 Git 客户端的全部功能。
 
+![Onegit 显示项目的提交图谱并打开提交菜单](docs/images/screenshot.jpg)
+
 ## 功能
 
 - 扫描项目父目录中的 Git 仓库，并在侧边栏以目录树浏览。
