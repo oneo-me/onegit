@@ -73,3 +73,11 @@ GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/a
 Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml); Build makes these release packages.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing code, and [AGENTS.md](AGENTS.md) for working rules. User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md).
+
+## Author
+
+[Blog](https://oneo.me) · [X @oneo666](https://x.com/oneo666)
+
+## License
+
+[MIT](LICENSE) © 2026 ONEO.

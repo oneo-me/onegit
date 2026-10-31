@@ -73,3 +73,11 @@ GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/a
 Neorio 用户可从 [.neorio/config.yaml](.neorio/config.yaml) 获得相同的 Run、Build、Test 与 Vet 任务，其中 Build 构建上述发布包。
 
 修改代码前先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，协作规则见 [AGENTS.md](AGENTS.md)。用户可感知的变化记录在 [CHANGELOG.md](CHANGELOG.md)。
+
+## 作者
+
+[博客](https://oneo.me) · [X @oneo666](https://x.com/oneo666)
+
+## 许可证
+
+[MIT](LICENSE) © 2026 ONEO。
