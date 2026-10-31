@@ -1,6 +1,6 @@
 # Onegit
 
-Onegit is a worktree-centered macOS app for browsing many Git repositories. Read [ARCHITECTURE.md](ARCHITECTURE.md) in full before coding, then the relevant subjects. Go commands run in `source/`.
+Onegit is a worktree-centered macOS app for browsing many Git repositories. Read [ARCHITECTURE.md](ARCHITECTURE.md) in full before coding, then the relevant subjects. Go commands run in `source_mygo/`.
 
 ## Principles
 
@@ -17,7 +17,7 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 ## Working with the user
 
 - Never create sub-Agents or Git worktrees; work directly in the current checkout.
-- Onevra is consumed as the published module version in `source/go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any Onevra change with the user first, then follow that repository's own instructions.
+- Onevra is consumed as the published module version in `source_mygo/go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any Onevra change with the user first, then follow that repository's own instructions.
 - Use the MyGo CLI through `go tool mygo`; never install it globally.
 - Commit only when authorized. Never push, tag or publish without explicit authorization.
 - Commit subjects are Conventional Commits naming the outcome in the product's words, such as `feat: delete refs from their menu`, with no body unless breaking.

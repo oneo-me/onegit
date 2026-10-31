@@ -9,7 +9,7 @@ import (
 	"go.yaml.in/yaml/v3"
 
 	"github.com/egoist/mygo"
-	"github.com/oneo-me/onegit/source/gitview"
+	"github.com/oneo-me/onegit/source_mygo/gitview"
 	"github.com/oneo-me/onevra/source/shells/sidebar"
 )
 

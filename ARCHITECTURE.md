@@ -1,24 +1,24 @@
 # Onegit architecture
 
-Onegit is a single Go module in [source](source/) built on [Onevra](https://github.com/oneo-me/onevra) components and the MyGo runtime. It has three moving parts: project discovery for the sidebar, a repository page for the selected project, and settings with persisted state. All Git access goes through the `git` executable on `PATH`; only creating a GitHub repository runs the GitHub CLI, `gh`.
+Onegit is a single Go module in [source_mygo](source_mygo/) built on [Onevra](https://github.com/oneo-me/onevra) components and the MyGo runtime. It has three moving parts: project discovery for the sidebar, a repository page for the selected project, and settings with persisted state. All Git access goes through the `git` executable on `PATH`; only creating a GitHub repository runs the GitHub CLI, `gh`.
 
-Onevra and MyGo versions are pinned in [go.mod](source/go.mod). Onevra provides themed controls and the `shells/sidebar` window shell; Onegit owns application state, persistence and background work.
+Onevra and MyGo versions are pinned in [go.mod](source_mygo/go.mod). Onevra provides themed controls and the `shells/sidebar` window shell; Onegit owns application state, persistence and background work.
 
 ## Code map
 
 | Path | Responsibility |
 | --- | --- |
-| `source/main.go` | MyGo startup, window creation and the app menu |
-| `source/settings*.go` | Settings dialog, preferences file, theme and language |
-| `source/localization.go` | UI strings keyed by their Chinese text, with English translations |
-| `source/commands.go` | Command palette data and actions |
-| `source/projects*.go`, `source/state.go` | Project scan, sidebar tree, pinning, groups, removal and persisted sidebar state |
-| `source/worktrees*.go` | Worktree listing and the shown worktree |
-| `source/repository_ui.go`, `source/launchers_ui.go` | Repository page and its title bar, with its launchers and their settings |
-| `source/gitview/` | Reusable Git view shared with Neorio: toolbar, refs pane, changes, commit graph, details, dialogs and Git CLI layer |
-| `source/launchers/` | File managers, terminals and development tools shared with Neorio: catalog, detection and opening a directory |
-| `source/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
-| `source/mygo.json` | Packaging; output goes to `dist/` |
+| `source_mygo/main.go` | MyGo startup, window creation and the app menu |
+| `source_mygo/settings*.go` | Settings dialog, preferences file, theme and language |
+| `source_mygo/localization.go` | UI strings keyed by their Chinese text, with English translations |
+| `source_mygo/commands.go` | Command palette data and actions |
+| `source_mygo/projects*.go`, `source_mygo/state.go` | Project scan, sidebar tree, pinning, groups, removal and persisted sidebar state |
+| `source_mygo/worktrees*.go` | Worktree listing and the shown worktree |
+| `source_mygo/repository_ui.go`, `source_mygo/launchers_ui.go` | Repository page and its title bar, with its launchers and their settings |
+| `source_mygo/gitview/` | Reusable Git view shared with Neorio: toolbar, refs pane, changes, commit graph, details, dialogs and Git CLI layer |
+| `source_mygo/launchers/` | File managers, terminals and development tools shared with Neorio: catalog, detection and opening a directory |
+| `source_mygo/assets/` | App icon: an Icon Composer project for macOS, PNG and ICO for others |
+| `source_mygo/mygo.json` | Packaging; output goes to `dist/` |
 
 ## Boundaries
 
@@ -66,4 +66,4 @@ Review these manually: the native directory and icon pickers, and packaging and 
 | --- | --- |
 | [Project discovery](docs/architecture/project-discovery.md) | Changing scanning, the sidebar tree, pinning, groups or the project cache |
 | [Repository page](docs/architecture/repository-page.md) | Changing worktree switching, the title bar actions or how Onegit configures the Git view |
-| [Git view](docs/architecture/git-view.md) | Changing `source/gitview` or embedding it in another app |
+| [Git view](docs/architecture/git-view.md) | Changing `source_mygo/gitview` or embedding it in another app |

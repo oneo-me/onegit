@@ -38,19 +38,19 @@ Onegit 尚未发布，请按[开发](#开发)从源码构建。运行时需能�
 
 ## 开发
 
-需要 macOS、Go 1.27.3 或更新版本及 Xcode Command Line Tools。MyGo CLI 是 [go.mod](source/go.mod) 中声明的 Go 工具依赖，无需全局安装。
+需要 macOS、Go 1.27.3 或更新版本及 Xcode Command Line Tools。MyGo CLI 是 [go.mod](source_mygo/go.mod) 中声明的 Go 工具依赖，无需全局安装。
 
-在 `source/` 下运行：
+在 `source_mygo/` 下运行：
 
 ```sh
-cd source
+cd source_mygo
 GOWORK=off go mod download
 go tool mygo dev
 ```
 
 `go tool mygo dev` 运行 `Onegit Dev`，代码修改后自动重启。
 
-在 `source/` 下格式检查、测试、检查与构建：
+在 `source_mygo/` 下格式检查、测试、检查与构建：
 
 ```sh
 gofmt -l .
@@ -62,7 +62,7 @@ GOWORK=off go tool mygo build
 
 测试均为无界面运行，不会打开窗口或原生对话框。目录与图标选择器、打包与应用图标需人工检查。产物写入 `dist/<os>-<arch>/`，使用临时签名且未经公证。
 
-在 `source/` 下构建全平台发布包：macOS 通用应用与磁盘映像、Windows 安装程序，以及 Linux 归档与 Debian 包。Windows 安装程序需要 NSIS（`brew install makensis`）。
+在 `source_mygo/` 下构建全平台发布包：macOS 通用应用与磁盘映像、Windows 安装程序，以及 Linux 归档与 Debian 包。Windows 安装程序需要 NSIS（`brew install makensis`）。
 
 ```sh
 GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64

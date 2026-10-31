@@ -1,6 +1,6 @@
 # Git view
 
-`source/gitview` (import path `github.com/oneo-me/onegit/source/gitview`) is a reusable repository view, ported from Neorio's Git window so both apps can share it. Hosts own the window and the project list. The view owns its toolbar, the refs pane, the content beside it and its dialogs.
+`source_mygo/gitview` (import path `github.com/oneo-me/onegit/source_mygo/gitview`) is a reusable repository view, ported from Neorio's Git window so both apps can share it. Hosts own the window and the project list. The view owns its toolbar, the refs pane, the content beside it and its dialogs.
 
 ## What it shows
 

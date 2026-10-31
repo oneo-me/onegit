@@ -1,6 +1,6 @@
 .DS_Store
 /dist/
-/source/.mygo/
-/source/source
-/source/source.exe
-/source/mygo_windows_*.syso
+/source_mygo/.mygo/
+/source_mygo/source_mygo
+/source_mygo/source_mygo.exe
+/source_mygo/mygo_windows_*.syso

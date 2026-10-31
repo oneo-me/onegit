@@ -5,7 +5,7 @@ import (
 	"slices"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/oneo-me/onegit/source/launchers"
+	"github.com/oneo-me/onegit/source_mygo/launchers"
 	"github.com/oneo-me/onevra/source/components"
 	"github.com/oneo-me/onevra/source/icons/lucide"
 )

@@ -1,11 +1,11 @@
-icon: source/assets/icon.png
+icon: source_mygo/assets/icon.png
 tasks:
   - label: Run
     group: run
     command: go
     args: [tool, mygo, dev]
     options:
-      cwd: source
+      cwd: source_mygo
       env:
         GOWORK: "off"
   - label: Build
@@ -13,7 +13,7 @@ tasks:
     command: go
     args: [tool, mygo, build, -platform, "darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64"]
     options:
-      cwd: source
+      cwd: source_mygo
       env:
         GOWORK: "off"
     outputDirectory: ../dist
@@ -21,13 +21,13 @@ tasks:
     command: go
     args: [test, ./...]
     options:
-      cwd: source
+      cwd: source_mygo
       env:
         GOWORK: "off"
   - label: Vet
     command: go
     args: [tool, mygo, vet]
     options:
-      cwd: source
+      cwd: source_mygo
       env:
         GOWORK: "off"

@@ -1,4 +1,4 @@
-module github.com/oneo-me/onegit/source
+module github.com/oneo-me/onegit/source_mygo
 
 go 1.27.3
 

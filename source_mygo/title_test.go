@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/egoist/mygo/ui"
-	"github.com/oneo-me/onegit/source/launchers"
+	"github.com/oneo-me/onegit/source_mygo/launchers"
 )
 
 // The repository's actions live in the title bar beside its name, not in a

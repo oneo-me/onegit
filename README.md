@@ -38,19 +38,19 @@ Onegit is not released yet. Build it from source as described in [Development](#
 
 ## Development
 
-Requirements: macOS, Go 1.27.3 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source/go.mod), so no global install is needed.
+Requirements: macOS, Go 1.27.3 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source_mygo/go.mod), so no global install is needed.
 
-Run from `source/`:
+Run from `source_mygo/`:
 
 ```sh
-cd source
+cd source_mygo
 GOWORK=off go mod download
 go tool mygo dev
 ```
 
 `go tool mygo dev` runs `Onegit Dev` and restarts it after code changes.
 
-Format, test, vet and build from `source/`:
+Format, test, vet and build from `source_mygo/`:
 
 ```sh
 gofmt -l .
@@ -62,7 +62,7 @@ GOWORK=off go tool mygo build
 
 Tests are headless and never open windows or native dialogs. The directory and icon pickers, packaging and the app icon need manual review. Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization.
 
-Build release packages for every platform from `source/`: a universal macOS app and disk image, Windows installers and Linux archives and Debian packages. Windows installers need NSIS (`brew install makensis`).
+Build release packages for every platform from `source_mygo/`: a universal macOS app and disk image, Windows installers and Linux archives and Debian packages. Windows installers need NSIS (`brew install makensis`).
 
 ```sh
 GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
