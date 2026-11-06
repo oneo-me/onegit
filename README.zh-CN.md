@@ -1,31 +1,42 @@
-# Onegit
+<p align="center">
+  <img src="source_mygo/assets/icon.png" alt="Onegit" width="128">
+</p>
 
-[English](README.md) | **简体中文**
+<h1 align="center">Onegit</h1>
 
-Onegit 是以 worktree 为中心的 macOS 应用，在一个窗口中汇集多个 Git 仓库。它承接日常的仓库浏览与 worktree 切换，不追求覆盖通用 Git 客户端的全部功能。
+<p align="center">
+  <strong>简体中文</strong> |
+  <a href="README.md">English</a>
+</p>
 
-![Onegit 显示项目的提交图谱并打开提交菜单](docs/images/screenshot.jpg)
+<p align="center">
+  <a href="https://github.com/oneo-me"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-oneo--me-181717?logo=github&logoColor=white"></a>
+  <a href="https://oneo.me"><img alt="博客" src="https://img.shields.io/badge/%E5%8D%9A%E5%AE%A2-oneo.me-0969da"></a>
+  <a href="https://x.com/oneo666"><img alt="X" src="https://img.shields.io/badge/X-%40oneo666-000000?logo=x&logoColor=white"></a>
+  <a href="https://github.com/sponsors/oneo-me"><img alt="GitHub 赞助" src="https://img.shields.io/badge/GitHub%20%E8%B5%9E%E5%8A%A9-ea4aaa?logo=githubsponsors&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="https://awesomemygo.dev/apps/onegit"><img alt="Listed on Awesome MyGo" src="https://awesomemygo.dev/badge.svg"></a>
+</p>
+
+<p align="center">
+  Onegit 是以 worktree 为中心的 macOS 应用，在一个窗口中汇集多个 Git 仓库。它承接日常的仓库浏览与 worktree 切换，不追求覆盖通用 Git 客户端的全部功能。
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot.jpg" alt="Onegit 显示项目的提交图谱并打开提交菜单">
+</p>
 
 ## 功能
 
-- 扫描项目父目录中的 Git 仓库，并在侧边栏以目录树浏览。
-- 将项目置顶到目录树上方，或放入自建分组，并拖拽调整分组顺序。
-- 从项目菜单打开项目文件夹、选择图片作为项目图标，或将其从侧边栏移除，并可撤销或恢复。
-- 通过命令面板（`⌘F`）查找项目与设置。
-- 在分支上方双击项目的 worktree 即可切换；从标题栏在文件管理器、终端或设置中选择的开发工具中打开当前 worktree，或在 GitHub 上打开仓库。
-- 分别查看已暂存与未暂存的改动，按文件、改动块或所选行暂存，放弃改动块或所选行，贮藏所选文件或复制其路径，并填写信息提交。
-- 修改上一次提交，一次完成提交与推送，并为每个 worktree 保留提交信息草稿。
-- 浏览可折叠合并的完整提交图谱、历史查找，以及含差异与文件内容的提交详情。
-- 固定引用、从 reflog 查看丢失的提交、按信息/作者/更改路径或内容搜索历史、比较提交或提交与工作区，并查看文件历史或追溯。
-- 从文件菜单打开或在文件管理器中显示文件、打开文件夹、保存所显示的版本，或将文件重置为提交或其父提交的版本。
-- 浏览本地分支、远程分支与标签，从分组菜单新建分支或标签，删除过期的本地分支，并跳转到对应提交。
-- 双击引用或提交即可检出，也可从菜单检出到当前或新的 worktree、拉取、合并、变基、新建分支或标签、删除或复制；分支菜单还可推送、快进、重命名和更改上游。
-- 从远程菜单获取、编辑或删除远程，在打开 worktree 时自动获取，在 GitHub 上查看或复制其地址。
-- 从变基对话框查看冲突，并可同时更新依赖的分支或暂存本地改动；也可交互式改写、压缩、修正或丢弃提交。
-- 继续或中止停下的合并、变基、拣选或还原，选择任一侧解决冲突并暂存文件。
-- 从菜单重置、拣选、还原提交或保存为补丁，也可应用、重命名或删除贮藏。
-- 选择合并类型（包括压缩和不提交），并一次删除或推送多个分支或标签。
-- 获取、拉取、推送、贮藏和菜单操作等 Git 写入仅在点击时执行；设为自动获取的远程会在打开 worktree 时获取。
+- 扫描项目父目录并在侧边栏以目录树浏览，可置顶、分组、设置图标，并通过命令面板（`⌘F`）查找。
+- 在分支上方切换 worktree，并在文件管理器、终端或开发工具中打开当前 worktree，或在 GitHub 上打开仓库。
+- 查看已暂存与未暂存的改动，按文件或所选行暂存，放弃改动，贮藏文件，并填写每个 worktree 独立的提交信息草稿。
+- 浏览提交图谱，搜索历史与 reflog，比较提交，并查看文件历史或追溯。
+- 管理分支、标签、远程与贮藏，并进行变基、合并、拣选或还原，处理其中的冲突。
+- 将没有远程的仓库通过 GitHub CLI 推送到新的 GitHub 仓库。
+- 获取、拉取、推送、贮藏等 Git 写入仅在点击时执行；设为自动获取的远程会在打开 worktree 时获取。
 
 ## 运行
 
@@ -74,10 +85,6 @@ Neorio 用户可从 [.neorio/config.yaml](.neorio/config.yaml) 获得相同的 R
 
 修改代码前先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，协作规则见 [AGENTS.md](AGENTS.md)。用户可感知的变化记录在 [CHANGELOG.md](CHANGELOG.md)。
 
-## 作者
-
-[博客](https://oneo.me) · [X @oneo666](https://x.com/oneo666)
-
 ## 许可证
 
-[MIT](LICENSE) © 2026 ONEO。
+采用 [MIT](LICENSE) 协议 © 2026 ONEO。

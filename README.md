@@ -1,31 +1,42 @@
-# Onegit
+<p align="center">
+  <img src="source_mygo/assets/icon.png" alt="Onegit" width="128">
+</p>
 
-**English** | [简体中文](README.zh-CN.md)
+<h1 align="center">Onegit</h1>
 
-Onegit is a worktree-centered macOS app that gathers many Git repositories in one window. It covers everyday repository browsing and worktree switching, not every feature of a general Git client.
+<p align="center">
+  <strong>English</strong> |
+  <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-![Onegit showing a project's commit graph with a commit menu open](docs/images/screenshot.jpg)
+<p align="center">
+  <a href="https://github.com/oneo-me"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-oneo--me-181717?logo=github&logoColor=white"></a>
+  <a href="https://oneo.me"><img alt="Blog" src="https://img.shields.io/badge/Blog-oneo.me-0969da"></a>
+  <a href="https://x.com/oneo666"><img alt="X" src="https://img.shields.io/badge/X-%40oneo666-000000?logo=x&logoColor=white"></a>
+  <a href="https://github.com/sponsors/oneo-me"><img alt="GitHub Sponsors" src="https://img.shields.io/badge/GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white"></a>
+</p>
+
+<p align="center">
+  <a href="https://awesomemygo.dev/apps/onegit"><img alt="Listed on Awesome MyGo" src="https://awesomemygo.dev/badge.svg"></a>
+</p>
+
+<p align="center">
+  Onegit is a worktree-centered macOS app that gathers many Git repositories in one window. It covers everyday repository browsing and worktree switching, not every feature of a general Git client.
+</p>
+
+<p align="center">
+  <img src="docs/images/screenshot.jpg" alt="Onegit showing a project's commit graph with a commit menu open">
+</p>
 
 ## Features
 
-- Scan a parent directory for Git repositories and browse them in a sidebar tree.
-- Pin projects above the directory tree, or sort them into your own groups and drag the groups into order.
-- Open a project's folder, choose an image as its icon, or remove it from the sidebar in its menu, with undo and restore.
-- Find projects and settings with the command palette (`⌘F`).
-- Switch between a project's worktrees by double-clicking one above its branches; open the shown one in the file manager, a terminal or a development tool chosen in Settings, or the repository on GitHub, from the title bar.
-- Review staged and unstaged changes, stage whole files, single changes or selected lines, discard a change or selected lines, stash chosen files or copy their paths, and commit them with a message.
-- Amend the last commit, commit and push in one action, and keep a draft message per worktree.
-- Browse the full commit graph with collapsible merges, find in history, and commit details with diffs and file contents.
-- Pin refs, show lost commits from the reflog, search history by message, author, changed path or content, compare commits or a commit with the worktree, and open a file's history or blame.
-- Open or reveal a changed or committed file, open a folder in the file manager, save the version shown, or reset a file to a commit's or its parent's version from its menu.
-- Browse local branches, remote branches and tags, create branches or tags from their group menus, delete stale local branches, and jump to their commits.
-- Double-click a ref or commit to check it out, or use its menu for checkout, worktrees, pull, merge, rebase, branch, tag, delete and copy; branch menus also push, fast-forward, rename and track.
-- Manage remotes from their menu: fetch, edit or delete one, fetch it when a worktree opens, open it on GitHub or copy its address.
-- Rebase from a dialog that reports conflicts and can update dependent branches or stash local changes; rebase interactively with reword, squash, fixup and drop.
-- Continue or abort a stopped merge, rebase, cherry-pick or revert, resolving a conflicted file with either side and staging it.
-- Reset, cherry-pick, revert or save a commit as a patch, and apply, rename or delete a stash, from their menus.
-- Choose the merge type, including squash and no commit, and delete or push several branches or tags at once.
-- Every Git write, such as fetch, pull, push, stash or a menu action, runs only when you click, except remotes you set to fetch automatically when a worktree opens.
+- Scan a parent directory into a sidebar tree; pin or group projects, give them an icon, and find them with the command palette (`⌘F`).
+- Switch worktrees above the branches, and open the shown one in the file manager, a terminal or a development tool, or its repository on GitHub.
+- Review staged and unstaged changes, stage files or lines, discard changes, stash files, and commit with a per-worktree draft.
+- Browse the commit graph, search history and the reflog, compare commits, and open a file's history or blame.
+- Manage branches, tags, remotes and stashes, and rebase, merge, cherry-pick or revert with conflict handling.
+- Push a repository without remotes to a new GitHub repository through the GitHub CLI.
+- Every Git write runs only when you click, except remotes set to fetch automatically when a worktree opens.
 
 ## Run
 
@@ -64,7 +75,7 @@ GOWORK=off go tool mygo build
 
 Tests are headless and never open windows or native dialogs. The directory and icon pickers, packaging and the app icon need manual review. Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization.
 
-Build release packages for every platform from `source_mygo/`: a universal macOS app and disk image, Windows installers and Linux archives and Debian packages. Windows installers need NSIS (`brew install makensis`).
+Build release packages for every platform from `source_mygo/`: a universal macOS app and disk image, Windows installers, and Linux archives and Debian packages. Windows installers need NSIS (`brew install makensis`).
 
 ```sh
 GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
@@ -73,10 +84,6 @@ GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/a
 Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml); Build makes these release packages.
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing code, and [AGENTS.md](AGENTS.md) for working rules. User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md).
-
-## Author
-
-[Blog](https://oneo.me) · [X @oneo666](https://x.com/oneo666)
 
 ## License
 
