@@ -1,6 +1,6 @@
 # Onegit
 
-Onegit is a worktree-centered macOS app for browsing many Git repositories. Read [ARCHITECTURE.md](ARCHITECTURE.md) in full before coding, then the relevant subjects. Go commands run in `source_mygo/`.
+Onegit is a worktree-centered macOS app for browsing many Git repositories. Read [ARCHITECTURE.md](ARCHITECTURE.md) in full before coding, then the relevant subjects. Go commands run at the repository root.
 
 ## Principles
 
@@ -8,8 +8,8 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 - The original requirement "no user operation" is still unclear. It may mean no Git writes, no manual refresh or no accounts; do not turn any reading into a constraint.
 - Live status refresh and broader Git operations are not designed yet. Ask before choosing their behavior.
 - Separate confirmed goals, proposals, open questions and implemented behavior. Never claim a feature works without code and verification.
-- Onevra is the shared component library. Prefer its components and shells; add reusable UI capabilities there, not as wrappers or workarounds in Onegit.
-- Use MyGo primitives directly, and read version-matched MyGo and Onevra signatures before using them. Frame builders never perform I/O or start processes.
+- NSGo's `ui` is the component library. Prefer its components and shells; add reusable UI capabilities there, not as wrappers or workarounds in Onegit.
+- Use NSGo primitives directly, and read the version-matched source (`go list -m -f '{{.Dir}}' github.com/nsgo-dev/nsgo`) before using them. Components never perform I/O or start processes while they build.
 - Never delete user work, reset branches or switch a worktree's branch without an explicit user action.
 - Tests use temporary storage and repositories, never the real `~/.onegit/` directory.
 - Write code comments and all documentation in English. Only `README.zh-CN.md` is Chinese; UI strings and test fixtures are product content.
@@ -17,17 +17,17 @@ Onegit is a worktree-centered macOS app for browsing many Git repositories. Read
 ## Working with the user
 
 - Never create sub-Agents or Git worktrees; work directly in the current checkout.
-- Onevra is consumed as the published module version in `source_mygo/go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any Onevra change with the user first, then follow that repository's own instructions.
-- Use the MyGo CLI through `go tool mygo`; never install it globally.
+- NSGo is consumed as the module version in `go.mod`; never copy its code or add a `replace` directive without the user's agreement. Discuss any NSGo change with the user first, then follow that repository's own instructions.
+- Use the NSGo CLI through `go tool nsgo`; never install it globally.
 - Commit only when authorized. Never push, tag or publish without explicit authorization.
 - Commit subjects are Conventional Commits naming the outcome in the product's words, such as `feat: delete refs from their menu`, with no body unless breaking.
-- Never launch the app, `go tool mygo dev` or anything else that opens windows, native dialogs or the Dock; the user reviews UI natively. Report what you could not verify.
+- Never launch the app, `go tool nsgo dev` or anything else that opens windows, native dialogs or the Dock; the user reviews UI natively. Report what you could not verify.
 
 ## Verification
 
 - While iterating, run `gofmt -l .` and `GOWORK=off go test` only for the affected packages, narrowed with `-run` where it helps.
-- Before handing off, run the commands in [README Development](README.md#development) once, skipping plain `go test ./...` because the race run covers it, and `git diff --check` from the repository root. Do not rerun them when nothing changed since they passed.
-- Test UI headlessly with `ui.NewTester`, and inject native dialogs and other platform calls so tests never open them.
+- Before handing off, run the commands in [README Development](README.md#development) once, skipping `go tool nsgo build` unless packaging changed, and `git diff --check`. Do not rerun them when nothing changed since they passed.
+- Test UI headlessly with `nsgotest` in a desktop environment, and inject native pickers and other platform calls so tests never open them.
 - Add tests for new behavior and fixed bugs, extending an existing test where one fits; not for styling, copy, layout tweaks or behavior-preserving refactors.
 
 ## Documentation

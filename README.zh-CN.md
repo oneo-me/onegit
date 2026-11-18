@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="source_mygo/assets/icon.png" alt="Onegit" width="128">
+  <img src="assets/Icon.png" alt="Onegit" width="128">
 </p>
 
 <h1 align="center">Onegit</h1>
@@ -14,10 +14,6 @@
   <a href="https://oneo.me"><img alt="博客" src="https://img.shields.io/badge/%E5%8D%9A%E5%AE%A2-oneo.me-0969da"></a>
   <a href="https://x.com/oneo666"><img alt="X" src="https://img.shields.io/badge/X-%40oneo666-000000?logo=x&logoColor=white"></a>
   <a href="https://github.com/sponsors/oneo-me"><img alt="GitHub 赞助" src="https://img.shields.io/badge/GitHub%20%E8%B5%9E%E5%8A%A9-ea4aaa?logo=githubsponsors&logoColor=white"></a>
-</p>
-
-<p align="center">
-  <a href="https://awesomemygo.dev/apps/onegit"><img alt="Listed on Awesome MyGo" src="https://awesomemygo.dev/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -51,37 +47,30 @@ Onegit 尚未发布，请按[开发](#开发)从源码构建。运行时需能�
 
 ## 开发
 
-需要 macOS、Go 1.27.3 或更新版本及 Xcode Command Line Tools。MyGo CLI 是 [go.mod](source_mygo/go.mod) 中声明的 Go 工具依赖，无需全局安装。
+需要 macOS、Go 1.27.3 或更新版本及 Xcode。[NSGo](https://github.com/nsgo-dev/nsgo) CLI 是 [go.mod](go.mod) 中声明的 Go 工具依赖，无需全局安装。
 
-在 `source_mygo/` 下运行：
+在仓库根目录运行：
 
 ```sh
-cd source_mygo
 GOWORK=off go mod download
-go tool mygo dev
+GOWORK=off go tool nsgo dev
 ```
 
-`go tool mygo dev` 运行 `Onegit Dev`，代码修改后自动重启。
+`go tool nsgo dev` 运行 Onegit，代码修改后自动重新加载。
 
-在 `source_mygo/` 下格式检查、测试、检查与构建：
+格式检查、检查、测试与构建：
 
 ```sh
 gofmt -l .
-GOWORK=off go test ./...
+GOWORK=off go tool nsgo check
+GOWORK=off go tool nsgo test
 GOWORK=off go test -race ./...
-GOWORK=off go tool mygo vet
-GOWORK=off go tool mygo build
+GOWORK=off go tool nsgo build
 ```
 
-测试均为无界面运行，不会打开窗口或原生对话框。目录与图标选择器、打包与应用图标需人工检查。产物写入 `dist/<os>-<arch>/`，使用临时签名且未经公证。
+测试均为无界面运行，不会打开窗口或原生对话框。目录、图标与保存选择器、各界面外观、打包与应用图标需人工检查。
 
-在 `source_mygo/` 下构建全平台发布包：macOS 通用应用与磁盘映像、Windows 安装程序，以及 Linux 归档与 Debian 包。Windows 安装程序需要 NSIS（`brew install makensis`）。
-
-```sh
-GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
-```
-
-Neorio 用户可从 [.neorio/config.yaml](.neorio/config.yaml) 获得相同的 Run、Build、Test 与 Vet 任务，其中 Build 构建上述发布包。
+`go tool nsgo build` 构建 [nsgo.yaml](nsgo.yaml) 列出的全部目标：Apple 芯片与 Intel 的 macOS，以及 x64 与 Arm64 的 Windows 和 Linux。安装包写入 `dist/releases`：磁盘映像、Windows 安装程序、Debian 与 Arch 包及 AppImage。Windows 安装程序需要 NSIS（`brew install makensis`）。
 
 修改代码前先阅读 [ARCHITECTURE.md](ARCHITECTURE.md)，协作规则见 [AGENTS.md](AGENTS.md)。用户可感知的变化记录在 [CHANGELOG.md](CHANGELOG.md)。
 

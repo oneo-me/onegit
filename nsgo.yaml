@@ -1,0 +1,15 @@
+name: Onegit
+id: me.oneo.onegit
+version: 0.1.0
+copyright: © 2026 ONEO
+icon:
+  apple: assets/AppIcon.icon
+  png: assets/Icon.png
+dev:
+  target: native
+build:
+  output: dist
+  targets: [macos_arm64, macos_x64, windows_arm64, windows_x64, linux_arm64, linux_x64]
+linux:
+  maintainer: "ONEO <oneo.me@outlook.com>"
+  categories: [Development, RevisionControl]

@@ -1,6 +1,8 @@
 # Git view
 
-`source_mygo/gitview` (import path `github.com/oneo-me/onegit/source_mygo/gitview`) is a reusable repository view, ported from Neorio's Git window so both apps can share it. Hosts own the window and the project list. The view owns its toolbar, the refs pane, the content beside it and its dialogs.
+`gitview` (import path `github.com/oneo-me/onegit/gitview`) is a reusable repository view built on NSGo, after Neorio's Git window. Hosts own the window and the project list. The view owns its toolbar, the refs pane, the content beside it and its dialogs.
+
+It draws the history with `base/commitgraph` in a `ui.List`, the file trees with `ui.Tree`, diffs with `ui/diff` and dialogs with `ui.Dialog`; context menus are the platform's popup menus.
 
 ## What it shows
 
@@ -20,12 +22,12 @@
 - **Changes.** A file tree beside the selected file's diff; images are compared side by side. A conflicted file shows its worktree text with Git's markers.
 - A file's menu opens it in its default application or shows it in the file manager, stages, unstages or discards it, stashes the chosen files, opens its history or blame, and copies its paths. A conflicted file can be resolved with ours or theirs. A directory's menu opens its folder in the file manager and acts on the files below it.
 - **Staging.** Current changes split into an unstaged list above a staged one, each a tree with multi-selection, listed by `WorktreeStatus`.
-- Double-clicking a file, a diff change's button or selected lines stage or unstage; an unstaged change or selected lines can also be discarded.
+- Double-clicking a file, or the buttons over the change under the pointer or the selected lines, stage or unstage; an unstaged change or selected lines can also be discarded.
 - Row menus and shortcuts act on the chosen rows: Stage (`⌘S`) and Discard Changes (`⇧⌘D`) above, Unstage (`⇧⌘S`) below; headers act on a whole list.
 - A file's menu also offers Stage All or Unstage All.
 - **Discarding.** After a confirmation, `Discard` restores tracked files from the index and deletes untracked ones. Discarding part of a file writes the worktree version with `DiscardText`; a Host without `FileWriter` cannot do it.
 - **Committing.** A commit box below the lists commits the staged files, amends the checked out commit, or commits and pushes; its message is kept as a draft per worktree. `⌘Enter` commits. Partial staging writes the picked text to the index with `StageText`, never touching the worktree.
-- **All commits.** A graph of every shown ref, the checked out commit and host entries, or the reflog when shown.
+- **All commits.** A graph of every shown ref and the checked out commit, or the reflog when shown.
 - Merges collapse, `⌘F` finds, and authors show GitHub or Gravatar avatars. `⇧⌘F` searches the repository's message, author, changed paths or content.
 - Selecting a row floats its details over the list: Commit, Changes and Files tabs. The details can be resized and close with Escape.
 - A commit's Changes menu also resets a file to the commit's version or its parent's after a confirmation, or shows it in the Files tab.
@@ -41,7 +43,7 @@
 - A merge can fast-forward, create a merge commit, squash its changes or stop before committing.
 - Bulk dialogs delete or push several local branches or tags.
 - Deleting local branches first reads `UnmergedBranches`, those `branch -d` refuses: commits their upstream lacks, or HEAD lacks without one. Such a branch is marked, and goes with `branch -D` only once the user chooses to lose its commits.
-- Fetch updates every remote, or with its switch off one remote branch. A file's version or a commit's or stash's patch is written where the host's `SaveFile` or MyGo's save dialog chooses.
+- Fetch updates every remote, or with its switch off one remote branch. A file's version or a commit's or stash's patch is written where the host's `SaveFile` or the system's save dialog chooses.
 
 | Menu item | Git |
 | --- | --- |
@@ -75,45 +77,33 @@
 
 ## Host API
 
-- `New(Options)` creates a view. `SetPath` chooses the worktree, `Reload` rereads it, `Layout` builds it and `Close` stops it.
+- `New(Options)` creates a view. `Bind` keeps its state in a long-lived scope, `SetPath` chooses the worktree, `Reload` rereads it, `Node` shows it and `Close` stops it.
 - `Toolbar` builds the Git actions in a host's title bar, and `GitHubPage` names the GitHub page of the tracked or default remote for a host's own button. `OpWorktree` names a write adding or removing a worktree, for `OnWrite`.
 - `OpenFetch`, `OpenPull`, `OpenPush`, `OpenStash` and `Run` serve hosts adding their own. `CanSync`, `CanStage`, `CanPull` and `CanStash` say whether an action may start.
 - `Syncing` names the running action. `Tracking` and `ActionTooltip` describe the branch and its upstream. `Fetch` fetches every remote without the dialog.
-- `Selected` names the selected history row, and `RevealEntry` selects an entry's row once read. `OnSelect` reports changes to the section or row.
+- `Selected` names the selected commit while the history shows.
 
 Options:
 
 | Option | Purpose |
 | --- | --- |
-| `Dispatch` | Required. Runs results on the UI thread |
-| `Git` | Environment for the `git` executable, or a `Host` that runs git, reads files and watches them on another computer, and as a `GitHubHost` runs `gh` there |
+| `Dispatch` | Required. Runs results on the engine, as `Scope.Post` does |
+| `Invalidate` | Hears every change the view shows, such as for a host's title bar |
+| `Git` | Environment for the `git` executable, or a `Host` that runs git and reads files on another computer, and as a `GitHubHost` runs `gh` there |
 | `RefFilter` | Hides refs from the pane and the history, with the commits only they reach |
-| `Entries` | Rows the host inserts above a revision. Each row has its own leading mark, columns and file readers |
-| `Busy` | Disables Git writes while host work runs |
 | `OnWrite` | Reports each finished Git write, such as to refresh a host's project list |
 | `OpenWorktree` | Shows the worktree of a double-clicked branch another worktree has checked out; nil ignores it |
-| `Watch` | Rereads on file changes via MyGo `WatchFiles`, or the host's watch; off reads only when asked |
 | `State`, `OnState` | Remembered layout, options, drafts, pinned refs, reflog choice, merge type and automatic fetch choices for the host to persist |
-| `Language`, `Text` | Built-in English and Chinese strings. `Text` overrides them by key |
+| `Language` | Built-in English or Chinese strings; `SetLanguage` changes them, building the view again |
 | `AvatarDir` | Avatar cache; empty draws initials and never downloads |
-| `SaveFile` | Writes a file's version or a commit's or stash's patch where the host chooses; nil uses MyGo's save dialog |
+| `SaveFile` | Writes a file's version or a commit's or stash's patch where the host chooses; nil uses the system's save dialog |
 | `OpenFile`, `RevealFile` | Opens a file in its default application or a directory's folder in the file manager, and shows either in the file manager; nil leaves those menu items out |
-| `Overlay`, `DialogInset` | Host content over the section, and title bar clearance for dialogs |
+| `Toaster`, `DialogInset` | Where failures show as toasts, and title bar clearance for dialogs |
 
 ## Boundaries
 
-- Frame builders do no I/O. Git runs in goroutines, and results carry a generation so stale ones are dropped.
+- Components do no I/O while they build. Git runs in goroutines, and results carry a generation so stale ones are dropped.
 - The view writes from user actions: the toolbar, the file, ref, commit and remote menus, staging, discarding, resetting files, commits and the host's `Run`. The only automatic write is fetching a remote the user set to fetch when a worktree opens. It never checks out on its own.
 - Network commands run with `GIT_TERMINAL_PROMPT=0`, so missing credentials fail instead of hanging.
 - Every action works through a `Host` as it does on this computer. One that runs a program other than git extends `Host` with an optional interface, as `GitHubHost` does for `gh` and `FileWriter` does for discarding part of a file. Interactive rebase itself needs the local Git executable, since its todo and message editors are temporary scripts.
 - Conflict resolution covers taking ours or theirs and staging the file; it does not include a side-by-side merge editor.
-
-## Neorio mapping
-
-Neorio's Git window shows this view and leads its title bar with `Toolbar`; its project sidebar and the title bar's task launchers and commands stay in Neorio.
-
-- `RefFilter` hides `neorio/*` branches.
-- `Entries` adds a row per task worktree, led by a robot animated while it works, with its agents and working time, and `RevealEntry` selects the task the window opens for.
-- `Busy` reports landings, `Overlay` shows the command panel, and `OnWrite` rereads the sidebar's status.
-- `Watch` stays on.
-- `Git.Host` runs git and `gh`, reads files and watches through the server of the shown device, this computer's or an SSH host's.

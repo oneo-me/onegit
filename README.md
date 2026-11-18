@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="source_mygo/assets/icon.png" alt="Onegit" width="128">
+  <img src="assets/Icon.png" alt="Onegit" width="128">
 </p>
 
 <h1 align="center">Onegit</h1>
@@ -14,10 +14,6 @@
   <a href="https://oneo.me"><img alt="Blog" src="https://img.shields.io/badge/Blog-oneo.me-0969da"></a>
   <a href="https://x.com/oneo666"><img alt="X" src="https://img.shields.io/badge/X-%40oneo666-000000?logo=x&logoColor=white"></a>
   <a href="https://github.com/sponsors/oneo-me"><img alt="GitHub Sponsors" src="https://img.shields.io/badge/GitHub%20Sponsors-ea4aaa?logo=githubsponsors&logoColor=white"></a>
-</p>
-
-<p align="center">
-  <a href="https://awesomemygo.dev/apps/onegit"><img alt="Listed on Awesome MyGo" src="https://awesomemygo.dev/badge.svg"></a>
 </p>
 
 <p align="center">
@@ -51,37 +47,30 @@ Onegit is not released yet. Build it from source as described in [Development](#
 
 ## Development
 
-Requirements: macOS, Go 1.27.3 or later, and Xcode Command Line Tools. The MyGo CLI is a Go tool dependency in [go.mod](source_mygo/go.mod), so no global install is needed.
+Requirements: macOS, Go 1.27.3 or later, and Xcode. The [NSGo](https://github.com/nsgo-dev/nsgo) CLI is a Go tool dependency in [go.mod](go.mod), so no global install is needed.
 
-Run from `source_mygo/`:
+Run from the repository root:
 
 ```sh
-cd source_mygo
 GOWORK=off go mod download
-go tool mygo dev
+GOWORK=off go tool nsgo dev
 ```
 
-`go tool mygo dev` runs `Onegit Dev` and restarts it after code changes.
+`go tool nsgo dev` runs Onegit and reloads it after code changes.
 
-Format, test, vet and build from `source_mygo/`:
+Format, check, test and build:
 
 ```sh
 gofmt -l .
-GOWORK=off go test ./...
+GOWORK=off go tool nsgo check
+GOWORK=off go tool nsgo test
 GOWORK=off go test -race ./...
-GOWORK=off go tool mygo vet
-GOWORK=off go tool mygo build
+GOWORK=off go tool nsgo build
 ```
 
-Tests are headless and never open windows or native dialogs. The directory and icon pickers, packaging and the app icon need manual review. Builds go to `dist/<os>-<arch>/` with ad-hoc signing and no notarization.
+Tests are headless and never open windows or native dialogs. The directory, icon and save pickers, the look of each screen, packaging and the app icon need manual review.
 
-Build release packages for every platform from `source_mygo/`: a universal macOS app and disk image, Windows installers, and Linux archives and Debian packages. Windows installers need NSIS (`brew install makensis`).
-
-```sh
-GOWORK=off go tool mygo build -platform darwin/universal,windows/amd64,windows/arm64,linux/amd64,linux/arm64
-```
-
-Neorio users get the same Run, Build, Test and Vet tasks from [.neorio/config.yaml](.neorio/config.yaml); Build makes these release packages.
+`go tool nsgo build` makes every target [nsgo.yaml](nsgo.yaml) lists: macOS for Apple silicon and Intel, Windows and Linux for x64 and Arm64. Installers land in `dist/releases`: disk images, Windows installers, Debian and Arch packages and AppImages. Windows installers need NSIS (`brew install makensis`).
 
 Read [ARCHITECTURE.md](ARCHITECTURE.md) before changing code, and [AGENTS.md](AGENTS.md) for working rules. User-visible changes are listed in [CHANGELOG.md](CHANGELOG.md).
 

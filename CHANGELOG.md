@@ -29,5 +29,5 @@ User-facing release notes for Onegit.
 - Open, save, reveal or reset changed and committed files from their menus, and open their folders in the file manager.
 - See the full commit graph with collapsible merges, find, avatars, and commit details with diffs and file contents.
 - Pin refs, show lost commits from the reflog, search history by message, author, changed path or content, compare commits or a commit with the worktree, and open a file's history or blame.
-- Install Onegit on macOS, Windows and Linux from a disk image, an installer, a Debian package or an archive.
+- Install Onegit on macOS, Windows and Linux from a disk image, an installer, a Debian or Arch package or an AppImage.
 - Avoid the UI freezing while choosing the project parent directory.

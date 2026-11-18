@@ -16,7 +16,7 @@ The scan runs silently with no progress text. A failed directory keeps the proje
 
 ## Cache and merging
 
-The cache is keyed by parent directory, so switching directories restores each tree independently. Scan results merge on the main thread by path.
+The cache is keyed by parent directory, so switching directories restores each tree independently. Scan results merge on the engine by path.
 
 - New nodes are added; existing nodes and their expansion are kept.
 - Paths that no longer exist are dropped with their pinning and removal, as are folders they leave empty. A missing parent directory, such as an unmounted volume, keeps the cache.
@@ -37,10 +37,10 @@ Group headers offer New Group; user groups also rename or delete, which returns 
 
 Pinning, group membership and icons live in the cached nodes, and the group order, names and collapse in `groups`, all per parent directory. Pinned and Ungrouped Projects share their collapse across parent directories.
 
-Nodes start collapsed. The sidebar follows Neorio's Git window: Onevra `SidebarItem` rows in a `ScrollView`, and `Collapsible` headings that count their projects.
+Nodes start collapsed. The sidebar follows Neorio's Git window: rows in NSGo's `ScrollView` under collapsible headings that count their projects. The rows rebuild only when what they show changes; the selected row follows on its own, and a dragged heading's target is highlighted without rebuilding it.
 
 - Repositories lead with their chosen icon, else a blank placeholder tile; folders with a folder icon.
-- Clicking a folder, Right and Left open and close it; folders are never selected.
+- Clicking a folder opens and closes it; folders are never selected.
 
 ## Context menus
 
@@ -52,10 +52,10 @@ Right-clicking a folder offers Open Folder. A repository row also offers pinning
 - Removal hides the project from every group, the command palette and selection fallback without touching its files.
 - The flag lives in the cached tree, so scans and restarts keep the project hidden.
 - The toast after a removal undoes it; the palette's Restore Removed Projects command brings back every project removed from the current parent directory.
-- Opening a folder runs `Shell.OpenPath`; a failure shows as a toast.
+- Opening a folder asks the system to open it, through NSGo's `OpenFile`; a failure shows as a toast.
 
 ## Command palette
 
 The palette searches every cached project for the current parent directory, including collapsed ones but not removed ones. It matches names and paths and opens the same node the sidebar would. While a project is hidden, it also lists Restore Removed Projects.
 
-The search box above the sidebar and `⌘F` open it. It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; Onevra `CommandDialog` owns filtering, keyboard navigation and focus. The palette does not open over the settings dialog or the native directory picker.
+The search box above the sidebar and `⌘F` open it. It also lists theme, language and parent directory commands that open the matching settings row. Onegit owns the command data; NSGo's `ui.CommandDialog` owns filtering, keyboard navigation and focus, and Escape clears a query before it closes. The palette does not open over the settings dialog or the native directory picker.
